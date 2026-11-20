@@ -37,7 +37,7 @@ The repo has a GitHub remote, `main` is pushed, and CI (`quality.yml`) has been 
 If public at first push: (a) SPEC scrub + history rewrite, (b) push + CI. Take (a) alone if it is not finished at half the context.
 
 ## Acceptance
-`git ls-remote origin main` equals local `HEAD`; a `quality.yml` run on that `HEAD` observed green, URL in HANDOFF (if an earlier run was red, why, in HANDOFF; gitleaks step unweakened); Dependabot security updates on; public: `git log -p --all | grep -iEf <gitignored patterns file>` prints nothing; private: HANDOFF says the history scrub is due and PLAN has its `proposed` row.
+`main` pushed; a `quality.yml` run observed green on the last pushed commit before the handoff stamp, run URL and the SHA it ran on in HANDOFF (if an earlier run was red, why; gitleaks step unweakened); Dependabot security updates on; public: the patterns file is non-empty, `git grep -iEf <patterns file> $(git rev-list --all)` matched before the rewrite (positive control) and exits 1 after it (0 or 2 fails); private: HANDOFF says the history scrub is due and PLAN has its `proposed` row with this same check.
 
 ---
 *Filled at `/handoff`:*
