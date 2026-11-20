@@ -4,32 +4,41 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `<YYYY-MM-DDTHH:MM:SS+HH:MM>`, from `date -Iseconds` at the
-  moment of writing. `/pickup` computes this handoff's age from it.
-- **Describes commit:** `<hash>`, pushed to `origin/<branch>`. **CI:**
-  `<green | red | unobserved>` for that hash on `quality.yml`, with the
-  run URL. Never "green" for a run nobody saw. This file arrives in the
-  stamp commit right after that hash.
+- **Written:** `2026-11-20T10:19:25+01:00`
+- **Describes commit:** `bb5b570`, local only: no remote yet (T-001).
+  **CI:** unobserved (no remote; `quality.yml` has never run). This file
+  arrives in the commit right after `bb5b570`.
 
-- **Current task:** `T-NNN` `<title>`, `<status (YYYY-MM-DD)>`.
-  See `docs/tasks/<file>`.
+- **Current task:** none. Bootstrap (2026-11-20): scaffold (node, claude),
+  faigo kit (core + advisor, stack none, safety core none, `git_host:
+  github`), design doc moved to `SPEC.md` with §13-§14.1, onboarding
+  closed. Commits `29e8a85`, `4b4dc87`, `bb5b570`.
 
-- **Next action:** the exact first step for the next session.
+- **Next action:** owner reviews `SPEC.md`; then `/pickup` and
+  `/decompose` on M0 (SPEC §13).
 
-- **Read before anything else:** what the next session must know before it
-  opens a file. Traps, not history.
+- **Read before anything else:** SPEC §9 (which kit rules are kept), §13,
+  §14. Rule 3 of `AGENTS.md`: the runtime and dev dependencies SPEC §11
+  names (MCP SDK, zod, vitest, undici) are not in `package.json` yet and
+  go through `/rfc`.
 
-- **Reviews:** which reviews ran on this task, how many findings, and
-  where they were resolved.
+- **Reviews:** none: bootstrap, generated files plus docs only.
 
-- **Proposed plan changes:** `proposed` rows this task added to
-  `docs/tasks/PLAN.md`, for the owner or `/decompose` to confirm.
+- **Proposed plan changes:** T-001 Connect the remote (GitHub),
+  `proposed (2026-11-20)`.
 
-- **Open doubts:** what the next session or the owner should judge.
+- **Open doubts:**
+  - SPEC names the owner, this account's custom fields, its rate limit and
+    the allow-list domain. Fine while private; T-001's acceptance asks for
+    a pass before any public push (SPEC §14 rule 2).
+  - M0's "repo, CI" overlaps T-001; `/decompose` decides whether T-001
+    becomes M0's first row.
 
-- **Dead ends:** what was tried and abandoned, and why.
+- **Dead ends:** none.
 
-- **Known red:** anything red in `make quality` or CI, stated exactly.
+- **Known red:** none.
 
-- **Checkpoint:** what `make quality` printed (counts, not "green"),
-  and any test the next session should rerun first.
+- **Checkpoint:** `make quality` exit 0 on `bb5b570`'s tree: eslint and
+  ruff "All checks passed!"; prettier "All matched files use Prettier code
+  style!"; ruff "6 files already formatted"; tsc "no TypeScript yet";
+  `tools/checks` "Ran 25 tests", OK; both gitleaks scans passed.
