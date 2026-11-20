@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - run: pipx install ruff
+      - run: pipx install ruff==0.15.17 # same pin as .pre-commit-config.yaml
       - run: ruff check tools/
       - run: ruff format --check tools/
       - run: python3 -m unittest discover -s tools/checks
@@ -38,7 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read # gitleaks-action lists PR commits via the API; 403s without it
     steps:
       - uses: actions/checkout@v6
         with:
@@ -48,7 +47,11 @@ jobs:
           node-version: "24"
       - run: npm ci || npm install
       - run: npm audit --audit-level=high
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pipx install pre-commit==4.6.2
+      # gitleaks CLI at the pin in .pre-commit-config.yaml, over every commit
+      # (fetch-depth 0); same scan as `make gitleaks`. gitleaks-action needs a
+      # license key on org repos (GITLEAKS_LICENSE), the CLI does not.
+      - run: pre-commit run gitleaks-history --hook-stage manual
