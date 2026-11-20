@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-20)
+- **Status:** done (2026-11-20)
 - **Depends on:** none
 - **Created:** 2026-11-20
 
@@ -43,18 +43,35 @@ If public at first push: (a) SPEC scrub + history rewrite, (b) push + CI. Take (
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- History scrub (owner: Zanichelli org, public): real account values moved
+  from `SPEC.md` (and the old design doc, present since the root commit)
+  to gitignored `docs/private/` (`account-facts.md`, `account-patterns`,
+  12 lines); all history rewritten with `git filter-branch`, refs/original
+  removed, reflog expired, gc. `git grep -iEf docs/private/account-patterns
+  $(git rev-list --all)`: pre-scrub bundle exit 0 (121 lines), after exit 1,
+  fresh clone from GitHub exit 1.
+- `27a7f16`: status doing, `docs/private/` gitignored.
+- Repo `ZanichelliEditore/freshdesk-mcp` created public, `main` pushed.
+- `80c7aae`: CI pins ruff 0.15.17; gitleaks CLI via
+  `pre-commit run gitleaks-history --hook-stage manual` replaces
+  `gitleaks-action` (first run red: unpinned ruff 0.17.6 rules; action
+  needs a license key on org repos).
+- Dependabot alerts and security updates on.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The CI gitleaks step has not been shown to fail on a planted secret
+  (pre-commit hides hook output on pass, so the log shows no commit count).
+- Nothing stops account values from re-entering a tracked file: proposed
+  T-012.
+- Commit hashes quoted in docs written up to `59e3395` (the rewrite)
+  (`docs/improvements.md`, `docs/journal.md`, earlier reviews) predate it
+  and no longer resolve.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
