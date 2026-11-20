@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** todo
+- **Status:** doing (2026-11-20)
 - **Depends on:** none
 - **Created:** 2026-11-20
 

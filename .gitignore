@@ -12,3 +12,5 @@ __pycache__/
 .claude/settings.local.json
 # the compaction marker: written by the PreCompact hook, cleared by /handoff
 .claude/.compacted
+# real account values (patterns file, account facts): never tracked (AGENTS.md rule 2)
+docs/private/
