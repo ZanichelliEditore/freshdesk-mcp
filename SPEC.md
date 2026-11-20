@@ -308,8 +308,12 @@ that visible). Confirm-by-argument is a second layer against a model
 acting on injected ticket text. Docs tell users never to "always allow"
 the `send` tools.
 
-Deliberately not adopted from customer-square: guard/pin checks, RFC per
-dependency, leak-check hooks, single-module write gate as a governed file.
+Deliberately not adopted from customer-square: guard/pin checks and a
+single-module write gate as a governed file (safety core: `none`). Kept
+from the faigo kit (owner, 2026-11-20): new dependencies go through
+`/rfc`, the gitleaks hooks run on every commit, and before the first
+caller of a `write` or `send` tool an RFC decides whether the project
+needs a safety core (`AGENTS.md`, rule 1).
 
 ## 10. Configuration
 
@@ -378,7 +382,10 @@ location chosen at M4.
 Zanichelli org); npm scope; DPO validation before rollout beyond the
 builders.
 
-## 13. Milestones
+## 13. Milestones (phases with acceptance)
+
+Each milestone is a phase; its "Done when" is the acceptance `/decompose`
+splits into tasks.
 
 | M | Content | Done when |
 |---|---|---|
@@ -388,3 +395,25 @@ builders.
 | M3 | `send` toolset | C5 reply, C4 forward, with confirm and allow-list, on `mcp-test` tickets to internal addresses only |
 | M4 | `.mcpb`, Italian operator guide, internal team config | an operator installs on a clean machine without a terminal |
 | M5+ | catalogue toolsets on demand | per toolset |
+
+## 14. Session discipline
+
+The rules in `AGENTS.md` apply. Project-specific additions:
+
+1. No session calls the real Freshdesk except through the manual `smoke`
+   script (§11), run by hand; writes and sends only on `mcp-test` tickets.
+2. Real account values (domain, API key, team config with field meanings
+   and allow-list) never enter a tracked file: tests use synthetic
+   fixtures, the Zanichelli team config lives outside the repo (§10, §12).
+3. A task that would add the first caller of a `write` or `send` tool
+   stops and raises the safety-core RFC first (§9).
+
+### 14.1 Sizing a task to one session
+
+- One task = one tool, one client resource family (types, implementation
+  and tests), or one cross-cutting module (`http`, rate limiter, schema
+  service, config, confirm/preview), with its tests.
+- A mechanism and the first tool that uses it are two tasks: the
+  mechanism first.
+- If a task needs more than one new module, or changes a tool's public
+  input and its callers, split it at planning.
