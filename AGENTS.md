@@ -1,10 +1,3 @@
-<!-- agent-native-setup:first-run — remove this block once ONBOARDING.md is done -->
-> **First run — setup pending.** This repo was scaffolded by the `agent-native-setup` wizard
-> (an agent-native setup); the tooling is in place but the one-time onboarding hasn't run
-> yet. **Before other work, complete [`ONBOARDING.md`](./ONBOARDING.md)** — then delete
-> it and remove this block.
-<!-- /agent-native-setup:first-run -->
-
 # freshdesk-mcp — Agent Contract
 
 MCP server for Freshdesk: triage, categorise, draft replies, hand off and analyse tickets through Claude

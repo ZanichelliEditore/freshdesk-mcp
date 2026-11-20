@@ -21,8 +21,8 @@ Ordered task list. One task = one session (SPEC.md
 fact: 0 · sessions that ran two tasks: 0 · split points set at planning and
 taken: 0 · split points set at planning and not needed: 0.
 
-## Phase 1: <name>
+## Setup
 
 | Id | Title | Type | Depends | Acceptance | Status |
 |---|---|---|---|---|---|
-| T-NNN | <title> | build | none | <one line, mechanically checkable> | todo |
+| T-001 | Connect the remote (GitHub) | build | none | owner and visibility of the GitHub repo chosen (SPEC §12); SPEC holds no real account values before a public push (SPEC §14 rule 2); `main` pushed; first `quality.yml` run **observed** green, URL in HANDOFF (the first run may be red: `gitleaks-action` has no parent for the root commit); Dependabot security updates on | proposed (2026-11-20) |
