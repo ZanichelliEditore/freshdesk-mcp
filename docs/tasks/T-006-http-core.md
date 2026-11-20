@@ -3,15 +3,16 @@
 - **Type:** build
 - **Phase:** M0
 - **Status:** todo
-- **Depends on:** T-004, T-005
+- **Depends on:** T-005
 - **Created:** 2026-11-20
 
 ## Goal
-`src/client/http.ts` sends one request correctly: undici agent with keep-alive, Basic auth, UA, host check, status → error mapping, limiter fed by response headers, metadata-only logs.
+`src/client/http.ts` sends one request correctly through a single send function: undici agent with keep-alive, Basic auth, UA, host check on every URL, no redirects, status → error mapping, limiter fed by response headers, metadata-only logs.
 
 ## In scope
-- Install `undici` (per T-002); `fetch` imported from undici.
-- Host validated against `^[a-z0-9-]+\.freshdesk\.com$` unless the config override is on.
+- Install `undici` (per T-002); `fetch` source as the T-002 RFC decided.
+- One send function every request goes through; it checks the host of **every** URL (built or absolute) against `^[a-z0-9-]+\.freshdesk\.com$`, or equal to the exact override hostname; checked at construction too.
+- `redirect: 'error'`: a redirect is never followed with the auth header.
 - stderr logs method, path template, status, duration only.
 - Synthetic fixtures under `test/fixtures/`.
 
@@ -32,7 +33,7 @@
 `none`
 
 ## Acceptance
-`test/client/http.test.ts` (MockAgent): Basic auth and UA headers sent; foreign host refused unless override; each status maps to its T-003 code; limiter state updated from headers; no stderr line contains the API key or a body string; `make quality` green.
+`test/client/http.test.ts` (MockAgent): Basic auth and UA headers sent; an absolute URL to a foreign host is refused with no request sent; the override allows exactly its hostname and still refuses others; a 302 is not followed; each status maps to its T-003 code; limiter state updated from headers; no stderr line contains the API key or a body string; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

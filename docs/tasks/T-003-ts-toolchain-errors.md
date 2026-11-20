@@ -10,10 +10,10 @@
 TypeScript compiles and vitest runs under `make quality` and in CI, proven by the first real module: the normalised error shape of §7.1.
 
 ## In scope
-- `package.json`: `type: module`, `engines.node >=20`, `test: vitest run`; install `vitest` (per T-002).
-- `tsconfig.json`: switch to `NodeNext` + emit to `dist/` (an npm/`npx` package needs output; switching later means touching every import) — owner confirms at review.
-- `src/client/errors.ts`: `{code, http_status, message, retryable, retry_after_s?}` with codes `auth|forbidden|not_found|validation|rate_limited|server|network`; Freshdesk `errors[]` passed through on `validation`.
-- CI Node matrix 20 + 24 if the owner wants it (else Node 24 only, noted).
+- `package.json`: `type: module`, `engines.node >=20`, `test: vitest run`; install `vitest`, `@types/node` (per T-002).
+- `tsconfig.json`: switch to `NodeNext` + emit to `dist/` (an npm/`npx` package needs output; switching later means touching every import) — owner confirms at pickup.
+- `src/client/errors.ts`: `{code, http_status, message, retryable, retry_after_s?}` with codes `auth|forbidden|not_found|validation|rate_limited|server|network`; Freshdesk `errors[]` passed through on `validation`; a defined fallback for statuses outside the list.
+- CI Node matrix 20 + 24 if the owner wants it at pickup (else Node 24 only, noted in HANDOFF).
 
 ## Out of scope
 - HTTP calls, undici (T-006).
@@ -32,7 +32,7 @@ TypeScript compiles and vitest runs under `make quality` and in CI, proven by th
 `none`
 
 ## Acceptance
-`test/client/errors.test.ts` maps 401/403/404/400(with `errors[]`)/429(with `Retry-After`)/5xx/network to the seven codes; `make quality` green with vitest running; CI run on that commit observed green.
+`test/client/errors.test.ts` maps 401/403/404/400 with `errors[]`/400 without/429 with `Retry-After`/5xx/network to the seven codes, and 405/409/415 to the documented fallback; `make quality` green with vitest running; CI run on that commit observed green.
 
 ---
 *Filled at `/handoff`:*

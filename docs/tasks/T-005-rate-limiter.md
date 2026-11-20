@@ -7,13 +7,14 @@
 - **Created:** 2026-11-20
 
 ## Goal
-`src/client/rate-limit.ts`: a header-driven budget with reserve, floor and pacing, tested with a fake clock and no network.
+`src/client/rate-limit.ts`: a header-driven budget with reserve, floor, pacing and `Retry-After`, tested with a fake clock and no network.
 
 ## In scope
 - State from `X-RateLimit-Total`, `-Remaining`, window end; conservative defaults before any header is seen.
 - Caller passes a cost class (`cheap|expensive`); below reserve, `expensive` refused with `rate_limited` explaining why.
-- Below floor: wait for the window if it ends within a bound, else fail fast (pick the bound, document it in the module and `docs/journal.md`).
-- Pacing of `expensive` ≤ configured req/s; `Retry-After` honoured.
+- Below floor: wait if the window ends within a bound, fail fast with `rate_limited` beyond it (pick the bound, document it in the module and `docs/journal.md`).
+- Pacing of `expensive` ≤ configured req/s.
+- **Owns every wait**, `Retry-After` included: the retry loop (T-007) asks the limiter how long to wait, it never sleeps on its own.
 - Options passed in (no config import).
 
 ## Out of scope
@@ -30,7 +31,7 @@
 `none`
 
 ## Acceptance
-`test/client/rate-limit.test.ts` (fake clock): parses headers; defaults with no headers; `expensive` refused below reserve, `cheap` allowed; floor waits or fails fast per the documented bound; pacing ≤ 2 req/s; `Retry-After` respected; `make quality` green.
+`test/client/rate-limit.test.ts` (fake clock): parses headers; defaults with no headers; `expensive` refused below reserve, `cheap` allowed; below floor it waits when the window ends inside the bound, fails fast beyond it, and the exact boundary is tested; pacing ≤ 2 req/s; `Retry-After` delay returned; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

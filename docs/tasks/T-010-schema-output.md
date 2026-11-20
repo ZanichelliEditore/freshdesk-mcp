@@ -1,9 +1,9 @@
-# T-009 — Schema service: load, TTL cache, output mapping
+# T-010 — Schema service: load, TTL cache, output mapping
 
 - **Type:** build
 - **Phase:** M0
 - **Status:** todo
-- **Depends on:** T-008
+- **Depends on:** T-004, T-009
 - **Created:** 2026-11-20
 
 ## Goal
@@ -13,10 +13,11 @@
 - Cache with TTL from config; one load per TTL.
 - Output `{label: value_label}`; status, priority, source, agent, group as names.
 - Hidden fields from team config left out.
-- Requester as a name is **not** in scope (needs contacts; M1).
+- Requester as a name is **not** in scope (needs contacts; M1). Untrusted-content wrapping (§7.4) of free-text fields is M1's `format.ts`, not this.
 
 ## Out of scope
-- Input mapping (T-010).
+- Input mapping (T-011).
+- Untrusted-content wrapping (M1).
 
 ## Spec sections to read
 - SPEC.md §7.3

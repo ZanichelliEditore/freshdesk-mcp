@@ -1,18 +1,19 @@
-# T-010 — Schema service: input mapping + nested-choice validation
+# T-011 — Schema service: input mapping + nested-choice validation
 
 - **Type:** build
 - **Phase:** M0
 - **Status:** todo
-- **Depends on:** T-009
+- **Depends on:** T-010
 - **Created:** 2026-11-20
 
 ## Goal
 Tools can pass labels or API names; values are validated against choices, nested levels included, with an error listing the valid choices.
 
 ## In scope
-- Accept field label or API name; accept value label.
+- Accept field label or API name; accept value label. State and test the case rule for labels.
 - Nested path `"A > B > C"` resolves to the three API fields.
 - Invalid choice → `validation` error listing valid choices at the failing level.
+- Unknown field and a label shared by two fields → defined `validation` errors.
 
 ## Out of scope
 - Any tool using it (M1/M2).
@@ -27,7 +28,7 @@ Tools can pass labels or API names; values are validated against choices, nested
 `none`
 
 ## Acceptance
-`test/schema/input.test.ts` covers label and API-name inputs, a 3-level nested path, an invalid choice at each level; `make quality` green; **M0 done:** CI run on this commit observed green, URL in HANDOFF.
+`test/schema/input.test.ts` covers label and API-name inputs, the label case rule, a 3-level nested path, an invalid choice at each level, an unknown field and an ambiguous label; `make quality` green; **M0 done:** CI run on this commit observed green, URL in HANDOFF.
 
 ---
 *Filled at `/handoff`:*

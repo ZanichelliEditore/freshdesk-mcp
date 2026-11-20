@@ -11,3 +11,5 @@ that needs a real decision into an RFC in `docs/rfc/proposed/`.
 ## Known gaps
 
 - [a1b2c3d · YYYY-MM-DD] _Add the first gap or deferred idea here._
+- [3ec2fde · 2026-11-20] M1 decompose: give §7.4 untrusted-content wrapping its own row, covering free-text custom fields as well as subject/body (security-reviewer on M0 plan, docs/tasks/T-010-schema-output.md)
+- [3ec2fde · 2026-11-20] quality.yml runs 'npm ci || npm install', which hides a lockfile out of sync with package.json; use plain 'npm ci' (.github/workflows/quality.yml, planner on M0)
