@@ -1,0 +1,48 @@
+.PHONY: help install bootstrap lint format format-check typecheck test quality rfc-sync improvement
+
+help: ## Show available targets
+	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
+
+install: ## set up git hooks (once)
+	pre-commit install
+
+bootstrap: install ## first-run setup: git hooks + fetch deps
+	npm install
+
+lint: ## run linters
+	npx eslint .
+	ruff check tools/
+
+format: ## auto-format
+	npx prettier --write .
+	ruff format tools/
+
+format-check: ## check formatting (read-only)
+	npx prettier --check .
+	ruff format --check tools/
+
+typecheck: ## type-check
+	if git ls-files '*.ts' '*.tsx' | grep -q .; then npx tsc --noEmit; else echo "no TypeScript yet"; fi
+
+test: ## run tests
+	npm test --if-present
+	python3 -m unittest discover -s tools/checks
+
+quality: lint format-check typecheck test ## full local gate
+
+rfc-sync: ## move RFCs into the folder matching their Status
+	python3 tools/checks/sync_rfc_status.py
+
+# TEXT reaches the shell unexpanded, as a variable: nothing in it runs.
+improvement: export override TEXT := $(value TEXT)
+improvement: ## append a commit+date-stamped idea to docs/improvements.md (make improvement TEXT="<idea>")
+	sha=$$(git rev-parse --short HEAD 2>/dev/null); printf -- '- [%s%s] %s\n' "$${sha:+$$sha · }" "$$(date +%F)" "$$TEXT" >> docs/improvements.md
+
+.PHONY: gitleaks
+
+# `quality` runs it too: make merges this line into the `quality:` rule.
+quality: gitleaks
+
+gitleaks: ## secret scan of the staged diff and of every commit, at the gitleaks pinned in .pre-commit-config.yaml
+	pre-commit run gitleaks --all-files
+	pre-commit run gitleaks-history --hook-stage manual

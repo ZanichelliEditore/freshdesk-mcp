@@ -1,0 +1,73 @@
+{
+  "blocks": {
+    "AGENTS.md": "sha256:49a9eb460c220bb3c4a4a1d03eafc93ab0d3a9f0a486865bd110c164cc9637e4"
+  },
+  "files": {
+    ".claude/agents/compliance-reviewer.md": "sha256:4a3570dc22aee7a186809fb90982b30b00d2ea6e6262ffe934f3e46ce4df7e1a",
+    ".claude/agents/security-reviewer.md": "sha256:ab79f8cc187da5af66f3b944a1f2644255ac10ff054df68195fbf0002ddb33af",
+    ".claude/commands/decompose.md": "sha256:da71dd330c885ebc7f838e6c02bbbc9385456bee78692c6bba38cd11de881ebe",
+    ".claude/commands/handoff.md": "sha256:2d0e033230025dac355171eb6aebe74ec331e08d6f1ee3f50d7171e5e8279631",
+    ".claude/commands/pickup.md": "sha256:a1e074457f95317eac3028c0234f48ec019d206adcd1776631c76a6408ab8dff",
+    ".claude/hooks/precompact.sh": "sha256:baab65f44ef2317ddd0b8fadd749edffc7311a5476d524aff26e991a6bb77840",
+    ".claude/hooks/session-start.sh": "sha256:353f1b05ff0d903a44b99302e20a071ad24a3aaea3658f3ef60036ab1896991e",
+    "docs/tasks/_template.md": "sha256:61614c184a49e170fdae2cd1297241b4706e63702a8156191fe2efd68b04cc0e",
+    "tools/advise": "sha256:03e70d637569063271bb5921f282332863f64cee8e70d3cda85a45723850b56d"
+  },
+  "kit_version": "bdaab1dd9bc4",
+  "modules": [
+    "core",
+    "advisor"
+  ],
+  "patches": {
+    ".claude/agents/code-reviewer.md": {
+      "base": "sha256:41929071df541114f78c2f2b9dfaa65fe0034df37fd37d1ebcf742310e798ad4",
+      "patch": "sha256:033f1d0225ae6bcf3ade45293ff787446e1e1e79fd2102f7faa426668f2244cf",
+      "result": "sha256:b1cb0a11eff1c3919c50b7fb04fff814e0fce31b6d8a8f4ee06605bc7f2bcfec"
+    },
+    ".claude/commands/rfc.md": {
+      "base": "sha256:594fc9598df7548785885e7e8e3df514efad5c4474c1b5ea1fc322e3cfb2f519",
+      "patch": "sha256:85946d09437451a6e8d1777940956d2101561d9452799a50932a8200c933e21b",
+      "result": "sha256:9443bafd058d161fb4b04c5f76ab6f9676f1f48baa2bc6ef67dbb51fd2a60057"
+    },
+    ".claude/settings.json": {
+      "base": "sha256:9c2b230a0a186b95702010959f61e5519facd85979f1b80d1f99f454ba7dfdbd",
+      "patch": "sha256:2939953fcbace675645e3e7ae2020f70696e45a89c84f6ec1c64ba490e468f97",
+      "result": "sha256:7f4b1100af38fee9d7295e9f9935c244ea1a77fc0278bc291a82d00b6eb0330a"
+    },
+    ".pre-commit-config.yaml": {
+      "base": "sha256:0a09e57a889c50dd825546604295421e9d9f04dd58eb4f6233fd89330dc426b7",
+      "patch": "sha256:4ba26b900f74162c8df15ec610ada941738b4d64a9bae72738613f0a9117e406",
+      "result": "sha256:e3205856ecc874a6d1202e33284d232e20b07388835574eef9346e19df58c231"
+    },
+    "Makefile": {
+      "base": "sha256:5d6c4294cb94f1887a619843599ec35bb8204b7eddbf8224f47ffd2b931fdc8d",
+      "patch": "sha256:b14830bcb91dc22acbec9612ee8e63f3b44c1d55d41521b6c6aa1a6f13af536a",
+      "result": "sha256:b38de900d3582a15b67553e2dd3fdf2fd7f2ddd8127093a3f13f27871cd4fb74"
+    }
+  },
+  "seed": [
+    ".gitignore",
+    "docs/CONTRACT.md",
+    "docs/HANDOFF.md",
+    "docs/journal.md",
+    "docs/tasks/PLAN.md"
+  ],
+  "values": {
+    "browser_mcp": "no",
+    "ci_workflow": "quality.yml",
+    "compaction_marker": ".claude/.compacted",
+    "contract_doc": "SPEC.md",
+    "env_check": "",
+    "git_host": "github",
+    "phases_section": "13",
+    "quality_cmd": "make quality",
+    "safety_core": "none",
+    "safety_core_checks": "",
+    "safety_core_path": "src/app/payments/gate.py",
+    "safety_core_tests": "tests/test_payment_gate.py",
+    "session_section": "14",
+    "sizing_section": "14.1",
+    "stack": "none",
+    "task_prefix": "T-NNN"
+  }
+}

@@ -1,0 +1,6 @@
+// Flat config. The toolchain is pinned in package.json (npm ci installs it).
+import tseslint from "typescript-eslint";
+
+export default tseslint.config(...tseslint.configs.recommended, {
+  ignores: ["dist/", "node_modules/", "**/*.gen.*"],
+});
