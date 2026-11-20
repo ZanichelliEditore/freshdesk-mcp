@@ -5,8 +5,10 @@
 "none".*
 
 - **Written:** `2026-11-20T11:18:25+01:00`
-- **Describes commit:** `<filled by stamp>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (public). **CI:** `<filled by stamp>`.
+- **Describes commit:** `4f68e32`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (public). **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/44718199337
+  (ran on `4f68e32`). This file arrives in the commit right after it.
   Earlier: run on `80c7aae` green,
   https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/44716765351;
   first run on `27a7f16` red (unpinned ruff 0.17.6 rules; `gitleaks-action`
