@@ -16,8 +16,8 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
       - run: npm ci || npm install
@@ -27,7 +27,7 @@ jobs:
         run: |
           if git ls-files '*.ts' '*.tsx' | grep -q .; then npx tsc --noEmit; else echo "no TypeScript yet"; fi
       - run: npm test --if-present
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: pipx install ruff==0.15.17 # same pin as .pre-commit-config.yaml
@@ -39,15 +39,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
       - run: npm ci || npm install
       - run: npm audit --audit-level=high
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: pipx install pre-commit==4.6.2
