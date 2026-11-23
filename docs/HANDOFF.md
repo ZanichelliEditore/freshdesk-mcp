@@ -5,9 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T15:50:19+01:00`
-- **Describes commit:** STAMP-HASH, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP-CI. This file's hash and
-  CI line arrive in the commit right after it.
+- **Describes commit:** `5240238`
+  (`5240238d1b9ffa096f2078f20bb7cb157a1afc65`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45198648998
+  (ran on `5240238`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** sizing of T-050 (`/decompose`, scoped to that row; task
   file `docs/tasks/PLAN.md`), `done (2026-11-23)`. Commits `3479402`
