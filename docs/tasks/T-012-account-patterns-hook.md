@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-001
 - **Created:** 2026-11-23
 
@@ -16,8 +16,10 @@ machine, before T-008 brings the first field-label fixtures.
   the matcher T-001 used for the history scrub. It is not reimplemented
   with Python's `re` (not POSIX ERE: a bracket class would compile and
   never match) and never reads the working tree.
-- Exits: 0 is a match and refuses the commit, 1 passes, any other exit
-  fails. A match in a binary file refuses, naming the file.
+- Exits, per run (the caller's locale and the C locale; amended by the
+  owner on 2026-11-23, in session): 0 is a match and refuses the commit, 1
+  with nothing on stderr passes, anything else fails. A match in a binary
+  file refuses, naming the file.
 - A `repo: local`, `language: system` commit-stage hook in
   `.pre-commit-config.yaml`, `pass_filenames: false`, `always_run: true`.
 - Output names `file:line`, never the pattern or the matched text, on
@@ -71,24 +73,57 @@ until it creates one.
 `none`
 
 ## Acceptance
-A local commit-stage hook (not in `make quality`, not in CI) runs `git grep --cached -n -iE -f docs/private/account-patterns` over the index: exit 0 refuses, 1 passes, any other exit fails; `tools/checks/test_account_patterns.py`, with temporary repositories and pattern files, proves a match is refused naming `file:line`, a match in a binary file is refused naming the file, content staged but absent from the working tree is caught, and a missing file, an empty or blank-only file and an invalid regex each exit non-zero with a message saying how to fix it; no output on any path, the invalid regex included, contains a pattern line or the matched text; a staged synthetic match is refused by the installed hook (positive control, output in HANDOFF); `make quality` green.
+A local commit-stage hook (not in `make quality`, not in CI) runs `git grep --cached -n -iE -f docs/private/account-patterns` over the index: in the caller's locale and in the C locale: exit 0 from either run refuses, 1 with nothing on stderr from both passes, anything else fails; `tools/checks/test_account_patterns.py`, with temporary repositories and pattern files, proves a match is refused naming `file:line`, a match in a binary file is refused naming the file, content staged but absent from the working tree is caught, and a missing file, an empty or blank-only file and an invalid regex each exit non-zero with a message saying how to fix it; no output on any path, the invalid regex included, contains a pattern line or the matched text; a staged synthetic match is refused by the installed hook (positive control, output in HANDOFF); `make quality` green.
 
 ---
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `054da94`: `tools/checks/account_patterns.py`, the `account-patterns`
+  hook in `.pre-commit-config.yaml`, the `CONTRIBUTING.md` section, and
+  `examples/team-config.example.json:10` (see "Open doubts").
+- `f79ffd2`: full-round fixes. `9fbaa8d`: scoped-round fix and the
+  owner's both-locales choice.
+- Tests: `tools/checks/test_account_patterns.py` (29):
+  `Matching::test_match_is_refused_naming_file_and_line`,
+  `Matching::test_match_in_a_binary_file_is_refused_naming_the_file`,
+  `IndexNotWorkingTree::test_staged_content_deleted_from_the_working_tree_is_caught`,
+  `IndexNotWorkingTree::test_temporary_index_of_commit_a_is_the_one_scanned`,
+  `CannotCheck::test_invalid_regex_does_not_print_the_pattern`,
+  `CannotCheck::test_unreadable_blob_is_not_a_pass`,
+  `BothLocales` (each of its two tests seen red with one locale run
+  removed).
+- Positive control: in `docs/HANDOFF.md`, "Checkpoint".
 
 ## Dead ends
-none
+- Forcing `LC_ALL=C` on git grep to parse its "Binary file" sentence
+  (`054da94`): the C locale does not fold an accented letter's case.
+  Binary files are now named from a `-l` run.
+- The caller's locale alone (`f79ffd2`): `.` does not match a byte that
+  is not valid UTF-8. Hence both runs (`9fbaa8d`).
 
 ## Open doubts
-none
+- `9fbaa8d` changed the mechanism after the scoped round and no reviewer
+  read it (AGENTS.md rule 9: no third round). The owner chose the change
+  on 2026-11-23; the builder's tests are its only check.
+- The owner's answer on contributors was conditional: `SKIP=` unless the
+  patterns file is only the list of custom fields. It also holds other
+  kinds of value, so the builder took `SKIP=`; the owner has not
+  confirmed that reading.
+- `CONTRIBUTING.md` documents `SKIP=account-patterns` beside AGENTS.md
+  hard rule 3; the exception is recorded here only.
+- The field name that stood at `examples/team-config.example.json:10`
+  before `054da94` is a real one and stays in pushed history: owner's
+  decision of 2026-11-23, low sensitivity, no rewrite.
+- "Plan-time choices" above still says a clone "cannot commit until it
+  creates one"; the owner's decision replaces it.
+- A caller whose own locale is C gets no case folding of accented
+  letters (script header, known limits).
+- Parked review items: `docs/improvements.md`, the entry stamped
+  `9fbaa8d`.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: the task is done.
