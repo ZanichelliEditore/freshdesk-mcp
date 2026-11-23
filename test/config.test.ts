@@ -205,6 +205,12 @@ describe("team config: errors name the file and the path", () => {
     ["a negative floor", { limits: { floor_pct: -1 } }, "limits.floor_pct"],
     ["zero pacing", { limits: { pacing_rps: 0 } }, "limits.pacing_rps"],
     [
+      "a floor above the reserve",
+      { limits: { reserve_pct: 20, floor_pct: 21 } },
+      "limits.floor_pct",
+    ],
+    ["a floor above the default reserve", { limits: { floor_pct: 21 } }, "limits.floor_pct"],
+    [
       "an allow-list entry with no @",
       { forward_allow_list: ["example.com"] },
       "forward_allow_list.0",

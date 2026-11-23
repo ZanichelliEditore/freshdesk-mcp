@@ -109,6 +109,20 @@ describe("SchemaService: load and TTL cache", () => {
     expect(schema.agents.names.get(501)).toBe("Quill Ottersby");
   });
 
+  it("FrozenMap.forEach gives value, key and the view itself, with the caller's this", () => {
+    const view = new FrozenMap([[501, "Quill Ottersby"]]);
+    const seen: unknown[] = [];
+    const self = { tag: "self" };
+
+    view.forEach(function (this: unknown, value, key, map) {
+      seen.push(this, value, key, map);
+    }, self);
+
+    expect(seen).toEqual([self, "Quill Ottersby", 501, view]);
+    expect(seen[3]).toBe(view);
+    expect(seen[3]).not.toBeInstanceOf(Map);
+  });
+
   it("shares one load between calls made while it is in flight", async () => {
     queueLoad();
     const service = new SchemaService(http, TTL_S);
@@ -172,6 +186,13 @@ describe("SchemaService: load and TTL cache", () => {
       expect(() => cast.clear()).toThrow(TypeError);
       expect(() => Map.prototype.set.call(names, 501, "Changed")).toThrow(TypeError);
     }
+
+    expect(() => {
+      (FrozenMap.prototype as { get: unknown }).get = () => "Changed";
+    }).toThrow(TypeError);
+    expect(() => {
+      (FrozenMap as unknown as { prototype: unknown }).prototype = Map.prototype;
+    }).toThrow(TypeError);
 
     const again = schemaOf(await service.get());
     expect(again.agents.names.get(501)).toBe("Quill Ottersby");

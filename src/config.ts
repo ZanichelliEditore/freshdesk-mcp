@@ -94,6 +94,10 @@ const teamSchema = z.strictObject({
       /** How long the ticket-field schema is cached, seconds. */
       schema_ttl_s: z.int().positive().default(3600),
     })
+    .refine((limits) => limits.floor_pct <= limits.reserve_pct, {
+      path: ["floor_pct"],
+      error: "must not be above reserve_pct",
+    })
     .prefault({}),
   export_dir: z.string().min(1).optional(),
 });

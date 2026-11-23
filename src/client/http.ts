@@ -130,8 +130,10 @@ export interface PageCap {
 
 export class HttpClient {
   private readonly host: string;
-  private readonly authorization: string;
-  private readonly dispatcher: Dispatcher;
+  // Real private fields: the key and the dispatcher that carries it are not
+  // properties, so no holder of the client can read or print them.
+  readonly #authorization: string;
+  readonly #dispatcher: Dispatcher;
   private readonly limiter: RateLimiter;
 
   constructor(options: HttpClientOptions) {
@@ -141,8 +143,8 @@ export class HttpClient {
       );
     }
     this.host = options.domain;
-    this.authorization = `Basic ${Buffer.from(`${options.apiKey}:X`).toString("base64")}`;
-    this.dispatcher = options.dispatcher;
+    this.#authorization = `Basic ${Buffer.from(`${options.apiKey}:X`).toString("base64")}`;
+    this.#dispatcher = options.dispatcher;
     this.limiter = options.limiter;
   }
 
@@ -196,13 +198,13 @@ export class HttpClient {
       const response = await fetch(url, {
         method,
         headers: {
-          authorization: this.authorization,
+          authorization: this.#authorization,
           "user-agent": USER_AGENT,
           accept: "application/json",
           ...(payload === undefined ? {} : { "content-type": "application/json" }),
         },
         ...(payload === undefined ? {} : { body: payload }),
-        dispatcher: this.dispatcher,
+        dispatcher: this.#dispatcher,
         redirect: "manual",
         signal: timeout.signal,
       });

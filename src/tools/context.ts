@@ -3,21 +3,28 @@
 //
 //   - One limiter, shared by the client: built from the team `limits`.
 //   - One schema service on that client, its TTL `limits.schema_ttl_s`.
-//   - The team settings (`team`): field meanings, limits, toolsets.
+//   - The team settings (`team`): field meanings, limits, toolsets. They are
+//     the context's own frozen copy, and the context is frozen: a tool cannot
+//     unhide a field or lower a limit, and a later change to the `Config`
+//     changes nothing here.
 //   - `ticketOutput` with the team `fields` already given, so no tool decides
 //     which fields are hidden.
-//   - The API key goes to the client and nowhere else: the context has no
-//     `config`, `domain` or `apiKey`.
+//   - The API key goes to the client, which keeps it in a private field: the
+//     context has no `config`, `domain` or `apiKey`, and neither serialising
+//     nor inspecting it shows the key or the Authorization header.
 //
 // The dispatcher is the caller's (RFC 2026-11-23, rule 2): `cli.ts` passes
-// the Agent, tests the mock. A domain the client refuses throws `ConfigError`
-// here.
+// the Agent, tests the mock.
+//
+// Throws `ConfigError` for a domain the client refuses. A `Config` from
+// `loadConfig` throws nothing else; one built by hand with `floor_pct` above
+// `reserve_pct` gets the limiter's `RangeError`.
 
 import type { Dispatcher } from "undici";
 import { HttpClient } from "../client/http.js";
 import { RateLimiter } from "../client/rate-limit.js";
 import type { Config, TeamConfig } from "../config.js";
-import { type Schema, SchemaService } from "../schema/index.js";
+import { deepFreeze, type Schema, SchemaService } from "../schema/index.js";
 import { ticketOutput } from "../schema/output.js";
 
 export interface AppContext {
@@ -30,7 +37,7 @@ export interface AppContext {
 }
 
 export function createContext(config: Config, dispatcher: Dispatcher): AppContext {
-  const { team } = config;
+  const team = deepFreeze(structuredClone(config.team));
   const limiter = new RateLimiter(team.limits);
   const http = new HttpClient({
     domain: config.domain,
@@ -39,11 +46,12 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
     dispatcher,
     limiter,
   });
-  return {
+  return Object.freeze({
     http,
     limiter,
     schema: new SchemaService(http, team.limits.schema_ttl_s),
     team,
-    ticketOutput: (schema, ticket) => ticketOutput(schema, ticket, team.fields),
-  };
+    ticketOutput: (schema: Schema, ticket: Record<string, unknown>) =>
+      ticketOutput(schema, ticket, team.fields),
+  });
 }

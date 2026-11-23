@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inspect } from "node:util";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConfigError, loadConfig } from "../../src/config.js";
+import { type Config, ConfigError, loadConfig } from "../../src/config.js";
 import type { Schema } from "../../src/schema/index.js";
 import { ticketOutput } from "../../src/schema/output.js";
 import { type AppContext, createContext } from "../../src/tools/context.js";
@@ -97,6 +98,11 @@ describe("createContext: the schema service's TTL is limits.schema_ttl_s", () =>
     vi.setSystemTime(Date.now() + 3_600_000 - 1);
     expect(await schemaOf(context)).toBe(first);
     expect(sentPaths()).toEqual(ONE_LOAD);
+
+    vi.setSystemTime(Date.now() + 1);
+    queueLoad();
+    expect(await schemaOf(context)).not.toBe(first);
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
   });
 });
 
@@ -123,8 +129,10 @@ describe("createContext: team fields", () => {
     expect(context.team.limits.schema_ttl_s).toBe(3600);
   });
 
-  it("exposes the client, the limiter, the schema service and the team settings, not the key", () => {
+  it("exposes the client, the limiter, the schema service and the team settings, not the key", async () => {
     const context = contextFor({});
+    queueLoad();
+    await schemaOf(context);
 
     expect(Object.keys(context).sort()).toEqual([
       "http",
@@ -133,6 +141,61 @@ describe("createContext: team fields", () => {
       "team",
       "ticketOutput",
     ]);
+    const key = baseEnv.FRESHDESK_API_KEY;
+    const basic = Buffer.from(`${key}:X`).toString("base64");
+    for (const text of [
+      JSON.stringify(context),
+      inspect(context, { depth: Infinity, showHidden: true }),
+    ]) {
+      expect(text).not.toContain(key);
+      expect(text).not.toContain(basic);
+    }
+  });
+
+  it("freezes the team settings and itself: no tool can unhide a field or lower a limit", async () => {
+    const context = contextFor({ fields: { Hobby: { hidden: true } } });
+    queueLoad();
+    const schema = await schemaOf(context);
+    const fields = context.team.fields as Record<string, { hidden: boolean }>;
+
+    expect(() => {
+      fields.Hobby!.hidden = false;
+    }).toThrow(TypeError);
+    expect(() => {
+      delete fields.Hobby;
+    }).toThrow(TypeError);
+    expect(() => {
+      (context.team.limits as { reserve_pct: number }).reserve_pct = 0;
+    }).toThrow(TypeError);
+    expect(() => {
+      (context as { ticketOutput: unknown }).ticketOutput = () => ({});
+    }).toThrow(TypeError);
+    expect(() => {
+      (context as { team: unknown }).team = {};
+    }).toThrow(TypeError);
+
+    expect(context.ticketOutput(schema, rawTicket)).not.toHaveProperty("Hobby");
+    expect(context.team.limits.reserve_pct).toBe(20);
+  });
+
+  it("keeps its own copy of the team settings: changing the config afterwards changes nothing", async () => {
+    const path = join(dir, `team-${fileCount++}.json`);
+    writeFileSync(path, JSON.stringify({ fields: { Hobby: { hidden: true } } }));
+    const config: Config = loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: path });
+    const context = createContext(config, mock);
+
+    config.team.fields.Hobby!.hidden = false;
+    config.team.limits.reserve_pct = 100;
+    config.team.limits.floor_pct = 100;
+    config.team.limits.schema_ttl_s = 1;
+
+    queueLoad();
+    const schema = await schemaOf(context);
+    expect(context.ticketOutput(schema, rawTicket)).not.toHaveProperty("Hobby");
+    expect(context.team.limits.reserve_pct).toBe(20);
+    expect((await context.limiter.acquire("expensive")).ok).toBe(true);
+    vi.setSystemTime(Date.now() + 1000);
+    expect(await schemaOf(context)).toBe(schema);
   });
 });
 
@@ -175,7 +238,10 @@ describe("createContext: client and limiter", () => {
 
   it("sends through the context's client to the configured domain", async () => {
     const context = contextFor({});
-    queueLoad();
+    mock
+      .get(`https://${DOMAIN}`)
+      .intercept({ path: FIELDS, method: "GET" })
+      .reply(200, [], { headers: { "content-type": "application/json" } });
 
     const result = await context.http.requestWithRetry({ path: "/ticket_fields" });
 

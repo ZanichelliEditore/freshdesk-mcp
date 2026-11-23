@@ -81,7 +81,11 @@ export class FrozenMap<K, V> implements ReadonlyMap<K, V> {
   }
 }
 
-function deepFreeze<T>(value: T): T {
+// The class and its prototype too: no one swaps `get` for every view.
+Object.freeze(FrozenMap.prototype);
+Object.freeze(FrozenMap);
+
+export function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null) {
     for (const inner of Object.values(value)) deepFreeze(inner);
     Object.freeze(value);
@@ -95,10 +99,14 @@ export class SchemaService {
   private cached?: { schema: Schema; loadedAt: number };
   private inFlight?: Promise<SchemaResult>;
 
+  readonly #http: HttpClient;
+
   constructor(
-    private readonly http: HttpClient,
+    http: HttpClient,
     private readonly ttlS: number,
-  ) {}
+  ) {
+    this.#http = http;
+  }
 
   /** The cached schema while its TTL lasts; otherwise a new load. */
   get(): Promise<SchemaResult> {
@@ -114,11 +122,11 @@ export class SchemaService {
 
   private async load(): Promise<SchemaResult> {
     const startedAt = Date.now();
-    const fields = await listTicketFields(this.http);
+    const fields = await listTicketFields(this.#http);
     if (!fields.ok) return fields;
-    const agents = await listAgents(this.http);
+    const agents = await listAgents(this.#http);
     if (!agents.ok) return agents;
-    const groups = await listGroups(this.http);
+    const groups = await listGroups(this.#http);
     if (!groups.ok) return groups;
 
     const schema: Schema = deepFreeze({
