@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T17:42:56+01:00`
-- **Describes commit:** filled in the stamp commit. **CI:** filled in the
-  stamp commit.
+- **Describes commit:** `a7b22e8`
+  (`a7b22e8a0e89d9b9052b0fb5194b78fc6997420f`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45219730245
+  (ran on `a7b22e8`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-044 `done (2026-11-23)`,
   `docs/tasks/T-044-dependabot-branches.md` ("Done" is the report).
