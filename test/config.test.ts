@@ -91,6 +91,10 @@ describe("custom-domain override: one exact hostname", () => {
     ["two hostnames", "a.example.com b.example.com"],
     ["userinfo", "x@evil.example"],
     ["an IPv4 address", "203.0.113.7"],
+    ["an IPv4 address with a hex part", "203.0.113.0x7"],
+    ["a numeric last label", "support.example.123"],
+    ["a trailing newline", "support.example.com\n"],
+    ["a name of 254 characters", `${"a.".repeat(123)}${"b".repeat(8)}`],
     ["upper case", "Support.Example.com"],
     ["surrounding space", " support.example.com"],
     ["a label starting with a hyphen", "-a.example.com"],
@@ -99,6 +103,13 @@ describe("custom-domain override: one exact hostname", () => {
   ])("rejects %s (%j), naming the variable", (_what, value) => {
     const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_HOST_OVERRIDE: value }));
     expect(err.message).toContain("FRESHDESK_HOST_OVERRIDE");
+  });
+
+  it("accepts a 63-character label and a 253-character name", () => {
+    for (const host of [`${"a".repeat(63)}.example.com`, `${"a.".repeat(123)}${"b".repeat(7)}`]) {
+      expect(host.length).toBeLessThanOrEqual(253);
+      expect(loadConfig({ ...baseEnv, FRESHDESK_HOST_OVERRIDE: host }).hostOverride).toBe(host);
+    }
   });
 
   it("is personal: a team file cannot set it", () => {
@@ -168,6 +179,13 @@ describe("team config: errors name the file and the path", () => {
     const path = join(dir, "absent.json");
     const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: path }));
     expect(err.message).toContain(path);
+    expect(err.message).toContain("ENOENT");
+  });
+
+  it("a directory names the path and the error code", () => {
+    const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: dir }));
+    expect(err.message).toContain(dir);
+    expect(err.message).toContain("EISDIR");
   });
 
   it.each([
@@ -203,12 +221,14 @@ describe("team config: errors name the file and the path", () => {
 
   it.each([
     ["an array", []],
-    ["a string", "core"],
+    ["a string", '"core"'],
     ["null", null],
-  ])("a file holding %s is refused", (_what, content) => {
+  ])("a file holding %s is valid JSON but refused by the schema", (_what, content) => {
     const path = teamFile(content);
     const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: path }));
     expect(err.message).toContain(path);
+    expect(err.message).toContain("the file: ");
+    expect(err.message).not.toContain("not valid JSON");
   });
 
   it("reports every problem in the file, not only the first", () => {
@@ -229,6 +249,17 @@ describe("no error message contains the API key", () => {
     [
       "key as an allow-list entry",
       { ...baseEnv, FRESHDESK_MCP_CONFIG: teamFile({ forward_allow_list: [API_KEY] }) },
+    ],
+    ["key as the config path", { ...baseEnv, FRESHDESK_MCP_CONFIG: API_KEY }],
+    ["key inside the config path", { ...baseEnv, FRESHDESK_MCP_CONFIG: join(dir, API_KEY) }],
+    ["key as an unknown key", { ...baseEnv, FRESHDESK_MCP_CONFIG: teamFile({ [API_KEY]: 1 }) }],
+    [
+      "key as a field name",
+      { ...baseEnv, FRESHDESK_MCP_CONFIG: teamFile({ fields: { [API_KEY]: { hide: true } } }) },
+    ],
+    [
+      "key as a field name with a wrong value",
+      { ...baseEnv, FRESHDESK_MCP_CONFIG: teamFile({ fields: { [API_KEY]: { hidden: 1 } } }) },
     ],
   ])("%s", (_what, env) => {
     const err = errorOf(() => loadConfig(env));

@@ -19,6 +19,7 @@
 _TODO: list the application's own components and their responsibilities as they land._
 
 - **`src/client/errors.ts`** — the one normalised error shape (SPEC §7.1): maps an HTTP status or a network failure to seven codes, with a documented fallback.
+- **`src/config.ts`** — `loadConfig(env)` (SPEC §10): personal settings from the environment (domain, API key, team-file path, custom-domain override), team settings from an optional JSON file under a strict zod schema with defaults; a `ConfigError` names the variable or the file and key path. Example: `examples/team-config.example.json`.
 
 **Runtime stack** ([RFC 2026-11-23](../rfc/active/2026-11-23-adopt-runtime-stack.md)):
 Node ≥ 22.19, `zod ^4.2`, `undici ^8`, `@modelcontextprotocol/server ^2`;

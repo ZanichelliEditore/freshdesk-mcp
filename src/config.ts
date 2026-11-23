@@ -9,12 +9,16 @@
 // to point everyone's API key at another host, so the team schema has no
 // such key and refuses unknown ones.
 //
-// This module checks presence and types only. Whether the domain or the
-// override is an acceptable host is the HTTP client's rule (SPEC §7.1).
+// This module checks presence and types, plus the override's shape (one
+// lower-case dotted hostname, see isHostname). Whether the domain or the
+// override is an acceptable host to send the key to is the HTTP client's
+// rule (SPEC §7.1), checked there at construction and per request.
 //
-// A ConfigError's message names the variable, or the file and the path
-// inside it, and never quotes a value: not from the environment, not from
-// the file (which may not be the file the user meant).
+// A ConfigError's message names the variable, or the file's path and the
+// key path inside it. It quotes no value from the environment or the file
+// (which may not be the file the user meant), with two exceptions it needs
+// to be useful: the FRESHDESK_MCP_CONFIG path and the file's key names.
+// Wherever the API key's text would appear in either, it is replaced.
 
 import { readFileSync } from "node:fs";
 import { z } from "zod";
@@ -26,9 +30,13 @@ export class ConfigError extends Error {
 const LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 const HOSTNAME = new RegExp(`^(?:${LABEL}\\.)+${LABEL}$`);
 
-/** A lower-case, dotted DNS name: no scheme, port, path, wildcard or IP. */
+/**
+ * A lower-case, dotted DNS name: no scheme, port, path, wildcard or IP.
+ * The last label starts with a letter, so no spelling of an IPv4 address
+ * that a URL parser accepts (`1.2.3.4`, `1.2.3.0x4`) passes.
+ */
 function isHostname(value: string): boolean {
-  return value.length <= 253 && HOSTNAME.test(value) && !/\.\d+$/.test(value);
+  return value.length <= 253 && HOSTNAME.test(value) && /\.[a-z][a-z0-9-]*$/.test(value);
 }
 
 const required = (name: string) =>
@@ -117,9 +125,13 @@ function loadTeamConfig(path: string | undefined): TeamConfig {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
-  } catch {
-    // No `cause`, here and below: its text may quote the file.
-    throw new ConfigError(`Cannot read the team config ${path} (FRESHDESK_MCP_CONFIG).`);
+  } catch (err) {
+    // No `cause`, here and below: its text may quote the file. Only a
+    // Node error code (ENOENT, EACCES, EISDIR) is passed on.
+    const code = /^E[A-Z]+$/.exec(String((err as NodeJS.ErrnoException).code))?.[0];
+    throw new ConfigError(
+      `Cannot read the team config ${path} (FRESHDESK_MCP_CONFIG)${code ? `: ${code}` : ""}.`,
+    );
   }
   let json: unknown;
   try {
@@ -151,12 +163,23 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     );
   }
   const personal = parsed.data;
+  let team: TeamConfig;
+  try {
+    team = loadTeamConfig(personal.FRESHDESK_MCP_CONFIG);
+  } catch (err) {
+    // The path and the file's key names are quoted: a key pasted into the
+    // wrong setting, or a wrong file, must not put the API key in a message.
+    if (!(err instanceof ConfigError)) throw err;
+    throw new ConfigError(
+      err.message.replaceAll(personal.FRESHDESK_API_KEY, "[FRESHDESK_API_KEY]"),
+    );
+  }
   return {
     domain: personal.FRESHDESK_DOMAIN,
     apiKey: personal.FRESHDESK_API_KEY,
     ...(personal.FRESHDESK_HOST_OVERRIDE === undefined
       ? {}
       : { hostOverride: personal.FRESHDESK_HOST_OVERRIDE }),
-    team: loadTeamConfig(personal.FRESHDESK_MCP_CONFIG),
+    team,
   };
 }
