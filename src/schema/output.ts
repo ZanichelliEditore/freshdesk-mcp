@@ -41,12 +41,12 @@ const TICKET_KEY = new Map([
 ]);
 
 /** Where a field's value sits in the ticket: a top-level key or one of `custom_fields`. */
-function ticketKey(name: string, isDefault: boolean): string {
+export function ticketKey(name: string, isDefault: boolean): string {
   return isDefault ? (TICKET_KEY.get(name) ?? name) : name;
 }
 
 /** How a hidden key and a field's names are compared. */
-function fold(text: string): string {
+export function fold(text: string): string {
   return text.normalize("NFC").trim().toLowerCase();
 }
 
