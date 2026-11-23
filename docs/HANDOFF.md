@@ -4,76 +4,66 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T13:28:59+01:00`
-- **Describes commit:** `432a2ab`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45174811277
-  (ran on `432a2ab`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T13:50:43+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's hash and
+  CI line arrive in the commit right after it.
 
-- **Current task:** T-010 (schema service: load, TTL cache, output
-  mapping), `done (2026-11-23)`. Build in `f8d7db7`, review fixes in
-  `460a596`.
+- **Current task:** T-011 (schema service: input mapping + nested-choice
+  validation), `done (2026-11-23)`. Build `73099a8`, review fixes
+  `92e6b40`. The build commit did not set the row to `doing` (rule 7
+  miss); set in `92e6b40`. **M0 done** once the CI run above is green.
 
-- **Next action:** `/pickup` takes T-011 (schema service: input mapping +
-  nested-choice validation).
+- **Next action:** `/decompose M1`. Before M1's first write caller the
+  owner decides: (1) hidden fields output-only, or also refused on input;
+  (2) a per-tool allow set of writable fields (SPEC §8.2); (3) hard rule 1:
+  `ticketInput` is the first builder of write payloads, so an RFC on
+  whether the first write tool needs a safety core; (4) the
+  agent/group/product choices live check (Open doubts, top); (5) size
+  `proposed` T-014 and T-015.
 
-- **Read before anything else:** `docs/tasks/PLAN.md` (rows T-011, T-014,
-  T-015); the T-011 task file; the "Open doubts" of T-010
-  (`docs/tasks/T-010-schema-output.md`); the T-010 entries of
-  `docs/improvements.md` (stamped `f8d7db7` and `460a596`).
+- **Read before anything else:** `docs/tasks/PLAN.md` (M1 rows, T-014,
+  T-015); `docs/improvements.md` entries stamped `73099a8` (owner
+  decisions M2, M3) and `92e6b40`; "Open doubts" of
+  `docs/tasks/T-011-schema-input.md` and `docs/tasks/T-010-schema-output.md`.
 
-- **Reviews:** full round, range `76e2718..f8d7db7`, R1 = `f8d7db7`; all
-  four quotes matched for all three.
-  code-reviewer: no High; Medium (requester/company/product keys untested)
-  and 4 Low (personal-data test could not fail, groups failure untested,
-  empty nested top level, overview claimed TTL wiring) fixed in `460a596`;
-  made one read-only Bash call (`git show f8d7db7:SPEC.md | grep`).
-  security-reviewer: no High; Medium (hidden match missed ticket keys,
-  spaces, Unicode forms) and 3 Low (prototype-chain lookups, shared mutable
-  cached schema, clock going back) fixed in `460a596`; §7.4 wrapping and
-  the unmatched-hidden-key warning parked.
-  compliance-reviewer: Wireframes `none`, nothing to check.
-  Scoped round, range `f8d7db7..460a596`, quotes matched for all three;
-  list A empty for all three; code-reviewer made no Bash call. Parked:
-  `docs/improvements.md`, entries stamped `f8d7db7` and `460a596`.
+- **Reviews:** full round, range `907e6a4..73099a8`, R1 = `73099a8`; all
+  four quotes matched for all three. code-reviewer: 4 Medium and Lows fixed
+  in `92e6b40` (Low 6 parked); made one read-only Bash call (`git grep` on
+  `SPEC.md`). security-reviewer: M1, M4, L1-L3 fixed in `92e6b40`; M2, M3
+  parked as owner decisions. compliance-reviewer: Wireframes `none`.
+  Scoped round, range `73099a8..92e6b40`, quotes matched for all three;
+  list A empty for all three; no Bash calls. Parked:
+  `docs/improvements.md`, entries stamped `73099a8` and `92e6b40`.
 
-- **Proposed plan changes:**
-  - T-015, "Build the schema service from config", `proposed (2026-11-23)`:
-    nothing passes `limits.schema_ttl_s` to `SchemaService` or the team
-    `fields` to `ticketOutput`, and T-011 does not; may fold into the first
-    M1 tool task.
-  - T-014, "A write is not started without time to finish", still
-    `proposed (2026-11-23)`; owner to size it before the first write
-    resource.
+- **Proposed plan changes:** none new. T-014 and T-015 still
+  `proposed (2026-11-23)`.
 
 - **Open doubts:**
-  - New (T-010), builder's choices for the owner to confirm: hidden-field
-    match ignores case (also spaces, Unicode form, and a default field's
-    ticket key); a key the ticket does not carry leaves the field out,
-    `null` stays `null`; requester, company and product are raw ids; a
-    hidden key matching no field is silent (warning parked).
-  - New (T-010): unresolved ids are strings (`unknown status 9`,
-    `agent 9 (name not loaded: the agent list is incomplete)`); the name
-    maps are read-only by type only (parked `460a596`); §7.4 wrapping must
-    exist before `ticketOutput`'s first tool caller; the ~5 min worst case
-    per list load (T-009 Low 4) still parked.
+  - **Owner decision / live check:** `unsupported_field`
+    (`src/schema/input.ts:242-247`) may refuse Agent, Group and Product on
+    a real account if `/ticket_fields` gives them a name → id `choices`
+    record (reviewers' memory, unverified; the fixture gives them none).
+    Due before M1's first write tool.
+  - New (T-011), orchestrator's and builder's choices: see the task file's
+    "Open doubts" (fail-closed other types, empty choices pass through,
+    API name vs label ambiguous with no escape syntax, short path sends
+    `null`, `" > "` separator, ids only for agent/group/requester);
+    `unsupported_field` is a code SPEC §7.3 does not name.
+  - From T-010: hidden-field match rules, unresolved ids as strings, name
+    maps read-only by type only, §7.4 wrapping before `ticketOutput`'s
+    first tool caller, ~5 min worst case per list load.
   - From T-009/T-008: schemas follow API v2 docs, not a live account;
     malformed page or body → `server`.
-  - From T-013: the deadline reaches `acquire` through an optional second
-    argument of `request`; a backoff crossing the deadline is skipped; a
-    caller's bound of exactly 15 s refuses a 15 s wait; SPEC §7.1 does not
-    mention the 30 s deadline; the 29.9 s/29.999 s tests not proven stable;
-    `paginate` has no total budget.
-  - From T-012: `9fbaa8d` is a mechanism change no reviewer read;
+  - From T-013: see HANDOFF at `432a2ab` (deadline through `request`'s
+    second argument, 15 s bound, SPEC §7.1 silent on 30 s, `paginate` has
+    no total budget).
+  - From T-012: `9fbaa8d` unreviewed mechanism change;
     `SKIP=account-patterns` for contributors without the patterns file,
-    owner to confirm; AGENTS.md hard rule 3 does not record it; the C locale
-    does not fold accented letters.
+    owner to confirm; C locale does not fold accented letters.
   - PLAN's sizing line still counts T-001's split point as pending.
-  - Earlier (T-003..T-007) builder's choices awaiting the owner: see the
-    "Open doubts" of each task file and HANDOFF at `6b348c7`.
   - `make quality` does not run `make build`; CI does (ran locally on
-    `460a596`: clean).
+    `92e6b40`: clean).
   - CI gitleaks step not shown to fail on a planted secret (T-001); hashes
     quoted up to `59e3395` predate the history rewrite; the pre-scrub
     backup bundle still holds account values, owner deletes it; two
@@ -83,8 +73,8 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `460a596` plus the handoff docs
-  (Node 22): eslint and ruff "All checks passed!"; prettier "All matched
-  files use Prettier code style!"; `tsc --noEmit` clean; vitest "Test Files
-  12 passed (12)", "Tests 456 passed (456)"; `tools/checks` "Ran 54 tests",
-  OK; both gitleaks scans passed. `test/schema/output.test.ts` 34 passed.
+- **Checkpoint:** `make quality` exit 0 on `92e6b40` (Node 22): eslint and
+  ruff "All checks passed!"; prettier "All matched files use Prettier code
+  style!"; `tsc --noEmit` clean; vitest "Test Files 13 passed (13)",
+  "Tests 503 passed (503)"; `tools/checks` "Ran 54 tests", OK; both
+  gitleaks scans passed. `test/schema/input.test.ts` 47 passed.

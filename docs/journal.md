@@ -54,3 +54,4 @@ stands for. End an entry with the task id it came from.
 - undici's `MockAgent` call history `path` has no query string; `fullUrl` has it. A test asserting `per_page` or `page` must read `fullUrl`. (T-009)
 - `Object.freeze` on a `Map` does not stop `set`/`delete`: a deep freeze that walks `Object.values` leaves a map mutable, and `ReadonlyMap` protects only at compile time. (T-010)
 - A `Record` lookup with a name from the tenant (`TICKET_KEY[name]`) reaches `Object.prototype` (`constructor`, `toString`); a `Map` or an `Object.hasOwn` guard does not. (T-010)
+- A `\u` escape written into a test source can arrive as the literal character, so a Unicode-form test compares two identical strings and cannot fail. Build such strings with `String.fromCharCode` and prove the test with a mutation that drops `normalize`. (T-011)
