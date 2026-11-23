@@ -4,80 +4,73 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T13:50:43+01:00`
-- **Describes commit:** `41fc2d9`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45179540597
-  (ran on `41fc2d9`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it. **M0
-  done:** this run is its acceptance.
+- **Written:** `2026-11-23T14:50:30+01:00`
+- **Describes commit:** `HASH_PENDING`. **CI:** CI_PENDING. This file's
+  hash and CI line arrive in the commit right after it.
 
-- **Current task:** T-011 (schema service: input mapping + nested-choice
-  validation), `done (2026-11-23)`. Build `73099a8`, review fixes
-  `92e6b40`. The build commit did not set the row to `doing` (rule 7
-  miss); set in `92e6b40`. **M0 done** (CI above).
+- **Current task:** M1 decomposition (`/decompose M1`, a `plan` session;
+  its task file is `docs/tasks/PLAN.md`), `done (2026-11-23)`. Commits
+  `8399b60` (plan and owner decisions), `342758a` (full-round fixes) and
+  the one this file describes (scoped-round wording). Documents only: no
+  `src/` or `test/` change.
 
-- **Next action:** `/decompose M1`. Before M1's first write caller the
-  owner decides: (1) hidden fields output-only, or also refused on input;
-  (2) a per-tool allow set of writable fields (SPEC §8.2); (3) hard rule 1:
-  `ticketInput` is the first builder of write payloads, so an RFC on
-  whether the first write tool needs a safety core; (4) the
-  agent/group/product choices live check (Open doubts, top); (5) size
-  `proposed` T-014 and T-015.
+- **Next action:** `/pickup` takes T-015
+  (`docs/tasks/T-015-app-context.md`).
 
-- **Read before anything else:** `docs/tasks/PLAN.md` (M1 rows, T-014,
-  T-015); `docs/improvements.md` entries stamped `73099a8` (owner
-  decisions M2, M3) and `92e6b40`; "Open doubts" of
-  `docs/tasks/T-011-schema-input.md` and `docs/tasks/T-010-schema-output.md`.
+- **Read before anything else:** `docs/tasks/PLAN.md`, section M1: its
+  notes, the "Owner decisions" table and the rows (execution order, not id
+  order).
 
-- **Reviews:** full round, range `907e6a4..73099a8`, R1 = `73099a8`; all
-  four quotes matched for all three. code-reviewer: 4 Medium and Lows fixed
-  in `92e6b40` (Low 6 parked); made one read-only Bash call (`git grep` on
-  `SPEC.md`). security-reviewer: M1, M4, L1-L3 fixed in `92e6b40`; M2, M3
-  parked as owner decisions. compliance-reviewer: Wireframes `none`.
-  Scoped round, range `73099a8..92e6b40`, quotes matched for all three;
-  list A empty for all three; no Bash calls. Parked:
-  `docs/improvements.md`, entries stamped `73099a8` and `92e6b40`.
+- **Reviews:**
+  - `planner` on the first draft: 3 High, 7 Medium, applied before
+    `8399b60`.
+  - Full round, range `d06ba09..8399b60`, R1 = `8399b60`; the four quotes
+    matched for all three, no Bash calls. security-reviewer: 2 High, 5
+    Medium, 5 Low. code-reviewer: 6 Medium, 11 Low. compliance-reviewer:
+    Wireframes `none`. A `planner` re-check: 4 findings. All applied in
+    `342758a`.
+  - Scoped round, range `8399b60..342758a`; quotes matched for all three,
+    no Bash calls; compliance `none`. List A: security 3, code 4, all
+    acceptance wording, applied in the commit this file describes and
+    **not reviewed again** (no third round, rule 9). List B parked:
+    `docs/improvements.md`, entry stamped `342758a`.
 
-- **Proposed plan changes:** none new. T-014 and T-015 still
-  `proposed (2026-11-23)`.
+- **Proposed plan changes:** T-041 (`ticketInput`: agent, group, product
+  by the measured shape) and T-049 (maintainer's check of a pull request's
+  range for account values), both `proposed (2026-11-23)`, to confirm or
+  drop at the next `/decompose`.
 
-- **Open doubts:**
-  - **Owner decision / live check:** `unsupported_field`
-    (`src/schema/input.ts:242-247`) may refuse Agent, Group and Product on
-    a real account if `/ticket_fields` gives them a name → id `choices`
-    record (reviewers' memory, unverified; the fixture gives them none).
-    Due before M1's first write tool.
-  - New (T-011), orchestrator's and builder's choices: see the task file's
-    "Open doubts" (fail-closed other types, empty choices pass through,
-    API name vs label ambiguous with no escape syntax, short path sends
-    `null`, `" > "` separator, ids only for agent/group/requester);
-    `unsupported_field` is a code SPEC §7.3 does not name.
-  - From T-010: hidden-field match rules, unresolved ids as strings, name
-    maps read-only by type only, §7.4 wrapping before `ticketOutput`'s
-    first tool caller, ~5 min worst case per list load.
-  - From T-009/T-008: schemas follow API v2 docs, not a live account;
-    malformed page or body → `server`.
-  - From T-013: see HANDOFF at `432a2ab` (deadline through `request`'s
-    second argument, 15 s bound, SPEC §7.1 silent on 30 s, `paginate` has
-    no total budget).
-  - From T-012: `9fbaa8d` unreviewed mechanism change;
-    `SKIP=account-patterns` for contributors without the patterns file,
-    owner to confirm; C locale does not fold accented letters.
-  - PLAN's sizing line still counts T-001's split point as pending.
-  - `make quality` does not run `make build`; CI does (ran locally on
-    `92e6b40`: clean).
-  - CI gitleaks step not shown to fail on a planted secret (T-001); hashes
-    quoted up to `59e3395` predate the history rewrite; the pre-scrub
-    backup bundle still holds account values, owner deletes it; two
-    Dependabot branches on the remote, not reviewed.
+- **Open doubts (owner):**
+  - T-048: approve the mechanism that authorises a publish (the RFC
+    recommends), then set it up before the first tag.
+  - T-038: evidence that the organisation owns the npm scope and the
+    publisher is a member, before the README names the package.
+  - The npm token, if T-048 keeps one, and the explicit go for the first
+    publish (0.1.0, after T-039).
+  - OD-2 and OD-3 (per-tool writable fields, safety core): by the RFC of
+    T-040.
+  - OD-4: the owner runs `make smoke` after T-016, then T-022's probes;
+    T-022 to T-024, T-043, T-026 to T-030, T-036 and T-037 wait on it.
+  - Orchestrator's choices of 2026-11-23, to confirm: choice names
+    stripped of HTML and capped like labels (SPEC §7.4); `count_tickets`
+    refuses a group-by field of a non-closed type (SPEC §8.2, T-036); the
+    variable name `FRESHDESK_EXPORT_DIR` (SPEC §10, T-037); hidden fields
+    "not guaranteed" in rows, counts and exports (SPEC §7.3).
+  - `examples/team-config.example.json` still carries `export_dir` and
+    three toolsets until T-019 and T-037 change it.
+  - From before, still open: schemas follow the API v2 docs, not a live
+    account (T-016 measures it); CI's gitleaks step not shown to fail on a
+    planted secret (T-001); hashes quoted up to `59e3395` predate the
+    history rewrite; two Dependabot branches on the remote (T-044).
 
-- **Dead ends:** none.
+- **Dead ends:** a root `server.json` and an MCP Registry listing were
+  planned and then withdrawn by the owner on 2026-11-23: not
+  parked, do not raise again unasked.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `92e6b40` (Node 22): eslint and
-  ruff "All checks passed!"; prettier "All matched files use Prettier code
-  style!"; `tsc --noEmit` clean; vitest "Test Files 13 passed (13)",
-  "Tests 503 passed (503)"; `tools/checks` "Ran 54 tests", OK; both
-  gitleaks scans passed. `test/schema/input.test.ts` 47 passed.
+- **Checkpoint:** `make quality` exit 0 (Node 22): eslint and ruff "All
+  checks passed!"; prettier "All matched files use Prettier code style!";
+  `tsc --noEmit` clean; vitest "Test Files 13 passed (13)", "Tests 503
+  passed (503)"; `tools/checks` "Ran 54 tests", OK; both gitleaks scans
+  passed.

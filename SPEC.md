@@ -270,7 +270,7 @@ costs in API calls when it is more than one.
 | `list_agents`, `list_groups` | lookup for assignment and notification |
 | `search_solutions`, `get_solution_article`, `list_solution_tree` | knowledge base read (C3, C9) |
 | `list_canned_responses`, `get_canned_response` | canned read (C3, C10) |
-| `count_tickets` | counts grouped by up to 2 fields over a period and filter, aggregated in code (C7) |
+| `count_tickets` | counts grouped by up to 2 fields over a period and filter, aggregated in code (C7); a group-by field must be of a closed type (number, boolean, date, validated choice, status, priority, source, agent, group), any other is refused (orchestrator's choice, 2026-11-23, owner to confirm) |
 | `export_tickets` | writes JSONL or CSV to the export dir: filter, period, optional conversations, labels resolved; returns path, row count, calls used (C7, and the feed for a history project) |
 
 **`write`** — non-customer-facing writes (C1, C4, C5, C6, C8)

@@ -13,9 +13,11 @@
 The `account-patterns` commit hook checks staged content against
 `docs/private/account-patterns`, a gitignored list of patterns for real
 account values that only maintainers hold; without the file it refuses
-every commit. Maintainers keep the file in place. A contributor who does not
-have it commits with `SKIP=account-patterns git commit` and does not create a
-stand-in file: a file with a dummy line switches the guard off for good.
+every commit. Maintainers keep the file in place. An outside contributor who
+was never given the file commits with `SKIP=account-patterns git commit`, that
+one hook id only, and does not create a stand-in file: a file with a dummy
+line switches the guard off for good. A maintainer or an agent session never
+uses `SKIP`: for them a missing file is a stop (`AGENTS.md`, hard rule 3).
 Every other hook still runs. A commit made that way was checked by nothing
 for account values (CI has no patterns file), so a maintainer reads it for
 them before merging.

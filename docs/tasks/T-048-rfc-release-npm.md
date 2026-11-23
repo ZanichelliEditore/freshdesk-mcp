@@ -19,6 +19,9 @@ the owner's release decisions and decides how a publish is authorised.
   Environment with the owner as required reviewer and an environment secret,
   or npm trusted publishing over OIDC with no long-lived token. For each:
   who can trigger a publish, and what a leaked credential allows.
+- Also weighed: who can push a `v*` tag (tag protection), and whether npm
+  trusted publishing works for a package that does not exist yet (if not,
+  0.1.0 may need a token).
 - Any tool or action the workflow needs is named with its pin.
 - `rfc-reviewer` on the draft. An accepted RFC may amend T-045's acceptance
   line (decompose.md step 6), in the row and the task file.

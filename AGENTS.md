@@ -70,7 +70,8 @@ generic engineering contract; where the two overlap, this section wins.
    given the patterns file may commit with `SKIP=account-patterns`, that
    one hook id only; never a maintainer or an agent session, for whom a
    missing file is a stop. A maintainer with the file checks such commits
-   for account values before merge. New dependencies go through `/rfc`.
+   for account values before merge (`CONTRIBUTING.md`, "The
+   `account-patterns` hook"). New dependencies go through `/rfc`.
 
 ### Session discipline (SPEC.md §14)
 

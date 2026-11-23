@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-017, T-019
+- **Depends on:** T-017, T-019, T-047
 - **Created:** 2026-11-23
 
 ## Goal
@@ -17,6 +17,8 @@ tree) and team meanings (C1, C8).
   length capped), not wrapped (owner, 2026-11-23).
 - A long choice list is capped with a marker; the description says the call
   cost (cold and warm cache).
+- After T-047: no tool ships without the 30 s deadline of a cold schema load
+  (owner, 2026-11-23).
 
 ## Out of scope
 - Hiding fields from this tool (parked, `docs/improvements.md`).
