@@ -5,14 +5,16 @@
 "none".*
 
 - **Written:** `2026-11-23T12:04:39+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file arrives
-  in the commit right after it.
+- **Describes commit:** `a84b4ba`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45161997156
+  (ran on `a84b4ba`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** `/decompose` of the two `proposed` rows, a plan session,
   documents only: T-012 and T-013 are `todo (2026-11-23)`, each with a task
   file, placed before T-008. Plan in `730ebf3`, review fixes in `f9927d8`
-  and the described commit. Approved by the owner on 2026-11-23 as
+  and `a84b4ba`. Approved by the owner on 2026-11-23 as
   presented after the planner's pass; the review fixes came after that
   approval and are the owner's to read (see "Open doubts").
 
