@@ -14,6 +14,7 @@ loud.
 - Rows from T-042; the description documents the 300-result cap and the lack
   of full text.
 - The query passes unchanged: no rule for hidden fields (owner, 2026-11-23).
+- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition` (0 if it serves one page only), and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
 
 ## Out of scope
 - Parsing or rewriting queries.
@@ -32,7 +33,7 @@ loud.
 ## Acceptance
 `test/tools/core/search-tickets.test.ts`: the query reaches
 `/search/tickets` unchanged; a `total` above 300 gives `truncated: true` and
-the description text names the cap and "no full text"; Freshdesk's 400 comes
+the description text names the cap and "no full text"; the rows come in the list envelope; a cursor from another call and one past the tool's last position are each `isError` `validation` with the MockAgent count 0; Freshdesk's 400 comes
 back as `isError` `validation` with its `errors[]`; `make quality` green.
 
 ---

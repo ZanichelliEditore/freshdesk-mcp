@@ -55,7 +55,7 @@ code does not know is wrapped, one of a number, boolean, date or
 validated-choice type is not; a value containing `</ticket_content>` or
 `<ticket_content>` (also in another case, with inner spaces, or written as
 entities such as `&lt;/ticket_content&gt;` in an HTML body) yields exactly
-one opening delimiter, at the start, and one closing delimiter, at the end;
+one opening delimiter, at the start, and one closing delimiter, followed by nothing but the truncation marker when one is present;
 `body_text` is used when present and an HTML-only body comes back with no
 tag; a text over the cap is cut on a code-point boundary with the marker and
 the count; the name helper strips tags and caps the length (asserted on a
@@ -116,10 +116,11 @@ cap); `null` and numbers pass unchanged; `make quality` green.
 ## Open doubts
 - The acceptance's "one closing delimiter, at the end" predates the
   marker-outside decision: a cut value ends with the marker after CLOSE.
-  Wording change proposed in HANDOFF (orchestrator's choice of 2026-11-23).
+  Resolved by `/decompose` (2026-11-23): the acceptance now reads "followed
+  by nothing but the truncation marker when one is present".
 - `ticketOutput` does not wrap: T-026 must apply `fieldValue` per field
-  (it needs the `TicketField`) and `plainName` to label keys; proposed
-  acceptance line in HANDOFF.
+  (it needs the `TicketField`) and `plainName` to label keys; in T-026's
+  scope and acceptance since `/decompose` (2026-11-23).
 - A `<` written by a customer (`"Ada" <ada@…>`) reads `‹` in every block.
 
 ## Context pressure

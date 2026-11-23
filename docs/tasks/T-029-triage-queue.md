@@ -17,6 +17,7 @@ Open and pending tickets with the urgency signals Claude ranks on (C2).
   within the per-call bound that note gives.
 - Dates ISO 8601 with zone, durations in human form; a stated default order;
   a cap with `truncated`.
+- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition` (0 if it serves one page only), and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
 
 ## Out of scope
 - Ranking or scoring (Claude does it).
@@ -41,7 +42,7 @@ message in human form, the unanswered flag and the escalation flags; the
 default order is asserted; the MockAgent count equals the pages fetched,
 with no per-ticket call, or stays within the bound
 `docs/architecture/ticket-queries.md` gives if it says a per-ticket call is
-needed, and `api_calls_used` matches; over the cap gives `truncated: true`;
+needed, and `api_calls_used` matches; over the cap gives `truncated: true`; a cursor from another call and one past the tool's last position are each `isError` `validation` with the MockAgent count 0;
 a client error is `isError`; `make quality` green.
 
 ---

@@ -50,7 +50,9 @@ open and that the plan reviews of 2026-11-23 kept finding:
       and `../client/resources/<r>.js` for `<r>` in `agents`, `groups`,
       `tickets` (T-023), `search` (T-024), `contacts`, `companies` (T-025),
       `solutions` (T-031), `canned` (T-033);
-    - type: `../schema/index.js`, `../config.js`.
+    - type: `../schema/index.js`, `../config.js`,
+      `../client/resources/ticket-fields.js` (`format.ts`, T-017, imports
+      `TicketField`).
   - **`T1`**:
     - value: `./core/index.js`, `../context.js`, `../format.js`,
       `../../client/errors.js`;
@@ -227,6 +229,10 @@ another, in the same session.
   not `src/tools/core/` as T-050's tests assumed. The rewrite was not
   reviewed again as a plan (owner, 2026-11-23); the reviews of T-051's
   build cover it.
+- **2026-11-23, `/decompose`.** `T0` gains the `type` entry
+  `../client/resources/ticket-fields.js`: T-017's `format.ts` imports
+  `TicketField` from it (HANDOFF at `d20c83b`). No other import under
+  `src/tools/` is off the list (planner's check).
 
 ---
 *Filled at `/handoff`:*

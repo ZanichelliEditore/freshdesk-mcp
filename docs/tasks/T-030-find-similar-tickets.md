@@ -16,6 +16,7 @@ subject-keyword overlap computed locally.
   calls.
 - Returns ids, subject and a resolution excerpt (both wrapped, clipped); the
   description says best effort.
+- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition` (0 if it serves one page only), and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
 
 ## Out of scope
 - Semantic similarity, a local index (SPEC §4 non-goals).
@@ -40,8 +41,7 @@ for each of the top K) second.
 `test/tools/core/find-similar-tickets.test.ts` (fake clock): candidates are
 the fixture tickets sharing the category fields, requester or company and
 resolved or closed within N days, in the asserted order of keyword overlap;
-a ticket older than N days and the ticket itself are absent; each item has
-id, wrapped subject and wrapped excerpt; below the reserve it is refused as
+a ticket older than N days and the ticket itself are absent; the result is the list envelope, each item with id, wrapped subject and wrapped excerpt; a cursor from another call and one past the tool's last position are each `isError` `validation` with the MockAgent count 0; below the reserve it is refused as
 `rate_limited` with no request; the MockAgent count never passes the stated
 bound and equals `api_calls_used`; `make quality` green.
 
