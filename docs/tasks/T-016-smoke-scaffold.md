@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-015, T-050 (its first half, if T-050's split point is
   taken)
 - **Created:** 2026-11-23
@@ -111,14 +111,27 @@ schema refuses is reported as refused, exit non-zero; `make help` lists
   `FRESHDESK_HOST_OVERRIDE` set; only `ConfigError` gives the config line,
   any other error the fixed `smoke: fail (unexpected error)` (`main`);
   "not JSON" told apart from "refused by the schema"; the banner says where
-  the output is kept.
+  the output is kept. Commit `2f20509`; tests in `test/smoke.test.ts`:
+  "refuses to start when FRESHDESK_HOST_OVERRIDE is set: nothing sent",
+  "a 2xx that is not JSON is reported as not JSON, not as a schema
+  refusal", "main: an unexpected error" (three cases), "the banner".
+- Scoped round (`2850999..2f20509`): list A empty for all three; list B
+  parked in `docs/improvements.md`, entry `2f20509`.
+- Not run against the real account by this session (SPEC §14 rule 1).
 
 ## Dead ends
-none
+- Running `scripts/smoke/*.ts` with Node's type stripping: `src/` imports
+  `./x.js`, which Node does not map to `.ts`; compiled with `tsc` instead.
 
 ## Open doubts
-none
+- The "not JSON" label relies on the prefix of `src/client/http.ts:262`'s
+  fixed message (parked, `2f20509`).
+- RFC rule 2 read by its purpose for the second Agent builder
+  (`scripts/smoke/cli.ts`), accepted for the owner by the orchestrator.
 
 ## Context pressure
+ok
 
 ## Next action
+The owner runs `make smoke` against the real account (HANDOFF); its
+`OD-4 name_to_id choices:` line answers OD-4.

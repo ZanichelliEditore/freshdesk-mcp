@@ -4,64 +4,53 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T17:18:59+01:00`
-- **Describes commit:** `31ce639`
-  (`31ce63977bec5860465e92f119cda824c42d3cde`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45215204078
-  (ran on `31ce639`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T17:35:05+01:00`
+- **Describes commit:** `<hash>` (pending), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** pending. This file's hash and
+  CI line arrive in the commit right after it.
 
-- **Current task:** plan session, `/decompose` scoped to T-051, the task
-  file `docs/tasks/PLAN.md`. Commits `b3fdd32` (sized), `83acc09` (full
-  review fixes), `002f91a` (rewrite to an exact allow-list, the owner's
-  option A) and the one this file describes (review items parked). T-051 is `todo (2026-11-23)`,
-  `docs/tasks/T-051-lint-import-allow-list.md`, right before T-019. T-019,
-  T-042 and T-043 depend on it (rows and task files). T-016 does not, and
-  it stays next.
-  Decided (orchestrator, 2026-11-23): the tool folder is
-  `src/tools/toolsets/core/`, as the M1 task files put it; T-051 moves
-  T-050's lint cases there and replaces the depth test. The scoped round's
-  list B is parked in `docs/improvements.md`, entry `83acc09` (B4, B5 and
-  security B2 live; the rest moot).
+- **Current task:** T-016 `done (2026-11-23)`,
+  `docs/tasks/T-016-smoke-scaffold.md`. Commits `2850999` (build),
+  `2f20509` (full review fixes) and the one this file describes.
 
-- **Next action:** `/pickup` takes T-016 (`docs/tasks/T-016-*.md`).
+- **Next action:**
+  1. **The owner** runs the smoke script against the real account, from the
+     repository root, with `FRESHDESK_DOMAIN` and `FRESHDESK_API_KEY` set
+     (and `FRESHDESK_MCP_CONFIG` if a team file is used;
+     `FRESHDESK_HOST_OVERRIDE` must be unset, or the run refuses to
+     start): `make smoke`. The output goes to
+     `docs/private/account-facts.md` (gitignored); only shape lines go into
+     tracked files. The `OD-4 name_to_id choices:` line answers OD-4. The
+     run unblocks T-022 (then T-023, T-024, T-043) and decides T-041.
+  2. Meanwhile `/pickup` takes **T-044** (Dependabot branches, spike): by
+     PLAN's rule the first `todo` row whose dependencies are `done` (none),
+     above T-017, T-018 and T-051 in row order.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`, the M1 note on
-  T-051 and row T-051; `docs/tasks/T-051-lint-import-allow-list.md`,
-  "Re-plans".
+- **Read before anything else:** `docs/tasks/PLAN.md` (T-044 row, OD
+  table); `docs/tasks/T-016-smoke-scaffold.md`, "Done".
 
 - **Reviews:**
-  - **Full round** on `81ee087..b3fdd32`, R1 = `b3fdd32`, plus the
-    `planner`'s review. The four quotes matched for all three reviewers,
-    with no Bash calls. compliance-reviewer: Wireframes `none`.
-    security-reviewer: 1 Medium, 1 Low, 2 info. code-reviewer: 3 Low.
-    planner: 1 finding and notes. All were applied in `83acc09` by the
-    orchestrator's decisions.
-  - **Scoped round** on `b3fdd32..83acc09`. The four quotes matched for
-    all three. compliance-reviewer: `none`. code-reviewer made one Bash
-    call, a no-op `echo`, and said so.
-    - code-reviewer, list A (1): a generated `%2e` or tab case at position
-      0 yields a bare specifier the rule cannot refuse.
-    - security-reviewer, list A (1): the planned rule checked only
-      specifiers starting with `.`, `/` or `file:`, which is weaker than
-      T-050's deny regex (`ms/../../src/./config.js`, a `file:` with a
-      leading space).
-
-    Under rule 9 this was reported to the owner, who chose option A: an
-    exact allow-list, rewritten in the handoff commit. The rewrite was not
-    reviewed again as a plan (owner, 2026-11-23); the reviews of T-051's
-    build cover it. No third round.
+  - **Full round** on `c95fd04..2850999`, R1 = `2850999`. The four quotes
+    matched for all three, no Bash calls. compliance-reviewer: Wireframes
+    `none`. security-reviewer: 0 High or Medium, 3 Low, 2 info.
+    code-reviewer: 0 High, 3 Medium, 7 Low. Fixed in `2f20509` or parked
+    in `docs/improvements.md`, entry `2850999` (by the orchestrator's
+    decisions).
+  - **Scoped round** on `2850999..2f20509`. The four quotes matched for
+    all three, no Bash calls. List A empty for all three; compliance
+    `none`. List B parked, entry `2f20509`.
 
 - **Proposed plan changes:** none new. T-041 and T-049 stay
   `proposed (2026-11-23)`: T-041 waits on OD-4, T-049 on the owner's
   confirm or drop.
 
 - **Open doubts (owner):**
-  - **T-051's list** is drawn from the M1 task files: modules, eight
-    resources, `node:path`, `node:fs/promises`, `node:crypto`, and the root
-    entry of `@modelcontextprotocol/server`. A task that needs another
-    module adds it as a reviewed config line.
+  - **T-016:** RFC 2026-11-23 rule 2 read by its purpose for the second
+    Agent builder, `scripts/smoke/cli.ts` (accepted by the orchestrator,
+    2026-11-23); the "not JSON" label relies on the prefix of a fixed
+    message in `src/client/http.ts` (parked, `2f20509`).
+  - **T-051's list** is drawn from the M1 task files (see HANDOFF at
+    `31ce639`).
   - **Carried from before**, unchanged; see HANDOFF at `81ee087`:
     - T-050: `.constructor`; `rate-limit.ts` not banned.
     - The 5 s lint-test timeout (`97c11e8`).
@@ -70,15 +59,16 @@
     - OD-2, OD-3, OD-4.
     - The orchestrator's choices of 2026-11-23.
     - `examples/team-config.example.json`, until T-019 and T-037.
-    - Schemas taken from the docs, not measured.
+    - Schemas taken from the docs, not measured (the owner's smoke run
+      measures them).
     - The gitleaks planted-secret check (T-001).
     - Hashes from before the history rewrite.
     - Two Dependabot branches (T-044).
 
-- **Dead ends:** the shortest-form grammar for T-051 (`b3fdd32`,
-  `83acc09`). Each review round found a form it missed, and the exact
-  allow-list replaced it. From before: the root `server.json` and the MCP
-  Registry listing were withdrawn by the owner on 2026-11-23. Do not raise
+- **Dead ends:** running the smoke script through Node's type stripping
+  (`src/` imports `./x.js`); compiled with `tsc` instead. From before: the
+  shortest-form grammar for T-051; the root `server.json` and the MCP
+  Registry listing, withdrawn by the owner on 2026-11-23. Do not raise
   them again unasked.
 
 - **Known red:** none.
@@ -87,7 +77,7 @@
   - eslint clean, ruff "All checks passed!";
   - prettier "All matched files use Prettier code style!";
   - `tsc --noEmit` clean;
-  - vitest "Test Files 14 passed (14)", "Tests 615 passed (615)";
+  - vitest "Test Files 15 passed (15)", "Tests 668 passed (668)";
   - `tools/checks` "Ran 54 tests", OK;
   - `npm run build` clean;
   - both gitleaks scans passed.
