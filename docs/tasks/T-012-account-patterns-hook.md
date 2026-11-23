@@ -37,6 +37,10 @@ values does. The repo is public and the hook refuses every commit without
 the file; a placeholder is a bypass in effect. Until decided, the build
 stops at the `CONTRIBUTING.md` line.
 
+Decided by the owner on 2026-11-23, in session: the hook stays fail-closed
+on a missing file; a contributor without the account values commits with
+`SKIP=account-patterns`, and `CONTRIBUTING.md` says so.
+
 Plan-time choices of 2026-11-23, the planner's recommendation; the owner
 reviews them with the plan: whole staged files, not added lines only; the
 hook is local only, so a clone without the patterns file cannot commit

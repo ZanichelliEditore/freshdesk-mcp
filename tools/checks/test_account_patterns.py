@@ -14,6 +14,7 @@ from pathlib import Path
 _SCRIPT = Path(__file__).resolve().parent / "account_patterns.py"
 _PATTERN = "zq-synth-[0-9]+"
 _VALUE = "ZQ-Synth-4711"  # differs in case from the pattern on purpose
+_PATTERNS_PATH = "docs/private/account-patterns"
 
 
 def _clean_env() -> dict[str, str]:
@@ -116,6 +117,31 @@ class Matching(_Repo):
         self.stage("a.txt", b"nothing to see\n")
         self.assertEqual(self.run_guard()[0], 0)
 
+    def test_crlf_patterns_file_still_matches(self) -> None:
+        self.patterns(b"other\r\n" + _PATTERN.encode() + b"\r\n")
+        self.stage("a.txt", f"{_VALUE}\n".encode())
+        self.assertEqual(self.run_guard()[0], 1)
+
+    def test_patterns_file_without_a_final_newline_still_matches(self) -> None:
+        self.patterns(b"other\n" + _PATTERN.encode())
+        self.stage("a.txt", f"{_VALUE}\n".encode())
+        self.assertEqual(self.run_guard()[0], 1)
+
+    def test_non_ascii_pattern_gets_git_greps_own_verdict(self) -> None:
+        # How `-i` folds an accented letter depends on the locale, so the
+        # guard must not change it: whatever git grep says here, it says.
+        self.patterns("zq-società-[0-9]+\n".encode())
+        self.stage("a.txt", "ZQ-SOCIETÀ-1\n".encode())
+        plain = subprocess.run(
+            ["git", "grep", "--cached", "-q", "-iE", "-f", _PATTERNS_PATH],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            check=False,
+        )
+        self.assertIn(plain.returncode, (0, 1))
+        self.assertEqual(self.run_guard()[0], 1 - plain.returncode)
+
 
 class IndexNotWorkingTree(_Repo):
     def test_staged_content_deleted_from_the_working_tree_is_caught(self) -> None:
@@ -130,7 +156,9 @@ class IndexNotWorkingTree(_Repo):
         self.patterns()
         self.stage("a.txt", f"{_VALUE}\n".encode())
         (self.root / "a.txt").write_text("clean now\n")
-        self.assertEqual(self.run_guard()[0], 1)
+        code, output = self.run_guard()
+        self.assertEqual(code, 1)
+        self.assertIn("a.txt:1", output)
 
     def test_unstaged_match_is_not_this_commit(self) -> None:
         self.patterns()
@@ -163,9 +191,11 @@ class IndexNotWorkingTree(_Repo):
 
 class CannotCheck(_Repo):
     def assert_refused_with_fix(self, needle: str) -> None:
-        self.stage("a.txt", b"clean\n")
+        # The staged file holds a match, so a guard that went on to scan
+        # would leak or answer 1; a clean index must not be what saves it.
+        self.stage("a.txt", f"{_VALUE}\n".encode())
         code, output = self.run_guard()
-        self.assertNotIn(code, (0, 1))
+        self.assertEqual(code, 2)
         self.assertIn("docs/private/account-patterns", output)
         self.assertIn(needle, output)
         self.assertIn("Fix:", output)
@@ -187,6 +217,40 @@ class CannotCheck(_Repo):
         self.patterns(b"zq-synth-(unclosed\n")
         self.assert_refused_with_fix("git grep")
 
+    def test_comment_line_is_refused_naming_its_line(self) -> None:
+        self.patterns(_PATTERN.encode() + b"\n# zq-synth note\n")
+        self.assert_refused_with_fix("line 2")
+
+    def test_trailing_whitespace_is_refused_naming_its_line(self) -> None:
+        self.patterns(b"\n" + _PATTERN.encode() + b" \n")
+        self.assert_refused_with_fix("line 2")
+
+    def test_whitespace_only_line_beside_a_pattern_is_refused(self) -> None:
+        self.patterns(_PATTERN.encode() + b"\n\n  \n")
+        self.assert_refused_with_fix("line 3")
+
+    def test_byte_order_mark_is_refused(self) -> None:
+        self.patterns(b"\xef\xbb\xbf" + _PATTERN.encode() + b"\n")
+        self.assert_refused_with_fix("line 1")
+
+    def test_unreadable_blob_is_not_a_pass(self) -> None:
+        # git grep skips a blob it cannot read and still exits 1.
+        self.patterns()
+        self.stage("a.txt", f"{_VALUE}\n".encode())
+        blob = subprocess.run(
+            ["git", "rev-parse", ":a.txt"],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        (self.root / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+        code, output = self.run_guard()
+        self.assertEqual(code, 2)
+        self.assertIn("Fix:", output)
+        self.assert_no_leak(output)
+
     def test_patterns_path_that_is_a_directory(self) -> None:
         (self.root / "docs" / "private" / "account-patterns").mkdir(parents=True)
         self.assert_refused_with_fix("missing")
@@ -194,7 +258,7 @@ class CannotCheck(_Repo):
     def test_outside_a_repository(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code, output = self.run_guard(cwd=Path(tmp))
-        self.assertNotIn(code, (0, 1))
+        self.assertEqual(code, 2)
         self.assertIn("Fix:", output)
 
 
