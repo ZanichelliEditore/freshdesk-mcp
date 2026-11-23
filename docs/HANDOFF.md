@@ -5,9 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T16:51:58+01:00`
-- **Describes commit:** STAMP-HASH, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP-CI. This file's hash and
-  CI line arrive in the commit right after it.
+- **Describes commit:** `1671260`
+  (`1671260c9d4df4f59335471e4237cc64ba5589b5`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45210203469
+  (ran on `1671260`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-050, harden runtime privacy of the HTTP client,
   limiter and schema service, plus the `src/tools/**` lint block
