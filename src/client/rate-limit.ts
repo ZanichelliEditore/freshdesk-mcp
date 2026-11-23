@@ -128,8 +128,10 @@ export class RateLimiter {
     if (status === 429) {
       const asked = count(headers.get("retry-after")) ?? WINDOW_S;
       const hold = Math.min(Math.max(asked, MIN_HOLD_S), MAX_HOLD_S) * 1000;
+      // A second 429 may extend a hold in force, never shorten it.
+      const end = Math.max(now + hold, this.exhausted ? (this.windowEnd ?? 0) : 0);
       this.exhausted = true;
-      this.windowEnd = now + hold;
+      this.windowEnd = end;
       return hold;
     }
     if (this.exhausted) return 0;

@@ -400,6 +400,33 @@ describe("429 and Retry-After", () => {
     expect(refusal(await limiter.acquire("cheap")).retry_after_s).toBe(WINDOW_S);
   });
 
+  it.each(["0", "30"])(
+    "a second 429 asking for %s s does not shorten a hold in force",
+    async (second) => {
+      const limiter = limiterAt(100, 90);
+      limiter.observe(429, retryAfter("600"));
+      vi.advanceTimersByTime(1000);
+      limiter.observe(429, retryAfter(second));
+      vi.advanceTimersByTime(30_000);
+      expect(refusal(await limiter.acquire("cheap")).retry_after_s).toBe(600 - 31);
+    },
+  );
+
+  it("a second 429 asking for longer extends the hold", async () => {
+    const limiter = limiterAt(100, 90);
+    limiter.observe(429, retryAfter("5"));
+    limiter.observe(429, retryAfter("600"));
+    expect(refusal(await limiter.acquire("cheap")).retry_after_s).toBe(600);
+  });
+
+  it("a 429 after a budget response is not stretched to that response's window", async () => {
+    const limiter = limiterAt(100, 90); // window ends in WINDOW_S
+    limiter.observe(429, retryAfter("2"));
+    const pending = limiter.acquire("cheap");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await pending).toEqual({ ok: true });
+  });
+
   it("everyone waiting on a hold is released when it ends", async () => {
     const limiter = limiterAt(100, 90);
     limiter.observe(429, retryAfter("2"));
