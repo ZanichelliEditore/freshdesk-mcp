@@ -1,0 +1,393 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpClient } from "../../src/client/http.js";
+import { RateLimiter } from "../../src/client/rate-limit.js";
+import type { TicketField } from "../../src/client/resources/ticket-fields.js";
+import { type Schema, type SchemaResult, SchemaService } from "../../src/schema/index.js";
+import { ticketOutput } from "../../src/schema/output.js";
+import { agentPages, groupPages } from "../fixtures/agents-groups.js";
+import { rawTicket, schemaFieldsPayload } from "../fixtures/schema.js";
+import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
+
+const DOMAIN = "acme.freshdesk.com";
+const ORIGIN = `https://${DOMAIN}`;
+const FIELDS = "/api/v2/ticket_fields";
+const AGENTS = "/api/v2/agents?per_page=100";
+const GROUPS = "/api/v2/groups?per_page=100";
+const JSON_TYPE = { "content-type": "application/json" };
+const TTL_S = 600;
+
+let mock: MockAgent;
+let http: HttpClient;
+
+beforeEach(() => {
+  vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  mock = mockDispatcher();
+  http = new HttpClient({
+    domain: DOMAIN,
+    apiKey: "k3y-Secret-Value-123",
+    dispatcher: mock,
+    limiter: new RateLimiter({ reserve_pct: 20, floor_pct: 5, pacing_rps: 2 }),
+  });
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  await mock.close();
+});
+
+function reply(path: string, body: unknown, link?: string, status = 200) {
+  mock
+    .get(ORIGIN)
+    .intercept({ path, method: "GET" })
+    .reply(status, body as object, {
+      headers: { ...JSON_TYPE, ...(link ? { link: `<${ORIGIN}${link}>; rel="next"` } : {}) },
+    });
+}
+
+/** Queue one full load: fields, two pages of agents, two of groups. */
+function queueLoad() {
+  reply(FIELDS, schemaFieldsPayload);
+  reply(AGENTS, agentPages[0], `${AGENTS}&page=2`);
+  reply(`${AGENTS}&page=2`, agentPages[1]);
+  reply(GROUPS, groupPages[0], `${GROUPS}&page=2`);
+  reply(`${GROUPS}&page=2`, groupPages[1]);
+}
+
+function sentPaths(): string[] {
+  return (mock.getCallHistory()?.calls() ?? []).map((call) => call.fullUrl.slice(ORIGIN.length));
+}
+
+function schemaOf(result: SchemaResult): Schema {
+  if (!result.ok) throw new Error(`expected a schema, got ${result.error.code}`);
+  return result.schema;
+}
+
+const ONE_LOAD = [FIELDS, AGENTS, `${AGENTS}&page=2`, GROUPS, `${GROUPS}&page=2`];
+
+describe("SchemaService: load and TTL cache", () => {
+  it("loads fields, agents and groups once, then serves them from the cache", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+
+    const first = schemaOf(await service.get());
+    const second = schemaOf(await service.get());
+
+    expect(sentPaths()).toEqual(ONE_LOAD);
+    expect(second).toBe(first);
+    expect(first.fields.map((field) => field.label)).toContain("Shelf");
+    expect([...first.agents.names]).toEqual([
+      [501, "Quill Ottersby"],
+      [502, "Juniper Vantablack"],
+      [503, "Ferro Lumen"],
+    ]);
+    expect([...first.groups.names]).toEqual([
+      [701, "Sprocket Desk"],
+      [702, "Widget Desk"],
+      [703, "Spanner Desk"],
+    ]);
+    expect(first.agents.truncated).toBe(false);
+    expect(first.groups.truncated).toBe(false);
+  });
+
+  it("keeps only each agent's id and name, none of its contact's personal data", async () => {
+    queueLoad();
+    const schema = schemaOf(await new SchemaService(http, TTL_S).get());
+
+    expect(JSON.stringify([...schema.agents.names])).not.toContain("@example.com");
+    expect(schema.agents.names.get(501)).toBe("Quill Ottersby");
+  });
+
+  it("shares one load between calls made while it is in flight", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+
+    const [a, b] = await Promise.all([service.get(), service.get()]);
+
+    expect(sentPaths()).toEqual(ONE_LOAD);
+    expect(schemaOf(b)).toBe(schemaOf(a));
+  });
+
+  it("does not refetch 1 ms before the TTL ends, and refetches once it has", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const first = schemaOf(await service.get());
+
+    vi.setSystemTime(Date.now() + TTL_S * 1000 - 1);
+    expect(schemaOf(await service.get())).toBe(first);
+    expect(sentPaths()).toEqual(ONE_LOAD);
+
+    vi.setSystemTime(Date.now() + 1);
+    queueLoad();
+    const second = schemaOf(await service.get());
+
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
+    expect(second).not.toBe(first);
+    expect(second.agents.names.get(503)).toBe("Ferro Lumen");
+  });
+
+  it("returns a failed load's error unchanged and does not cache it", async () => {
+    reply(FIELDS, { code: "invalid_credentials" }, undefined, 401);
+    const service = new SchemaService(http, TTL_S);
+
+    const failed = await service.get();
+    expect(failed).toMatchObject({ ok: false, error: { code: "auth" } });
+    expect(sentPaths()).toEqual([FIELDS]);
+
+    queueLoad();
+    schemaOf(await service.get());
+    expect(sentPaths()).toEqual([FIELDS, ...ONE_LOAD]);
+  });
+
+  it("stops at the first failing list and asks for nothing after it", async () => {
+    reply(FIELDS, schemaFieldsPayload);
+    reply(AGENTS, [{ id: "not a number" }]);
+    const service = new SchemaService(http, TTL_S);
+
+    expect(await service.get()).toMatchObject({ ok: false, error: { code: "server" } });
+    expect(sentPaths()).toEqual([FIELDS, AGENTS]);
+  });
+
+  it("carries a list's truncation through to the schema", async () => {
+    reply(FIELDS, schemaFieldsPayload);
+    for (let n = 1; n <= 10; n++) {
+      const path = n === 1 ? AGENTS : `${AGENTS}&page=${n}`;
+      reply(path, [{ id: 500 + n, contact: { name: `Agent ${n}` } }], `${AGENTS}&page=${n + 1}`);
+    }
+    reply(GROUPS, groupPages[1]);
+
+    const schema = schemaOf(await new SchemaService(http, TTL_S).get());
+
+    expect(schema.agents.truncated).toBe(true);
+    expect(schema.agents.names.size).toBe(10);
+    expect(schema.groups.truncated).toBe(false);
+  });
+});
+
+/** A schema built by hand: the mapping needs no HTTP. */
+function schema(overrides: Partial<Schema> = {}): Schema {
+  return {
+    fields: structuredClone(schemaFieldsPayload) as TicketField[],
+    agents: {
+      names: new Map(agentPages.flat().map((agent) => [agent.id, agent.contact.name])),
+      truncated: false,
+    },
+    groups: {
+      names: new Map(groupPages.flat().map((group) => [group.id, group.name])),
+      truncated: false,
+    },
+    ...overrides,
+  };
+}
+
+function ticket(
+  changes: Record<string, unknown> = {},
+  custom: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const raw = structuredClone(rawTicket) as Record<string, unknown>;
+  return { ...raw, ...changes, custom_fields: { ...rawTicket.custom_fields, ...custom } };
+}
+
+describe("ticketOutput: labelled values", () => {
+  it("maps a raw ticket to {label: value label}, with names for status, priority, source, agent and group", () => {
+    expect(ticketOutput(schema(), ticket(), {})).toEqual({
+      Subject: "Sprocket squeaks",
+      Status: "Open",
+      Priority: "High",
+      Colour: "Teal",
+      Product: "Gadgets > Sprockets > Blue sprocket",
+      Source: "Portal",
+      Agent: "Juniper Vantablack",
+      Group: "Spanner Desk",
+      Type: "Incident",
+      Shelf: "North > Bottom",
+      Hobby: "Kite flying",
+      Notes: null,
+    });
+  });
+
+  it("tells a 2-level tree from a status's choices by type, not by shape", () => {
+    const fields = schema().fields;
+    const shelf = fields.find((field) => field.name === "cf_shelf")!;
+    const status = fields.find((field) => field.name === "status")!;
+    // A status with the tree's shape of choices, and a tree with the status's.
+    status.choices = { "2": ["Open", "Being processed"] };
+    shelf.choices = { "2": ["Open"] };
+
+    const out = ticketOutput(
+      schema({ fields }),
+      ticket({}, { cf_shelf: "2", cf_tier: "Open" }),
+      {},
+    );
+
+    expect(out.Status).toBe("Open");
+    expect(out.Shelf).toBe("2 > Open");
+  });
+
+  it("leaves a field out when the ticket has no such key, and keeps null as null", () => {
+    const raw = ticket({ responder_id: null });
+    delete raw.subject;
+    delete (raw.custom_fields as Record<string, unknown>).cf_hobby;
+
+    const out = ticketOutput(schema(), raw, {});
+
+    expect(out).not.toHaveProperty("Subject");
+    expect(out).not.toHaveProperty("Hobby");
+    expect(out.Agent).toBeNull();
+    expect(out.Notes).toBeNull();
+  });
+
+  it("leaves every custom field out when the ticket has no custom_fields object", () => {
+    const raw = ticket();
+    delete raw.custom_fields;
+
+    const out = ticketOutput(schema(), raw, {});
+
+    expect(Object.keys(out)).toEqual([
+      "Subject",
+      "Status",
+      "Priority",
+      "Source",
+      "Agent",
+      "Group",
+      "Type",
+    ]);
+  });
+
+  it("stops a nested path at its first empty level", () => {
+    expect(
+      ticketOutput(schema(), ticket({}, { cf_family: "Widgets", cf_model: null }), {}).Product,
+    ).toBe("Gadgets > Widgets");
+    expect(ticketOutput(schema(), ticket({}, { cf_family: null }), {}).Product).toBe("Gadgets");
+    expect(ticketOutput(schema(), ticket({}, { cf_kit: null }), {}).Product).toBeNull();
+  });
+
+  it("treats null nested_ticket_fields like absent ones: the path is the top value", () => {
+    const fields = schema().fields;
+    fields.find((field) => field.name === "cf_kit")!.nested_ticket_fields = null;
+    const absent = schema().fields;
+    delete absent.find((field) => field.name === "cf_kit")!.nested_ticket_fields;
+
+    expect(ticketOutput(schema({ fields }), ticket(), {}).Product).toBe("Gadgets");
+    expect(ticketOutput(schema({ fields: absent }), ticket(), {}).Product).toBe("Gadgets");
+  });
+
+  it("names an id it cannot resolve instead of guessing", () => {
+    const out = ticketOutput(schema(), ticket({ status: 9, priority: 7, source: 99 }), {});
+
+    expect(out.Status).toBe("unknown status 9");
+    expect(out.Priority).toBe("unknown priority 7");
+    expect(out.Source).toBe("unknown source 99");
+  });
+
+  it("treats null choices like absent ones: every id is unknown", () => {
+    const fields = schema().fields;
+    fields.find((field) => field.name === "status")!.choices = null;
+    const absent = schema().fields;
+    delete absent.find((field) => field.name === "status")!.choices;
+
+    expect(ticketOutput(schema({ fields }), ticket(), {}).Status).toBe("unknown status 2");
+    expect(ticketOutput(schema({ fields: absent }), ticket(), {}).Status).toBe("unknown status 2");
+  });
+
+  it("calls an agent or group missing from a complete list unknown", () => {
+    const out = ticketOutput(schema(), ticket({ responder_id: 999, group_id: 998 }), {});
+
+    expect(out.Agent).toBe("unknown agent 999");
+    expect(out.Group).toBe("unknown group 998");
+  });
+
+  it("says the list is incomplete, not that the id is unknown, when the list was truncated", () => {
+    const full = schema();
+    const cut = schema({
+      agents: { names: full.agents.names, truncated: true },
+      groups: { names: full.groups.names, truncated: true },
+    });
+
+    const out = ticketOutput(cut, ticket({ responder_id: 999, group_id: 998 }), {});
+
+    expect(out.Agent).toBe("agent 999 (name not loaded: the agent list is incomplete)");
+    expect(out.Group).toBe("group 998 (name not loaded: the group list is incomplete)");
+    // An id the cut list does hold still resolves.
+    expect(ticketOutput(cut, ticket(), {}).Agent).toBe("Juniper Vantablack");
+  });
+
+  it("keys a second field with an already used label by label and API name", () => {
+    const fields = schema().fields;
+    fields.find((field) => field.name === "cf_hobby")!.label = "Colour";
+
+    const out = ticketOutput(schema({ fields }), ticket(), {});
+
+    expect(out.Colour).toBe("Teal");
+    expect(out["Colour (cf_hobby)"]).toBe("Kite flying");
+  });
+});
+
+it("ticketOutput keeps a field labelled __proto__ as an own key, not the object's prototype", () => {
+  const fields = schema().fields;
+  fields.find((field) => field.name === "cf_hobby")!.label = "__proto__";
+
+  const out = ticketOutput(schema({ fields }), ticket(), {});
+
+  expect(Object.getOwnPropertyDescriptor(out, "__proto__")?.value).toBe("Kite flying");
+  expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+});
+
+describe("ticketOutput: hidden fields", () => {
+  it("leaves out a field hidden by its label", () => {
+    const out = ticketOutput(schema(), ticket(), { Hobby: { hidden: true } });
+
+    expect(out).not.toHaveProperty("Hobby");
+    expect(JSON.stringify(out)).not.toContain("Kite flying");
+    expect(out.Colour).toBe("Teal");
+  });
+
+  it("leaves out a field hidden by its API name", () => {
+    expect(ticketOutput(schema(), ticket(), { cf_hobby: { hidden: true } })).not.toHaveProperty(
+      "Hobby",
+    );
+  });
+
+  it("matches a hidden key whatever its case", () => {
+    const out = ticketOutput(schema(), ticket(), {
+      hOBBY: { hidden: true },
+      CF_COLOUR: { hidden: true },
+    });
+
+    expect(out).not.toHaveProperty("Hobby");
+    expect(out).not.toHaveProperty("Colour");
+  });
+
+  it("keeps a field whose entry says hidden: false or gives only a meaning", () => {
+    const out = ticketOutput(schema(), ticket(), {
+      Hobby: { hidden: false },
+      Colour: { meaning: "Paint", hidden: false },
+    });
+
+    expect(out.Hobby).toBe("Kite flying");
+    expect(out.Colour).toBe("Teal");
+  });
+
+  it("hides a default field too", () => {
+    expect(ticketOutput(schema(), ticket(), { Agent: { hidden: true } })).not.toHaveProperty(
+      "Agent",
+    );
+  });
+
+  it("hides a whole nested field by its top label", () => {
+    const out = ticketOutput(schema(), ticket(), { Product: { hidden: true } });
+
+    expect(out).not.toHaveProperty("Product");
+    expect(JSON.stringify(out)).not.toContain("Sprockets");
+  });
+
+  it("cuts a nested path before a hidden level, by label or by API name", () => {
+    expect(ticketOutput(schema(), ticket(), { Model: { hidden: true } }).Product).toBe(
+      "Gadgets > Sprockets",
+    );
+    expect(ticketOutput(schema(), ticket(), { cf_family: { hidden: true } }).Product).toBe(
+      "Gadgets",
+    );
+  });
+});
