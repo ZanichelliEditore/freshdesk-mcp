@@ -15,8 +15,12 @@
 //     for an agent or group missing from a list that was truncated,
 //     `agent 9 (name not loaded: the agent list is incomplete)`.
 //   - `null` and absent `choices` or `nested_ticket_fields` are alike.
-//   - Hidden (team config `fields`, keyed by label or API name, any case): the
-//     field is left out; a hidden nested level cuts the path before it.
+//   - Requester, company and product show the ticket's raw id: their names
+//     need contacts, companies and products, not loaded here.
+//   - Hidden (team config `fields`): a key matches a field's label, its API
+//     name or, for a default field, its ticket key (`responder_id`), compared
+//     trimmed, NFC-normalised and lower-cased. The field is left out; a
+//     hidden nested level cuts the path before it.
 //   - A label already used keys the later field as `Label (api_name)`.
 //
 // Not here: the requester's name (needs contacts, M1), the ticket's own keys
@@ -27,14 +31,24 @@ import type { TeamConfig } from "../config.js";
 import type { NameMap, Schema } from "./index.js";
 
 /** Default fields whose value sits under another key of the ticket. */
-const TICKET_KEY: Record<string, string> = {
-  agent: "responder_id",
-  group: "group_id",
-  requester: "requester_id",
-  company: "company_id",
-  product: "product_id",
-  ticket_type: "type",
-};
+const TICKET_KEY = new Map([
+  ["agent", "responder_id"],
+  ["group", "group_id"],
+  ["requester", "requester_id"],
+  ["company", "company_id"],
+  ["product", "product_id"],
+  ["ticket_type", "type"],
+]);
+
+/** Where a field's value sits in the ticket: a top-level key or one of `custom_fields`. */
+function ticketKey(name: string, isDefault: boolean): string {
+  return isDefault ? (TICKET_KEY.get(name) ?? name) : name;
+}
+
+/** How a hidden key and a field's names are compared. */
+function fold(text: string): string {
+  return text.normalize("NFC").trim().toLowerCase();
+}
 
 type Raw = Record<string, unknown>;
 
@@ -45,14 +59,15 @@ function isRecord(value: unknown): value is Raw {
 /** The field's value in the ticket, or `undefined` when the ticket has no such key. */
 function rawValue(ticket: Raw, name: string, isDefault: boolean): unknown {
   const holder = isDefault ? ticket : ticket.custom_fields;
-  const key = isDefault ? (TICKET_KEY[name] ?? name) : name;
+  const key = ticketKey(name, isDefault);
   if (!isRecord(holder) || !Object.hasOwn(holder, key)) return undefined;
   return holder[key];
 }
 
 /** A status's choices: id → [agent label, customer label]. */
 function statusName(choices: TicketField["choices"], value: unknown): string {
-  const entry = isRecord(choices) ? choices[String(value)] : undefined;
+  const id = String(value);
+  const entry = isRecord(choices) && Object.hasOwn(choices, id) ? choices[id] : undefined;
   return Array.isArray(entry) && typeof entry[0] === "string"
     ? entry[0]
     : `unknown status ${String(value)}`;
@@ -78,9 +93,9 @@ function nestedPath(
   field: TicketField,
   ticket: Raw,
   top: unknown,
-  hidden: (name: string, label: string) => boolean,
+  hidden: (...names: string[]) => boolean,
 ): unknown {
-  if (top === null) return null;
+  if (top === null || top === "") return top;
   const parts = [String(top)];
   const levels = [...(field.nested_ticket_fields ?? [])].sort((a, b) => a.level - b.level);
   for (const level of levels) {
@@ -96,14 +111,13 @@ export function ticketOutput(schema: Schema, ticket: Raw, fields: TeamConfig["fi
   const hiddenKeys = new Set(
     Object.entries(fields)
       .filter(([, entry]) => entry.hidden)
-      .map(([key]) => key.toLowerCase()),
+      .map(([key]) => fold(key)),
   );
-  const hidden = (name: string, label: string) =>
-    hiddenKeys.has(name.toLowerCase()) || hiddenKeys.has(label.toLowerCase());
+  const hidden = (...names: string[]) => names.some((name) => hiddenKeys.has(fold(name)));
 
   const out: Raw = {};
   for (const field of schema.fields) {
-    if (hidden(field.name, field.label)) continue;
+    if (hidden(field.name, field.label, ticketKey(field.name, field.default))) continue;
     const value = rawValue(ticket, field.name, field.default);
     if (value === undefined) continue;
 

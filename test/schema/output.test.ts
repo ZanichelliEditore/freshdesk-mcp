@@ -95,7 +95,12 @@ describe("SchemaService: load and TTL cache", () => {
     queueLoad();
     const schema = schemaOf(await new SchemaService(http, TTL_S).get());
 
-    expect(JSON.stringify([...schema.agents.names])).not.toContain("@example.com");
+    const everything = JSON.stringify(schema, (_key, value: unknown) =>
+      value instanceof Map ? [...value] : value,
+    );
+    expect(everything).toContain("Quill Ottersby");
+    expect(everything).not.toContain("@example.com");
+    expect(everything).not.toContain("time_zone");
     expect(schema.agents.names.get(501)).toBe("Quill Ottersby");
   });
 
@@ -127,6 +132,42 @@ describe("SchemaService: load and TTL cache", () => {
     expect(second.agents.names.get(503)).toBe("Ferro Lumen");
   });
 
+  it("refetches when the clock has gone back before the load started", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const first = schemaOf(await service.get());
+
+    vi.setSystemTime(Date.now() - 1);
+    queueLoad();
+    const second = schemaOf(await service.get());
+
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
+    expect(second).not.toBe(first);
+  });
+
+  it("hands out a frozen schema: a mutation throws and the cache is unchanged", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const schema = schemaOf(await service.get());
+
+    expect(() => (schema.fields as TicketField[]).pop()).toThrow(TypeError);
+    expect(() => {
+      (schema.fields[0] as { label: string }).label = "Changed";
+    }).toThrow(TypeError);
+    const status = schema.fields.find((field) => field.name === "status")!;
+    expect(() => {
+      (status.choices as Record<string, string[]>)["2"]![0] = "Changed";
+    }).toThrow(TypeError);
+    expect(() => {
+      (schema.agents as { truncated: boolean }).truncated = true;
+    }).toThrow(TypeError);
+
+    const again = schemaOf(await service.get());
+    expect(again.fields[0]!.label).toBe("Subject");
+    expect(again.fields).toHaveLength(schemaFieldsPayload.length);
+    expect(again.agents.truncated).toBe(false);
+  });
+
   it("returns a failed load's error unchanged and does not cache it", async () => {
     reply(FIELDS, { code: "invalid_credentials" }, undefined, 401);
     const service = new SchemaService(http, TTL_S);
@@ -147,6 +188,16 @@ describe("SchemaService: load and TTL cache", () => {
 
     expect(await service.get()).toMatchObject({ ok: false, error: { code: "server" } });
     expect(sentPaths()).toEqual([FIELDS, AGENTS]);
+  });
+
+  it("fails the load on a malformed groups page, after fields and agents", async () => {
+    reply(FIELDS, schemaFieldsPayload);
+    reply(AGENTS, agentPages[1]);
+    reply(GROUPS, [{ id: 701 }]);
+    const service = new SchemaService(http, TTL_S);
+
+    expect(await service.get()).toMatchObject({ ok: false, error: { code: "server" } });
+    expect(sentPaths()).toEqual([FIELDS, AGENTS, GROUPS]);
   });
 
   it("carries a list's truncation through to the schema", async () => {
@@ -202,6 +253,9 @@ describe("ticketOutput: labelled values", () => {
       Group: "Spanner Desk",
       Type: "Incident",
       Shelf: "North > Bottom",
+      Requester: 9001,
+      Company: 8001,
+      Catalogue: 7001,
       Hobby: "Kite flying",
       Notes: null,
     });
@@ -252,6 +306,9 @@ describe("ticketOutput: labelled values", () => {
       "Agent",
       "Group",
       "Type",
+      "Requester",
+      "Company",
+      "Catalogue",
     ]);
   });
 
@@ -261,6 +318,10 @@ describe("ticketOutput: labelled values", () => {
     ).toBe("Gadgets > Widgets");
     expect(ticketOutput(schema(), ticket({}, { cf_family: null }), {}).Product).toBe("Gadgets");
     expect(ticketOutput(schema(), ticket({}, { cf_kit: null }), {}).Product).toBeNull();
+  });
+
+  it("shows an empty top level as it is, with no path after it", () => {
+    expect(ticketOutput(schema(), ticket({}, { cf_shelf: "" }), {}).Shelf).toBe("");
   });
 
   it("treats null nested_ticket_fields like absent ones: the path is the top value", () => {
@@ -334,6 +395,23 @@ it("ticketOutput keeps a field labelled __proto__ as an own key, not the object'
   expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
 });
 
+it("ticketOutput reads a default field named like an Object.prototype key from the ticket's own key only", () => {
+  const fields = [
+    { id: 1, name: "constructor", label: "Builder", type: "default_builder", default: true },
+    { id: 2, name: "toString", label: "Text", type: "default_text", default: true },
+  ] as TicketField[];
+
+  expect(ticketOutput(schema({ fields }), { constructor: "Brick" }, {})).toEqual({
+    Builder: "Brick",
+  });
+});
+
+it("ticketOutput calls a status named like an Object.prototype key unknown", () => {
+  expect(ticketOutput(schema(), ticket({ status: "constructor" }), {}).Status).toBe(
+    "unknown status constructor",
+  );
+});
+
 describe("ticketOutput: hidden fields", () => {
   it("leaves out a field hidden by its label", () => {
     const out = ticketOutput(schema(), ticket(), { Hobby: { hidden: true } });
@@ -367,6 +445,32 @@ describe("ticketOutput: hidden fields", () => {
 
     expect(out.Hobby).toBe("Kite flying");
     expect(out.Colour).toBe("Teal");
+  });
+
+  it("hides a default field by its ticket key", () => {
+    const out = ticketOutput(schema(), ticket(), {
+      responder_id: { hidden: true },
+      GROUP_ID: { hidden: true },
+      requester_id: { hidden: true },
+    });
+
+    expect(out).not.toHaveProperty("Agent");
+    expect(out).not.toHaveProperty("Group");
+    expect(out).not.toHaveProperty("Requester");
+    expect(out.Company).toBe(8001);
+  });
+
+  it("matches a hidden key with surrounding spaces or in another Unicode form", () => {
+    const fields = schema().fields;
+    fields.find((field) => field.name === "cf_hobby")!.label = "Caf\u00e9";
+
+    const spaced = ticketOutput(schema(), ticket(), { "  Hobby ": { hidden: true } });
+    const decomposed = ticketOutput(schema({ fields }), ticket(), {
+      "Cafe\u0301": { hidden: true },
+    });
+
+    expect(spaced).not.toHaveProperty("Hobby");
+    expect(JSON.stringify(decomposed)).not.toContain("Kite flying");
   });
 
   it("hides a default field too", () => {

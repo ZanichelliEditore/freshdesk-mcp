@@ -34,6 +34,9 @@ export const schemaFieldsPayload = [
     choices: { North: ["Top", "Bottom"], South: ["Middle"] },
     nested_ticket_fields: [{ name: "cf_tier", label: "Tier", level: 2 }],
   },
+  { id: 1013, name: "requester", label: "Requester", type: "default_requester", default: true },
+  { id: 1014, name: "company", label: "Company", type: "default_company", default: true },
+  { id: 1015, name: "product", label: "Catalogue", type: "default_product", default: true },
   { id: 1011, name: "cf_hobby", label: "Hobby", type: "custom_text", default: false },
   { id: 1012, name: "cf_notes", label: "Notes", type: "custom_paragraph", default: false },
 ];
@@ -47,6 +50,9 @@ export const rawTicket = {
   responder_id: 502,
   group_id: 703,
   type: "Incident",
+  requester_id: 9001,
+  company_id: 8001,
+  product_id: 7001,
   custom_fields: {
     cf_colour: "Teal",
     cf_kit: "Gadgets",

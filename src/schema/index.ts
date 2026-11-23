@@ -1,9 +1,13 @@
 // Schema service (SPEC §7.3): the ticket fields, plus agents and groups as
-// id → name maps, loaded together and kept for a TTL (team config
-// `limits.schema_ttl_s`, default 1 h).
+// id → name maps, loaded together and kept for a TTL in seconds the caller
+// gives (to be the team config's `limits.schema_ttl_s`, default 1 h; nothing
+// wires it yet).
 //
 //   - One load per TTL: the TTL runs from the moment the load started. Calls
-//     made while a load is in flight share it.
+//     made while a load is in flight share it. A clock that went back before
+//     the load started counts as expired.
+//   - Every caller gets the same schema, so it is read-only: typed so, and
+//     frozen deep (the maps are read-only by type only).
 //   - A failed load is not cached: its error is returned unchanged and the
 //     next call loads again. The lists are read one after the other and the
 //     first failure stops the load.
@@ -19,15 +23,23 @@ import { listGroups } from "../client/resources/groups.js";
 import { listTicketFields, type TicketField } from "../client/resources/ticket-fields.js";
 
 export interface NameMap {
-  names: Map<number, string>;
+  readonly names: ReadonlyMap<number, string>;
   /** The list stopped at its page cap: an id not in `names` may still exist. */
-  truncated: boolean;
+  readonly truncated: boolean;
 }
 
 export interface Schema {
-  fields: TicketField[];
-  agents: NameMap;
-  groups: NameMap;
+  readonly fields: readonly TicketField[];
+  readonly agents: NameMap;
+  readonly groups: NameMap;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !(value instanceof Map)) {
+    for (const inner of Object.values(value)) deepFreeze(inner);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 export type SchemaResult = { ok: true; schema: Schema } | { ok: false; error: FreshdeskError };
@@ -43,7 +55,8 @@ export class SchemaService {
 
   /** The cached schema while its TTL lasts; otherwise a new load. */
   get(): Promise<SchemaResult> {
-    if (this.cached && Date.now() - this.cached.loadedAt < this.ttlS * 1000) {
+    const age = this.cached ? Date.now() - this.cached.loadedAt : -1;
+    if (this.cached && age >= 0 && age < this.ttlS * 1000) {
       return Promise.resolve({ ok: true, schema: this.cached.schema });
     }
     this.inFlight ??= this.load().finally(() => {
@@ -61,7 +74,7 @@ export class SchemaService {
     const groups = await listGroups(this.http);
     if (!groups.ok) return groups;
 
-    const schema: Schema = {
+    const schema: Schema = deepFreeze({
       fields: fields.fields,
       agents: {
         names: new Map(agents.items.map((agent) => [agent.id, agent.contact.name])),
@@ -71,7 +84,7 @@ export class SchemaService {
         names: new Map(groups.items.map((group) => [group.id, group.name])),
         truncated: groups.truncated,
       },
-    };
+    });
     this.cached = { schema, loadedAt: startedAt };
     return { ok: true, schema };
   }
