@@ -6,33 +6,35 @@
 //     inside one `<ticket_content>…</ticket_content>` block. A string is the
 //     block's text; an array or object, its JSON. `null`, `undefined`,
 //     numbers and booleans pass unchanged.
-//   - An embedded delimiter cannot end or open the block: every `<` that
-//     comes before `ticket…content` with nothing but non-letters, non-digits
-//     and no `>` between them (`</TICKET_CONTENT >`, `< /ticket content>`,
-//     `<​/ticket_content>`) becomes `‹`. It runs on the text the reader
-//     sees, so an entity in an HTML body is decoded first and then caught.
-//     A delimiter written as entities in plain text (`&lt;/ticket_content&gt;`
-//     in a `body_text`) is left as it is: it is not a delimiter there.
+//   - An embedded delimiter cannot end or open the block: inside it, every
+//     `<` becomes `‹`, and so does every entity spelling of it (`&lt`,
+//     `&#60`, `&#x3c`, any case, any leading zeros, with or without `;`), in
+//     plain text and in a decoded HTML body alike. No delimiter word is
+//     looked for, so invisible characters and look-alikes inside it change
+//     nothing. In JSON (an array or object) a `<` is written `\u003c`, so
+//     the value still parses the same.
 //   - Text, not HTML: `bodyText` takes `body_text` / `description_text` when
 //     it is a string, else converts the HTML body with `htmlToText`. No HTML
 //     parser: comments, script and style are dropped, `<br>` and the end of a
 //     block become a newline, every other tag is removed, entities decoded
 //     once (`&amp;lt;` gives `&lt;`), whitespace collapsed.
 //   - A text over its cap (`TEXT_CAP` code points unless the caller gives
-//     one) is cut on a code point, and a marker inside the block says how many
-//     characters were cut and, from the caller's `rest`, how to fetch them.
+//     one) is cut on a code point, and a marker after the block, outside it,
+//     says how many characters were cut and, from the caller's `rest`, how to
+//     fetch them: marker-like text inside the block is the customer's.
 //   - Admin-set text (agent and group names, field labels, choice names,
 //     article, folder and canned titles) is not wrapped (owner, 2026-11-23):
-//     `plainName` strips tags, collapses whitespace and caps it at `NAME_CAP`,
-//     ending a cut one with `…`.
+//     `plainName` strips tags, collapses whitespace, turns `<` and its
+//     entities into `‹` and caps it at `NAME_CAP`, ending a cut one with `…`.
 //   - A ticket field's value (`fieldValue`) is wrapped unless its type is a
 //     known closed one and the value is of that type: a number (or decimal
-//     string) for `custom_number` / `custom_decimal`, a boolean for
-//     `custom_checkbox`, an ISO 8601 date for `custom_date` /
+//     string) for `custom_number` / `custom_decimal`, a boolean (which
+//     `untrusted` passes unchanged), an ISO 8601 date for `custom_date` /
 //     `custom_date_time`, a choice found in the field's own choices for
 //     `custom_dropdown`, `default_ticket_type` and `nested_field` (each level
 //     of the " > " path). A validated choice, and a status, priority, source,
-//     agent or group name, goes through `plainName`. Any other type is wrapped.
+//     agent or group name (a string or a number; any other value is wrapped),
+//     goes through `plainName`. Any other type is wrapped.
 //
 // Every pass over the text is linear in its length: no regex here can
 // backtrack over a long run (a tag strip stops at the last `>`).
@@ -54,21 +56,12 @@ export interface CutOptions {
   rest?: string;
 }
 
-const DELIMITER_WORD = /ticket[^\p{L}\p{N}<>]*content/giu;
-const GAP_END = /[\p{L}\p{N}>]/u;
+/** `<` and its entity spellings; a numeric one only when no digit follows (`&#600` is not one). */
+const LESS_THAN = /<|&lt;?|&#0*60(?![0-9]);?|&#x0*3c(?![0-9a-f]);?/gi;
 
-/** Turn every `<` that could start a delimiter into `‹`. */
+/** Every `<`, written or as an entity, becomes `‹`: no delimiter can form. */
 function neutralise(text: string): string {
-  let units: string[] | undefined;
-  for (const match of text.matchAll(DELIMITER_WORD)) {
-    for (let at = match.index - 1; at >= 0 && !GAP_END.test(text[at] ?? ""); at--) {
-      if (text[at] === "<") {
-        units ??= text.split("");
-        units[at] = "‹";
-      }
-    }
-  }
-  return units ? units.join("") : text;
+  return text.replace(LESS_THAN, "‹");
 }
 
 function cut(text: string, cap: number): { kept: string; more: number } {
@@ -84,7 +77,7 @@ function wrap(text: string, options: CutOptions = {}): string {
     more === 0
       ? ""
       : `\n[… ${more} more characters not shown${options.rest ? `; ${options.rest}` : ""}]`;
-  return `${OPEN}${kept}${marker}${CLOSE}`;
+  return `${OPEN}${kept}${CLOSE}${marker}`;
 }
 
 /** Customer-written text as one `<ticket_content>` block; null and numbers unchanged. */
@@ -94,11 +87,8 @@ export function untrusted(value: unknown, options?: CutOptions): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "string") return wrap(value, options);
-  // Each string neutralised before JSON escapes its newlines and tabs.
-  const json = JSON.stringify(value, (_key, inner: unknown) =>
-    typeof inner === "string" ? neutralise(inner) : inner,
-  );
-  return wrap(json, options);
+  // `<` in a key or a value written as its JSON escape: it parses the same.
+  return wrap(JSON.stringify(value).replaceAll("<", "\\u003c"), options);
 }
 
 /** Remove every `<…>`; only up to the last `>`, so a run of `<` is not rescanned. */
@@ -205,7 +195,9 @@ const ISO_DATE =
 /** A ticket field's value: wrapped unless its type is a known closed one and the value fits it. */
 export function fieldValue(field: TicketField, value: unknown, options?: CutOptions): unknown {
   const { type } = field;
-  if (NAME_TYPES.has(type)) return plainName(value);
+  if (NAME_TYPES.has(type) && (typeof value === "string" || typeof value === "number")) {
+    return plainName(value);
+  }
   if (typeof value === "string") {
     if (NUMBER_TYPES.has(type) && DECIMAL.test(value)) return value;
     if (DATE_TYPES.has(type) && ISO_DATE.test(value)) return value;
@@ -214,6 +206,5 @@ export function fieldValue(field: TicketField, value: unknown, options?: CutOpti
       return plainName(value);
     }
   }
-  if (type === "custom_checkbox" && typeof value === "boolean") return value;
   return untrusted(value, options);
 }
