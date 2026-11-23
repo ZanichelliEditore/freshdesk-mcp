@@ -5,12 +5,16 @@
 "none".*
 
 - **Written:** `2026-11-23T18:04:33+01:00`
-- **Describes commit:** the T-017 handoff commit; its hash and CI line
-  arrive in the stamp commit right after it.
+- **Describes commit:** `60909d3`
+  (`60909d35c7cb11e4938c4fb134458b2f011475b5`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45223781850
+  (ran on `60909d3`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-017 `done (2026-11-23)`,
   `docs/tasks/T-017-untrusted-content.md` ("Done"). Commits `fef8a5f`
-  (build), `1950f43` (full-round fixes) and the handoff commit (one test,
+  (build), `1950f43` (full-round fixes) and `60909d3` (handoff: one test,
   comment wording).
 
 - **Next action:**
