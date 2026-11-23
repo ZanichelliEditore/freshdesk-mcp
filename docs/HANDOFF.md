@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-23T10:34:51+01:00`
-- **Describes commit:** STAMP-PENDING
+- **Describes commit:** `01dabf9`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45148456880
+  (ran on `01dabf9`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file arrives in the commit right after it.
 
 - **Current task:** T-005 Rate limiter (standalone), `done (2026-11-23)`.
   Code in `aa38280`, `4384a89` and `a46859c`; see
