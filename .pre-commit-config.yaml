@@ -58,6 +58,17 @@ repos:
         files: ^docs/rfc/.*\.md$
   - repo: local
     hooks:
+      # Needs the gitignored docs/private/account-patterns, so it is local
+      # only: not in `make quality`, not in CI.
+      - id: account-patterns
+        name: account values in the index
+        entry: python3 tools/checks/account_patterns.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+  - repo: local
+    hooks:
       - id: rfc-needed
         name: RFC needed for structural changes
         entry: python3 tools/checks/rfc_needed.py

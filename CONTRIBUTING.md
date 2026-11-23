@@ -8,6 +8,16 @@
 3. Make the change. Keep it surgical.
 4. Run the quality gate before committing (see the command surface in `AGENTS.md`).
 
+## The `account-patterns` hook
+
+The `account-patterns` commit hook checks staged content against
+`docs/private/account-patterns`, a gitignored list of real account values
+that only maintainers hold; without the file it refuses every commit.
+Maintainers keep the file in place. A contributor who does not have it
+commits with `SKIP=account-patterns git commit` and does not create a
+stand-in file: a file with a dummy line switches the guard off for good.
+Every other hook still runs.
+
 ## Definition of done
 
 - The change traces directly to the task — no drive-by edits.
