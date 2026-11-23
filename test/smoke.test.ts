@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient, type HttpRequest, type PageRequest } from "../src/client/http.js";
 import { RateLimiter } from "../src/client/rate-limit.js";
 import { listTicketFields } from "../src/client/resources/ticket-fields.js";
-import { choicesShape, runSmoke, smoke, SmokeClient } from "../scripts/smoke/smoke.js";
+import { choicesShape, main, runSmoke, smoke, SmokeClient } from "../scripts/smoke/smoke.js";
 import { agentPages, groupPages } from "./fixtures/agents-groups.js";
 import { ticketFieldsPayload, ticketFieldsWithEntityChoices } from "./fixtures/ticket-fields.js";
 import { type MockAgent, mockDispatcher } from "./support/mock-dispatcher.js";
@@ -317,9 +317,6 @@ describe("runSmoke: failures", () => {
   });
 
   it("agents and groups the zod schema refuses are reported as refused", async () => {
-    account(ticketFieldsPayload);
-    mock.close();
-    mock = mockDispatcher();
     reply("/api/v2/ticket_fields", 200, ticketFieldsPayload, 2);
     reply("/api/v2/agents?per_page=100", 200, [{ id: "x" }]);
     reply("/api/v2/groups?per_page=100", 200, [{ id: 1 }]);
@@ -336,7 +333,7 @@ describe("runSmoke: failures", () => {
     const code = await smoke(env, mock, (line) => lines.push(line));
     expect(code).not.toBe(0);
     expect(lines).toEqual([
-      "config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_HOST_OVERRIDE, FRESHDESK_MCP_CONFIG)",
+      "config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_MCP_CONFIG)",
     ]);
     expect(sent()).toEqual([]);
   });
@@ -347,5 +344,87 @@ describe("runSmoke: failures", () => {
     expect(code).not.toBe(0);
     expect(lines.join("\n")).not.toContain(DOMAIN);
     expect(sent()).toEqual([]);
+  });
+
+  it("refuses to start when FRESHDESK_HOST_OVERRIDE is set: nothing sent", async () => {
+    const lines: string[] = [];
+    const env = {
+      FRESHDESK_DOMAIN: DOMAIN,
+      FRESHDESK_API_KEY: API_KEY,
+      FRESHDESK_HOST_OVERRIDE: "support.quillmoor.example",
+    };
+    const code = await smoke(env, mock, (line) => lines.push(line));
+    expect(code).toBe(1);
+    expect(lines).toEqual([
+      "config: fail (FRESHDESK_HOST_OVERRIDE is set: the smoke run is for the real account only)",
+    ]);
+    expect(sent()).toEqual([]);
+  });
+
+  it("an empty FRESHDESK_HOST_OVERRIDE is unset, as for the server", async () => {
+    account(ticketFieldsPayload);
+    const lines: string[] = [];
+    const env = {
+      FRESHDESK_DOMAIN: DOMAIN,
+      FRESHDESK_API_KEY: API_KEY,
+      FRESHDESK_HOST_OVERRIDE: "",
+    };
+    expect(await smoke(env, mock, (line) => lines.push(line))).toBe(0);
+  });
+
+  it("a 2xx that is not JSON is reported as not JSON, not as a schema refusal", async () => {
+    const html = (path: string, times = 1) =>
+      mock
+        .get(ORIGIN)
+        .intercept({ path, method: "GET" })
+        .reply(200, `<html>${CANARY}</html>`, { headers: { "content-type": "text/html" } })
+        .times(times);
+    html("/api/v2/ticket_fields");
+    html("/api/v2/agents?per_page=100");
+    html("/api/v2/groups?per_page=100");
+    const lines: string[] = [];
+    const code = await runSmoke(client(), (line) => lines.push(line));
+    expect(code).toBe(1);
+    expect(lines).toContain("ticket_fields: not JSON");
+    expect(lines).toContain("agents: not JSON");
+    expect(lines).toContain("groups: not JSON");
+    expect(lines.join("\n")).not.toContain(CANARY);
+  });
+});
+
+describe("main: an unexpected error", () => {
+  /** An environment whose every read throws an error that is not a ConfigError. */
+  const throwing = new Proxy({} as NodeJS.ProcessEnv, {
+    get() {
+      throw new Error(CANARY);
+    },
+  });
+
+  it("smoke lets an error that is not a ConfigError through", async () => {
+    await expect(smoke(throwing, mock, () => undefined)).rejects.toThrow(CANARY);
+  });
+
+  it("prints one fixed line, no message or stack, exit 1, nothing sent", async () => {
+    const lines: string[] = [];
+    const code = await main(throwing, mock, (line) => lines.push(line));
+    expect(code).toBe(1);
+    expect(lines).toEqual(["smoke: fail (unexpected error)"]);
+    expect(stderr).toEqual([]);
+    expect(sent()).toEqual([]);
+  });
+
+  it("passes a normal run's exit code through", async () => {
+    account(ticketFieldsPayload);
+    const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY };
+    expect(await main(env, mock, () => undefined)).toBe(0);
+  });
+});
+
+describe("the banner", () => {
+  it("says what is printed and where the output is kept", async () => {
+    const { out } = await run(ticketFieldsPayload);
+    expect(out.split("\n")[0]).toBe(
+      "smoke: GET only; shapes and counts, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only shape lines into tracked files.",
+    );
   });
 });

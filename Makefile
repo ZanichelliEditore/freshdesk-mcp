@@ -34,9 +34,13 @@ build: ## compile src/ to dist/ (tsconfig.build.json)
 quality: lint format-check typecheck test build ## full local gate
 
 # Compiled out of the tree (tsconfig.smoke.json), then run. Never in `quality` or CI.
-smoke: ## GET-only check of the real account (owner runs it; same env as the server): prints shapes, never values
+# Node stops looking for package.json at node_modules/, so the out dir gets its
+# own: the output loads as ES modules without relying on syntax detection.
+SMOKE_OUT := node_modules/.cache/freshdesk-mcp-smoke
+smoke: ## GET-only check of the real account (owner runs it; same env as the server): shapes and counts, no names or ids
 	npx tsc -p tsconfig.smoke.json
-	node node_modules/.cache/freshdesk-mcp-smoke/scripts/smoke/cli.js
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py

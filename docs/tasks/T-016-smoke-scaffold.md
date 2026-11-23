@@ -82,6 +82,36 @@ schema refuses is reported as refused, exit non-zero; `make help` lists
 *Filled at `/handoff`:*
 
 ## Done
+- Build `2850999`: `scripts/smoke/smoke.ts` (`SmokeClient`, `choicesShape`,
+  `runSmoke`, `smoke`), `scripts/smoke/cli.ts` (entry point, builds the
+  Agent), `tsconfig.smoke.json`, `make smoke`, the fixture variant
+  `ticketFieldsWithEntityChoices` in `test/fixtures/ticket-fields.ts`, and
+  `test/smoke.test.ts`. The files differ from "Files expected to change":
+  `scripts/smoke/` holds two files instead of `scripts/smoke.ts`, so the one
+  that builds the real Agent is named `cli.ts` and the existing `**/cli.ts`
+  lint ban keeps it out of tests; `tsconfig.smoke.json` is new.
+- "In scope" was wrong that one override on `request` covers the three: it
+  covers `requestWithRetry`, but the base `paginate` builds its first page
+  from path, query and cost only, so a method given through a cast would be
+  sent as a GET, not refused. `paginate` has its own guard
+  (`test/smoke.test.ts` "%s through paginate (cast): refused, nothing sent").
+- RFC 2026-11-23 rule 2 ("only `cli.ts` builds the one keep-alive Agent") is
+  read as: only an entry point builds a real dispatcher, and no test imports
+  one. `scripts/smoke/cli.ts` is a second entry point under that reading
+  (accepted by the orchestrator for the owner, 2026-11-23).
+- Full review fixes (range `c95fd04..2850999`): the compiled output loaded
+  only by Node's syntax detection, since Node stops looking for package.json
+  at `node_modules/`; `node --no-experimental-detect-module` on it failed
+  with "Failed to load the ES module", exit 1. `make smoke` now writes
+  `{"type":"module"}` into the out dir and runs Node with
+  `--no-experimental-detect-module`.
+  `env -u FRESHDESK_DOMAIN -u FRESHDESK_API_KEY -u FRESHDESK_HOST_OVERRIDE make smoke`
+  printed, before and after the fix, `config: fail (...)` and make exited 2
+  (the script 1); nothing was sent. Also: refusal with
+  `FRESHDESK_HOST_OVERRIDE` set; only `ConfigError` gives the config line,
+  any other error the fixed `smoke: fail (unexpected error)` (`main`);
+  "not JSON" told apart from "refused by the schema"; the banner says where
+  the output is kept.
 
 ## Dead ends
 none

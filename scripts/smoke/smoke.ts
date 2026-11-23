@@ -16,6 +16,12 @@
 // name → id `choices` record. Never a label, a name, an id, a choice, the
 // domain, the key, or Freshdesk's text: a failure prints its error code only.
 // A field type is printed only when it is spelled like an API type name.
+// A 2xx whose body is not JSON is said to be "not JSON"; a JSON body a zod
+// schema refuses, "refused by the schema".
+//
+// It refuses to start when FRESHDESK_HOST_OVERRIDE is set: it exists for the
+// real account only. A configuration it cannot load, and any error it did not
+// expect, each print one fixed line: no message, no stack.
 //
 // Exit code: 0 when the three lists were fetched and accepted, 1 otherwise.
 
@@ -32,7 +38,7 @@ import { listAgents } from "../../src/client/resources/agents.js";
 import { listGroups } from "../../src/client/resources/groups.js";
 import type { ListResult } from "../../src/client/resources/list-all.js";
 import { listTicketFields } from "../../src/client/resources/ticket-fields.js";
-import { loadConfig } from "../../src/config.js";
+import { ConfigError, loadConfig } from "../../src/config.js";
 import type { FreshdeskError } from "../../src/client/errors.js";
 
 type Out = (line: string) => void;
@@ -126,18 +132,17 @@ function typeName(type: unknown): string {
   return typeof type === "string" && /^[a-z][a-z0-9_]{0,39}$/.test(type) ? type : "other";
 }
 
-function fail(error: FreshdeskError): string {
-  return `fail ${error.code}`;
-}
-
-/** A 2xx the resource module refused is its zod schema's refusal. */
-function refusedBySchema(error: FreshdeskError): boolean {
-  return (
-    error.code === "server" &&
-    error.http_status !== null &&
-    error.http_status >= 200 &&
-    error.http_status < 300
-  );
+/**
+ * A failure in a few words, never its message. A 2xx comes back as an error
+ * in two cases only: the HTTP core could not parse the body (its fixed
+ * message, src/client/http.ts), or a resource module's zod schema refused it.
+ */
+function failure(error: FreshdeskError): string {
+  const ok = error.http_status !== null && error.http_status >= 200 && error.http_status < 300;
+  if (error.code !== "server" || !ok) return `fail ${error.code}`;
+  return error.message.startsWith("Freshdesk sent a body that is not JSON")
+    ? "not JSON"
+    : "refused by the schema";
 }
 
 const OD4_TYPES = ["default_agent", "default_group", "default_product"];
@@ -185,13 +190,15 @@ function reportList(noun: string, result: ListResult<unknown>, out: Out): boolea
     );
     return true;
   }
-  out(`${noun}: ${refusedBySchema(result.error) ? "refused by the schema" : fail(result.error)}`);
+  out(`${noun}: ${failure(result.error)}`);
   return false;
 }
 
 /** The report, one line at a time to `out`. Returns the exit code. */
 export async function runSmoke(http: SmokeClient, out: Out): Promise<number> {
-  out("smoke: GET only; shapes and counts, no account values");
+  out(
+    "smoke: GET only; shapes and counts, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only shape lines into tracked files.",
+  );
   let ok = true;
 
   const raw = await http.requestWithRetry({ path: "/ticket_fields" });
@@ -202,13 +209,11 @@ export async function runSmoke(http: SmokeClient, out: Out): Promise<number> {
       out(`ticket_fields: accepted, ${fields.fields.length} fields`);
     } else {
       ok = false;
-      out(
-        `ticket_fields: ${refusedBySchema(fields.error) ? "refused by the schema" : fail(fields.error)}`,
-      );
+      out(`ticket_fields: ${failure(fields.error)}`);
     }
   } else {
     ok = false;
-    out(`ticket_fields: ${fail(raw.error)}`);
+    out(`ticket_fields: ${failure(raw.error)}`);
   }
 
   ok = reportList("agents", await listAgents(http), out) && ok;
@@ -220,28 +225,46 @@ export async function runSmoke(http: SmokeClient, out: Out): Promise<number> {
 /**
  * Loads the configuration from `env` as the server does and runs the report.
  * A configuration that cannot be loaded prints one fixed line: its message
- * may quote the team file's path.
+ * may quote the team file's path. Any other error is thrown.
  */
 export async function smoke(
   env: NodeJS.ProcessEnv,
   dispatcher: Dispatcher,
   out: Out,
 ): Promise<number> {
+  if (env.FRESHDESK_HOST_OVERRIDE) {
+    out(
+      "config: fail (FRESHDESK_HOST_OVERRIDE is set: the smoke run is for the real account only)",
+    );
+    return 1;
+  }
   let http: SmokeClient;
   try {
     const config = loadConfig(env);
     http = new SmokeClient({
       domain: config.domain,
       apiKey: config.apiKey,
-      ...(config.hostOverride === undefined ? {} : { hostOverride: config.hostOverride }),
       dispatcher,
       limiter: new RateLimiter(config.team.limits),
     });
-  } catch {
-    out(
-      "config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_HOST_OVERRIDE, FRESHDESK_MCP_CONFIG)",
-    );
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    out("config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_MCP_CONFIG)");
     return 1;
   }
   return runSmoke(http, out);
+}
+
+/** `smoke`, with any error it throws turned into one fixed line and exit 1. */
+export async function main(
+  env: NodeJS.ProcessEnv,
+  dispatcher: Dispatcher,
+  out: Out,
+): Promise<number> {
+  try {
+    return await smoke(env, dispatcher, out);
+  } catch {
+    out("smoke: fail (unexpected error)");
+    return 1;
+  }
 }
