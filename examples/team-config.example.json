@@ -1,0 +1,20 @@
+{
+  "toolsets": ["core", "write"],
+  "fields": {
+    "Product": {
+      "meaning": "Which product the ticket is about. Three levels: product > area > topic."
+    },
+    "cf_order_number": { "meaning": "The shop order the customer refers to, if any." },
+    "cf_tax_code": { "hidden": true }
+  },
+  "uncategorised_fields": ["cf_product_topic"],
+  "forward_allow_list": ["@example.com", "legal@partner.example.com"],
+  "limits": {
+    "reserve_pct": 20,
+    "floor_pct": 5,
+    "pacing_rps": 2,
+    "bulk_cap": 50,
+    "schema_ttl_s": 3600
+  },
+  "export_dir": "./freshdesk-exports"
+}
