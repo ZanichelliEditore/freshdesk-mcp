@@ -173,7 +173,8 @@ export class HttpClient {
     if (!acquired.ok) return acquired;
     // Read again: `acquire` may have slept. Its token is spent either way.
     const left = deadline - Date.now();
-    if (left <= 0) return expired(method);
+    // Written so that a deadline that is not a number sends nothing either.
+    if (!(left > 0)) return expired(method);
 
     const started = performance.now();
     const log = (outcome: number | "network") => {
