@@ -208,45 +208,61 @@ export class HttpClient {
     return { ok: true, status, headers, body };
   }
 
-  /** `request`, attempted again where that cannot apply a write twice. */
+  /**
+   * `request`, attempted again where that cannot apply a write twice. A write
+   * that failed on a 5xx, a network error or a timeout may have been applied:
+   * it comes back `retryable: false`, so no caller sends it again either.
+   */
   async requestWithRetry(request: HttpRequest): Promise<HttpResult> {
     const read = (request.method ?? "GET") === "GET";
     for (let attempt = 0; ; attempt += 1) {
       const result = await this.request(request);
-      if (result.ok || attempt === MAX_RETRIES) return result;
+      if (result.ok) return result;
       const { code, http_status, retryable } = result.error;
       // With no status the limiter refused the call: waiting is its business.
       const limited = code === "rate_limited" && http_status !== null;
       const transient = retryable && (code === "server" || code === "network");
-      if (!limited && !(read && transient)) return result;
+      if (!read && transient) {
+        return { ok: false, error: { ...result.error, retryable: false } };
+      }
+      if (attempt === MAX_RETRIES || !(limited || transient)) return result;
       if (!limited) await sleep(BACKOFF_MS * 2 ** attempt);
     }
   }
 
   /**
    * The pages of a list, one result each, following `Link` up to the cap. A
-   * failed page is yielded and ends the iteration.
+   * failed page is yielded and ends the iteration. Throws a `TypeError` for a
+   * cap that is not a whole number, zero or more.
    */
   async *paginate(request: PageRequest, cap: PageCap): AsyncGenerator<HttpResult, void, void> {
-    let next: HttpRequest | undefined = request;
-    let items = 0;
-    for (let page = 0; page < cap.pages && next !== undefined; page += 1) {
+    if (!isCount(cap.pages) || (cap.items !== undefined && !isCount(cap.items))) {
+      throw new TypeError("A page cap and an item cap are whole numbers, zero or more.");
+    }
+    // Field by field: the type keeps a method, a body and a URL out, and a
+    // caller's wider object would carry them in.
+    const first: HttpRequest = { method: "GET", path: request.path };
+    if (request.params !== undefined) first.params = request.params;
+    if (request.query !== undefined) first.query = request.query;
+    if (request.cost !== undefined) first.cost = request.cost;
+
+    let next: HttpRequest | undefined = first;
+    let room = cap.items ?? Infinity;
+    for (let page = 0; page < cap.pages && room > 0 && next !== undefined; page += 1) {
       const result = await this.requestWithRetry(next);
       if (!result.ok) {
         yield result;
         return;
       }
-      if (cap.items !== undefined && Array.isArray(result.body)) {
-        const room = cap.items - items;
-        if (result.body.length >= room) {
-          yield { ...result, body: result.body.slice(0, room) };
-          return;
-        }
-        items += result.body.length;
+      const body: unknown = result.body;
+      if (Array.isArray(body)) {
+        yield body.length > room ? { ...result, body: body.slice(0, room) } : result;
+        room -= body.length;
+      } else {
+        yield result;
       }
-      yield result;
       const link = /<([^>]*)>\s*;\s*rel="?next"?/.exec(result.headers.get("link") ?? "")?.[1];
-      next = link === undefined ? undefined : { ...request, url: link };
+      next = link === undefined ? undefined : { ...first, url: link };
     }
   }
 
@@ -284,4 +300,8 @@ export class HttpClient {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isCount(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
 }

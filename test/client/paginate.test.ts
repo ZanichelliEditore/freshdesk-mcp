@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpClient, type HttpResult, type PageCap } from "../../src/client/http.js";
+import {
+  HttpClient,
+  type HttpRequest,
+  type HttpResult,
+  type PageCap,
+} from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
 import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
 
@@ -125,6 +130,53 @@ describe("paginate", () => {
       [{ id: 3 }, { id: 4 }],
     ]);
     expect(sentUrls()).toHaveLength(2);
+  });
+
+  it("sends nothing with an item cap of zero", async () => {
+    threePages();
+
+    expect(await collect({ pages: 10, items: 0 })).toEqual([]);
+    expect(sentUrls()).toHaveLength(0);
+  });
+
+  it.each([
+    { pages: Number.NaN },
+    { pages: -1 },
+    { pages: 1.5 },
+    { pages: Number.POSITIVE_INFINITY },
+    { pages: 10, items: Number.NaN },
+    { pages: 10, items: -1 },
+    { pages: 10, items: 2.5 },
+  ])("throws for the cap %j, sending nothing", async (cap) => {
+    threePages();
+
+    await expect(collect(cap)).rejects.toThrow(TypeError);
+    expect(sentUrls()).toHaveLength(0);
+  });
+
+  it("sends every page as a GET with no body, whatever the caller's object carries", async () => {
+    page(
+      "/api/v2/tickets?per_page=2",
+      [{ id: 1 }],
+      next(`${ORIGIN}/api/v2/tickets?per_page=2&page=2`),
+    );
+    page("/api/v2/tickets?per_page=2&page=2", [{ id: 2 }]);
+    const wider: HttpRequest = {
+      method: "POST",
+      path: "/tickets",
+      query: { per_page: 2 },
+      body: { subject: "x" },
+      url: "https://evil.example/api/v2/tickets",
+    };
+
+    const pages: HttpResult[] = [];
+    for await (const result of http.paginate(wider, { pages: 10 })) pages.push(result);
+
+    expect(bodies(pages)).toEqual([[{ id: 1 }], [{ id: 2 }]]);
+    const calls = mock.getCallHistory()!.calls();
+    expect(calls.map((call) => call.method)).toEqual(["GET", "GET"]);
+    expect(calls.map((call) => call.body)).toEqual([null, null]);
+    expect(sentUrls()[0]).toBe(`${ORIGIN}/api/v2/tickets?per_page=2`);
   });
 
   it("sends nothing with a page cap of zero", async () => {

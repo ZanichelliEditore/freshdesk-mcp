@@ -73,11 +73,30 @@ describe("requestWithRetry: reads", () => {
 
   it("backs off between attempts: 0.5 s, 1 s, 2 s", async () => {
     on("GET").reply(503, "").times(4);
+    const started = Date.now();
+    const at: number[] = [];
+    const request = http.request.bind(http);
+    vi.spyOn(http, "request").mockImplementation((options) => {
+      at.push(Date.now() - started);
+      return request(options);
+    });
 
-    const { ms } = await settle(http.requestWithRetry({ path: "/tickets" }));
+    await settle(http.requestWithRetry({ path: "/tickets" }));
 
-    expect(ms).toBeGreaterThanOrEqual(3500);
-    expect(ms).toBeLessThan(4500);
+    expect(at).toEqual([0, 500, 1500, 3500]);
+  });
+
+  it("counts a 429 and a 503 against the same four attempts", async () => {
+    on("GET").reply(429, "", { headers: { "retry-after": "1" } });
+    on("GET").reply(503, "");
+    on("GET").reply(429, "", { headers: { "retry-after": "1" } });
+    on("GET").reply(503, "");
+    on("GET").reply(200, { late: true }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "server", http_status: 503, retryable: true });
+    expect(sent()).toHaveLength(4);
   });
 
   it("returns the first success after 5xx failures", async () => {
@@ -157,11 +176,14 @@ describe("requestWithRetry: reads", () => {
   });
 
   it("does not retry a request that was refused before sending", async () => {
+    const attempts = vi.spyOn(http, "request");
+
     const { result } = await settle(
       http.requestWithRetry({ path: "/tickets", url: "https://evil.example/api/v2/tickets" }),
     );
 
     expect(failure(result)).toMatchObject({ code: "validation", http_status: null });
+    expect(attempts).toHaveBeenCalledTimes(1);
     expect(sent()).toHaveLength(0);
   });
 });
@@ -172,7 +194,8 @@ describe("requestWithRetry: writes are never sent twice", () => {
 
     const { result } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
 
-    expect(failure(result)).toMatchObject({ code: "server", http_status: 503 });
+    // It may have been applied: no caller may take it as safe to send again.
+    expect(failure(result)).toMatchObject({ code: "server", http_status: 503, retryable: false });
     expect(sent()).toHaveLength(1);
   });
 
@@ -183,7 +206,7 @@ describe("requestWithRetry: writes are never sent twice", () => {
 
     const { result } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
 
-    expect(failure(result).code).toBe("network");
+    expect(failure(result)).toMatchObject({ code: "network", retryable: false });
     expect(sent()).toHaveLength(1);
   });
 
@@ -197,6 +220,7 @@ describe("requestWithRetry: writes are never sent twice", () => {
       code: "network",
       http_status: null,
       message: "Could not reach Freshdesk (TimeoutError).",
+      retryable: false,
     });
     expect(sent()).toHaveLength(1);
     expect(ms).toBeGreaterThanOrEqual(10_000);
@@ -216,6 +240,40 @@ describe("requestWithRetry: writes on 429", () => {
     expect(result).toMatchObject({ ok: true, status: 201, body: { id: 7 } });
     expect(sent()).toHaveLength(2);
     expect(ms).toBeGreaterThanOrEqual(2000);
+  });
+
+  it.each(WRITES)("stops a %s that gets a 503 after a 429", async (method) => {
+    on(method).reply(429, "", { headers: { "retry-after": "1" } });
+    on(method).reply(503, "");
+    on(method).reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "server", http_status: 503, retryable: false });
+    expect(sent()).toHaveLength(2);
+  });
+
+  it("stops a POST that times out after a 429", async () => {
+    on("POST").reply(429, "", { headers: { "retry-after": "1" } });
+    on("POST").reply(201, { slow: true }, { headers: JSON_TYPE }).delay(60_000);
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "network", retryable: false });
+    expect(sent()).toHaveLength(2);
+  });
+
+  it("marks a write's 503 on the last attempt as not retryable too", async () => {
+    on("POST")
+      .reply(429, "", { headers: { "retry-after": "1" } })
+      .times(3);
+    on("POST").reply(503, "");
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "server", retryable: false });
+    expect(sent()).toHaveLength(4);
   });
 
   it("gives up on 429 after four attempts", async () => {

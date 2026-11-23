@@ -2,8 +2,9 @@
 // shared by every call this process makes. No network, no config import.
 //
 // Use: `await acquire(cost)` before each request, `observe(status, headers)`
-// on each response. The limiter owns every wait: a caller that is told to
-// retry calls `acquire` again and never sleeps on its own.
+// on each response. The limiter owns every wait for the rate limit: a caller
+// that is told to retry calls `acquire` again and never sleeps on a 429 itself
+// (its backoff after a 5xx or a network error is its own, see `http.ts`).
 //
 //   - Every allowed call takes one token from the local count; the next
 //     response's headers replace that count with the account's real one.
