@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T17:16:19+01:00`
-- **Describes commit:** pending: this file's hash and CI line arrive in
-  the commit right after it.
+- **Describes commit:** `002f91a`
+  (`002f91a0017530c3ea8525644199959a95530cea`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45214702698
+  (ran on `002f91a`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** plan session, `/decompose` scoped to T-051, the task
   file `docs/tasks/PLAN.md`. Commits `b3fdd32` (sized), `83acc09` (full
