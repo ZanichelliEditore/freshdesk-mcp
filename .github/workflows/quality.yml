@@ -15,12 +15,16 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # the engines floor (RFC 2026-11-23) and the current LTS
+        node: ["22.19", "24"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "24"
-      - run: npm ci || npm install
+          node-version: ${{ matrix.node }}
+      - run: npm ci
       - run: npx prettier --check .
       - run: npx eslint .
       - name: typecheck (tsc, if any TypeScript)
@@ -45,7 +49,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-      - run: npm ci || npm install
+      - run: npm ci
       - run: npm audit --audit-level=high
       - uses: actions/setup-python@v6
         with:

@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test quality rfc-sync improvement
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -27,6 +27,9 @@ typecheck: ## type-check
 test: ## run tests
 	npm test --if-present
 	python3 -m unittest discover -s tools/checks
+
+build: ## compile src/ to dist/ (tsconfig.build.json)
+	npm run build
 
 quality: lint format-check typecheck test ## full local gate
 
