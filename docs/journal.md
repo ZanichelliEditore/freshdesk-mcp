@@ -50,3 +50,5 @@ stands for. End an entry with the task id it came from.
 - When a wrapper rewrites a field (`requestWithRetry` forces `retryable: false` on a write), a test of that field through the wrapper cannot see the inner function get it wrong: test the inner function directly. (T-013)
 - An invented fixture name can still be an account value: the account-patterns hook refused a made-up custom-field name in T-008's first commit. Pick fixture names nothing real would use, and let the hook be the check, not the memory of the real names. (T-008)
 - zod 4 does not copy a `__proto__` key from parsed JSON into its output, neither in `z.record` nor in `z.looseObject`: the key is dropped silently, not refused, and the result's prototype stays `Object.prototype` (zod ^4.2, probed in `test/client/resources/ticket-fields.test.ts`). (T-008)
+- An async generator's return value is invisible to `for await`: adding one (`paginate`'s `truncated`) breaks no existing caller, and a caller that needs it drives `next()` by hand. (T-009)
+- undici's `MockAgent` call history `path` has no query string; `fullUrl` has it. A test asserting `per_page` or `page` must read `fullUrl`. (T-009)
