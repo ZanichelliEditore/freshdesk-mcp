@@ -27,3 +27,12 @@ describe("scrubFreshdeskEnv", () => {
     }
   });
 });
+
+describe("global dispatcher backstop (RFC 2026-11-23, rule 4)", () => {
+  it("refuses a call that names no dispatcher, before any connection", async () => {
+    // The one place a test calls the global fetch: it proves the backstop.
+    // eslint-disable-next-line no-restricted-globals
+    const error: unknown = await fetch("https://backstop.invalid/").catch((e: unknown) => e);
+    expect(error).toMatchObject({ cause: { code: "UND_MOCK_ERR_MOCK_NOT_MATCHED" } });
+  });
+});
