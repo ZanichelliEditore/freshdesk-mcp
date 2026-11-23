@@ -4,6 +4,7 @@ Every test builds its own temporary repository and patterns file; none reads
 the real `docs/private/account-patterns`. All values are synthetic.
 """
 
+import locale
 import os
 import subprocess
 import sys
@@ -14,7 +15,21 @@ from pathlib import Path
 _SCRIPT = Path(__file__).resolve().parent / "account_patterns.py"
 _PATTERN = "zq-synth-[0-9]+"
 _VALUE = "ZQ-Synth-4711"  # differs in case from the pattern on purpose
-_PATTERNS_PATH = "docs/private/account-patterns"
+
+
+def _utf8_locale() -> str | None:
+    """The name of a UTF-8 locale installed on this machine, if any."""
+    for name in ("C.UTF-8", "en_US.UTF-8"):
+        try:
+            locale.setlocale(locale.LC_CTYPE, name)
+        except locale.Error:
+            continue
+        locale.setlocale(locale.LC_CTYPE, "C")
+        return name
+    return None
+
+
+_UTF8 = _utf8_locale()
 
 
 def _clean_env() -> dict[str, str]:
@@ -109,7 +124,7 @@ class Matching(_Repo):
         self.stage("blob.dat", b"\x00\x01" + _VALUE.encode() + b"\x00")
         code, output = self.run_guard()
         self.assertEqual(code, 1)
-        self.assertIn("blob.dat", output)
+        self.assertIn("blob.dat (binary)", output)
         self.assert_no_leak(output)
 
     def test_interior_blank_line_does_not_match_everything(self) -> None:
@@ -127,20 +142,41 @@ class Matching(_Repo):
         self.stage("a.txt", f"{_VALUE}\n".encode())
         self.assertEqual(self.run_guard()[0], 1)
 
-    def test_non_ascii_pattern_gets_git_greps_own_verdict(self) -> None:
-        # How `-i` folds an accented letter depends on the locale, so the
-        # guard must not change it: whatever git grep says here, it says.
+    def test_text_and_binary_matches_are_both_named(self) -> None:
+        self.patterns()
+        self.stage("a.txt", f"{_VALUE}\n".encode())
+        self.stage("blob.dat", b"\x00" + _VALUE.encode())
+        code, output = self.run_guard()
+        self.assertEqual(code, 1)
+        self.assertIn("a.txt:1", output)
+        self.assertIn("blob.dat (binary)", output)
+        self.assertNotIn("a.txt (binary)", output)
+
+
+@unittest.skipUnless(_UTF8, "no UTF-8 locale on this machine")
+class BothLocales(_Repo):
+    """Each case is missed by one locale alone; the guard runs both."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.env["LC_ALL"] = _UTF8
+
+    def test_accented_letter_in_another_case_is_caught(self) -> None:
+        # Missed by the C locale: `-i` folds ASCII only there.
         self.patterns("zq-società-[0-9]+\n".encode())
         self.stage("a.txt", "ZQ-SOCIETÀ-1\n".encode())
-        plain = subprocess.run(
-            ["git", "grep", "--cached", "-q", "-iE", "-f", _PATTERNS_PATH],
-            cwd=self.root,
-            env=self.env,
-            capture_output=True,
-            check=False,
-        )
-        self.assertIn(plain.returncode, (0, 1))
-        self.assertEqual(self.run_guard()[0], 1 - plain.returncode)
+        code, output = self.run_guard()
+        self.assertEqual(code, 1)
+        self.assertIn("a.txt:1", output)
+
+    def test_value_beside_a_byte_that_is_not_utf8_is_caught(self) -> None:
+        # Missed by a UTF-8 locale: `.` does not match the Latin-1 byte.
+        self.patterns(b"zq-synth.[0-9]+\n")
+        self.stage("a.txt", b"ZQ-Synth\xe94711\n")
+        code, output = self.run_guard()
+        self.assertEqual(code, 1)
+        self.assertIn("a.txt:1", output)
+        self.assertEqual(output.count("a.txt"), 1)
 
 
 class IndexNotWorkingTree(_Repo):
@@ -228,6 +264,14 @@ class CannotCheck(_Repo):
     def test_whitespace_only_line_beside_a_pattern_is_refused(self) -> None:
         self.patterns(_PATTERN.encode() + b"\n\n  \n")
         self.assert_refused_with_fix("line 3")
+
+    def test_carriage_return_at_the_end_of_the_file_is_refused(self) -> None:
+        self.patterns(b"other\r\n" + _PATTERN.encode() + b"\r")
+        self.assert_refused_with_fix("line 2")
+
+    def test_lone_carriage_return_line_endings_are_refused(self) -> None:
+        self.patterns(b"other\r" + _PATTERN.encode() + b"\r")
+        self.assert_refused_with_fix("line 1")
 
     def test_byte_order_mark_is_refused(self) -> None:
         self.patterns(b"\xef\xbb\xbf" + _PATTERN.encode() + b"\n")
