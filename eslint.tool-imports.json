@@ -1,0 +1,69 @@
+{
+  "bare": {
+    "files": ["src/tools/**"],
+    "value": ["zod", "@modelcontextprotocol/server", "node:path", "node:fs/promises", "node:crypto"]
+  },
+  "places": {
+    "T0": {
+      "files": ["src/tools/*.ts"],
+      "value": [
+        "./context.js",
+        "./format.js",
+        "./list.js",
+        "./budget.js",
+        "./csv.js",
+        "./rows.js",
+        "./ticket-query.js",
+        "../client/errors.js",
+        "../client/resources/agents.js",
+        "../client/resources/groups.js",
+        "../client/resources/tickets.js",
+        "../client/resources/search.js",
+        "../client/resources/contacts.js",
+        "../client/resources/companies.js",
+        "../client/resources/solutions.js",
+        "../client/resources/canned.js"
+      ],
+      "type": ["../schema/index.js", "../config.js", "../client/resources/ticket-fields.js"]
+    },
+    "T1": {
+      "files": ["src/tools/toolsets/*.ts"],
+      "value": ["./core/index.js", "../context.js", "../format.js", "../../client/errors.js"],
+      "type": ["../../config.js"]
+    },
+    "T2": {
+      "files": ["src/tools/toolsets/core/*.ts"],
+      "value": [
+        "./get-ticket-schema.js",
+        "./list-agents.js",
+        "./list-groups.js",
+        "./get-ticket.js",
+        "./list-tickets.js",
+        "./search-tickets.js",
+        "./triage-queue.js",
+        "./find-similar-tickets.js",
+        "./solutions.js",
+        "./canned.js",
+        "./count-tickets.js",
+        "./export-tickets.js",
+        "../../context.js",
+        "../../format.js",
+        "../../list.js",
+        "../../budget.js",
+        "../../csv.js",
+        "../../rows.js",
+        "../../ticket-query.js",
+        "../../../client/errors.js",
+        "../../../client/resources/agents.js",
+        "../../../client/resources/groups.js",
+        "../../../client/resources/tickets.js",
+        "../../../client/resources/search.js",
+        "../../../client/resources/contacts.js",
+        "../../../client/resources/companies.js",
+        "../../../client/resources/solutions.js",
+        "../../../client/resources/canned.js"
+      ],
+      "type": ["../index.js", "../../../schema/index.js", "../../../config.js"]
+    }
+  }
+}
