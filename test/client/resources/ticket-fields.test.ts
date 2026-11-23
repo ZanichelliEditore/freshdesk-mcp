@@ -55,6 +55,15 @@ function clone(): Record<string, unknown>[] {
   return structuredClone(ticketFieldsPayload) as Record<string, unknown>[];
 }
 
+/** A payload with field `index` changed. */
+function change(index: number, edit: (field: Record<string, unknown>) => void) {
+  return () => {
+    const payload = clone();
+    edit(payload[index]!);
+    return payload;
+  };
+}
+
 describe("listTicketFields: a well-formed payload", () => {
   it("sends one GET to /ticket_fields and yields every field's label in order", async () => {
     reply(200, ticketFieldsPayload);
@@ -132,6 +141,49 @@ describe("listTicketFields: a well-formed payload", () => {
     reply(200, []);
     expect(fields(await listTicketFields(http))).toEqual([]);
   });
+
+  it("takes a null `choices` or `nested_ticket_fields` as absent", async () => {
+    const payload = clone();
+    payload[0]!.choices = null;
+    payload[4]!.nested_ticket_fields = null;
+    reply(200, payload);
+
+    const result = fields(await listTicketFields(http));
+
+    expect(result[0]!.choices).toBeNull();
+    expect(result[4]!.nested_ticket_fields).toBeNull();
+    expect(result[4]!.choices).toEqual(nestedChoices);
+  });
+});
+
+describe("listTicketFields: a `__proto__` key in the body", () => {
+  // Sent as text: an object literal's `__proto__` would not be an own key.
+  function replyText(text: string) {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: PATH, method: "GET" })
+      .reply(200, text, { headers: JSON_TYPE });
+  }
+  const field = '"id":1,"name":"x","label":"x","type":"t","default":false';
+
+  it("in `choices` does not change the parsed object's prototype", async () => {
+    replyText(`[{${field},"choices":{"__proto__":["A"]}}]`);
+
+    const [parsed] = fields(await listTicketFields(http));
+
+    expect(Object.getPrototypeOf(parsed!.choices)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
+  it("on a field does not change its prototype or Object's", async () => {
+    replyText(`[{${field},"__proto__":{"polluted":"yes"}}]`);
+
+    const [parsed] = fields(await listTicketFields(http));
+
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect((parsed as Record<string, unknown>).polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
 });
 
 describe("listTicketFields: a malformed payload", () => {
@@ -186,6 +238,48 @@ describe("listTicketFields: a malformed payload", () => {
         p[4]!.nested_ticket_fields = [{ name: "cf_family", label: CANARY }];
         return p;
       },
+    ],
+    [
+      "a nested level number that is not whole",
+      change(4, (f) => {
+        f.nested_ticket_fields = [{ name: "cf_family", label: "Family", level: 2.5 }];
+      }),
+    ],
+    [
+      "choices that mix ids and lists of names",
+      change(2, (f) => {
+        f.choices = { Low: 1, Medium: [CANARY] };
+      }),
+    ],
+    [
+      "an empty name",
+      change(0, (f) => {
+        f.name = "";
+      }),
+    ],
+    [
+      "an empty label",
+      change(0, (f) => {
+        f.label = "";
+      }),
+    ],
+    [
+      "a field without `default`",
+      change(0, (f) => {
+        delete f.default;
+      }),
+    ],
+    [
+      "a `default` that is not a boolean",
+      change(0, (f) => {
+        f.default = "false";
+      }),
+    ],
+    [
+      "a field without `type`",
+      change(0, (f) => {
+        delete f.type;
+      }),
     ],
   ];
 
