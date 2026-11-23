@@ -5,9 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T16:09:46+01:00`
-- **Describes commit:** STAMP-HASH, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP-CI. This file's hash and
-  CI line arrive in the commit right after it.
+- **Describes commit:** `ff8420a`
+  (`ff8420ab8cc388fb9884dfbfd869183359b5a06e`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45202226315
+  (ran on `ff8420a`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-047, caller deadline through `requestWithRetry`,
   `paginate`, the resources and the schema load
