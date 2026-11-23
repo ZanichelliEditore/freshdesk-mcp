@@ -16,15 +16,24 @@ it has no total bound: about 103 s at worst, 43.5 s for a GET nobody answers.
   and each backoff sleep; the clock is `Date.now()` (the tests fake `Date`,
   not `performance`).
 - The time left caps the per-attempt timeout, so an attempt in flight at
-  30 s is aborted.
-- `RateLimiter.acquire` takes an optional caller bound; a wait that would
-  pass the deadline is refused as `rate_limited` with `retry_after_s`, with
-  no sleep.
+  30 s is aborted. It is computed after `acquire` returns, where the timer
+  is set, not before.
+- `RateLimiter.acquire` takes an optional caller bound that only shortens
+  the wait: `min(15 s, bound)`, never a replacement. A wait that would end
+  at or after the deadline is refused as `rate_limited` with
+  `retry_after_s`, with no sleep. So at the deadline the limiter's refusal
+  wins over the expiry error, and a write held by a 429 comes back
+  `rate_limited`, not `network`.
+- How the deadline reaches `acquire` through the public `request` is the
+  builder's choice; it must not become a way for a caller to lengthen
+  anything.
+- The test helper `settle` steps 100 ms; "at or before 30 s" may need a
+  finer step.
 - Expiry error: `network`, `http_status: null`, a fixed message;
   `retryable: true` for a GET, `false` for any other method (an aborted
   write may have been applied, as with the 10 s timeout).
-- Header comments of `http.ts` and the `http.ts` line of
-  `docs/architecture/overview.md`.
+- Header comments of `http.ts` and of `rate-limit.ts`, and the `http.ts`
+  and `rate-limit.ts` lines of `docs/architecture/overview.md`.
 
 Plan-time choices of 2026-11-23, the planner's recommendation; the owner
 reviews them with the plan: the expiry code and its `retryable`, the
@@ -54,7 +63,7 @@ flight.
 `none`
 
 ## Acceptance
-`test/client/http-retry.test.ts` (MockAgent, fake clock): a call whose attempts, limiter waits and backoff would pass 30 s returns an error at or before 30 s and sends nothing after it; an attempt in flight at 30 s is aborted; the expiry error is `network` with `http_status: null`, `retryable: true` for a GET and `false` for any other method; a write held by a 429 is not sent once the deadline has passed; a limiter wait that would pass the deadline is refused as `rate_limited` with `retry_after_s`, with no sleep; a call that ends sooner is unchanged; `make quality` green.
+`test/client/http-retry.test.ts` (MockAgent, fake clock): a call whose attempts, limiter waits and backoff would pass 30 s returns an error at or before 30 s and sends nothing after it; an attempt in flight at 30 s is aborted; the expiry error is `network` with `http_status: null`, `retryable: true` for a GET and `false` for any other method; a limiter wait that would end at or after the deadline is refused as `rate_limited` with `retry_after_s`, with no sleep, the exact boundary tested, and a write on a 429 so refused is not sent again; a call that ends sooner is unchanged; `test/client/rate-limit.test.ts`: a caller's bound shortens `acquire`'s wait and never lengthens it past 15 s; `make quality` green.
 
 ## Split point
 Not expected to be needed (one module and the limiter's `acquire`). If the
