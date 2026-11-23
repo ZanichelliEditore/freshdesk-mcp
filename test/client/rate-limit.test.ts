@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type Acquired,
   DEFAULT_TOTAL,
+  MAX_HOLD_S,
   MAX_WAIT_S,
+  MIN_HOLD_S,
   RateLimiter,
   WINDOW_S,
 } from "../../src/client/rate-limit.js";
@@ -78,6 +80,8 @@ describe("headers", () => {
     ["a fraction", budget(100, "9.5")],
     ["a zero Total", budget(0, 0)],
     ["Remaining above Total", budget(100, 101)],
+    ["numbers too large to count with", budget("9".repeat(20), "9".repeat(20))],
+    ["numbers that overflow to Infinity", budget("9".repeat(400), "9".repeat(400))],
   ])("ignores %s and keeps the state it had", async (_name, headers) => {
     const limiter = limiterAt(100, 10);
     limiter.observe(200, headers);
@@ -101,6 +105,17 @@ describe("no headers seen yet", () => {
     expect((await limiter.acquire("expensive")).ok).toBe(true);
     expect((await limiter.acquire("expensive")).ok).toBe(false);
     expect((await limiter.acquire("cheap")).ok).toBe(true);
+  });
+
+  it("the first call starts a window of WINDOW_S: the default budget returns when it ends", async () => {
+    const limiter = new RateLimiter(limits);
+    const reserve = (DEFAULT_TOTAL * limits.reserve_pct) / 100;
+    for (let i = 0; i <= DEFAULT_TOTAL - reserve; i++) await limiter.acquire("cheap");
+    expect(refusal(await limiter.acquire("expensive")).retry_after_s).toBe(WINDOW_S);
+    vi.advanceTimersByTime(WINDOW_S * 1000 - 1);
+    expect(refusal(await limiter.acquire("expensive")).retry_after_s).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(await limiter.acquire("expensive")).toEqual({ ok: true });
   });
 });
 
@@ -181,7 +196,20 @@ describe("floor", () => {
   );
 
   it("does not apply exactly at the floor", async () => {
-    expect(await settlesNow(limiterAt(100, 5).acquire("cheap"))).toBe(true);
+    const pending = limiterAt(100, 5).acquire("cheap");
+    expect(await settlesNow(pending)).toBe(true);
+    expect(await pending).toEqual({ ok: true });
+  });
+
+  it("holds every call at zero, even with the floor configured at 0 %", async () => {
+    const limiter = limiterAt(100, 0, { reserve_pct: 0, floor_pct: 0, pacing_rps: 2 });
+    expect(refusal(await limiter.acquire("cheap")).message).toContain("0 of 100");
+  });
+
+  it("the last token goes out and the count never goes below zero", async () => {
+    const limiter = limiterAt(100, 1, { reserve_pct: 0, floor_pct: 0, pacing_rps: 2 });
+    expect(await limiter.acquire("cheap")).toEqual({ ok: true });
+    expect(refusal(await limiter.acquire("cheap")).message).toContain("0 of 100");
   });
 
   it("everyone waiting is released when the window ends", async () => {
@@ -195,7 +223,9 @@ describe("floor", () => {
   it("a state older than the window is dropped: the budget is assumed fresh", async () => {
     const limiter = limiterAt(100, 0);
     vi.advanceTimersByTime(windowMs);
-    expect(await settlesNow(limiter.acquire("expensive"))).toBe(true);
+    const pending = limiter.acquire("expensive");
+    expect(await settlesNow(pending)).toBe(true);
+    expect(await pending).toEqual({ ok: true });
   });
 
   it("headers seen while waiting are honoured when the wait ends", async () => {
@@ -248,6 +278,26 @@ describe("pacing", () => {
     await limiter.acquire("expensive");
     expect(await settlesNow(limiter.acquire("cheap"))).toBe(true);
     expect(await settlesNow(limiter.acquire("cheap"))).toBe(true);
+  });
+
+  it("refuses the expensive call whose pacing slot lies beyond the bound", async () => {
+    const limiter = limiterAt(1000, 1000);
+    const slots = MAX_WAIT_S * limits.pacing_rps + 1; // slots at 0, 0.5 s, ..., MAX_WAIT_S
+    const start = Date.now();
+    const calls = Array.from({ length: slots + 1 }, () =>
+      limiter.acquire("expensive").then((result) => ({ result, at: Date.now() - start })),
+    );
+    await vi.runAllTimersAsync();
+    const done = await Promise.all(calls);
+    expect(done.filter((call) => call.result.ok)).toHaveLength(slots);
+    expect(Math.max(...done.map((call) => call.at))).toBe(MAX_WAIT_S * 1000);
+    const refused = done.filter((call) => !call.result.ok);
+    expect(refused).toHaveLength(1);
+    expect(refusal(refused[0]!.result)).toMatchObject({
+      code: "rate_limited",
+      message: expect.stringContaining("pacing"),
+      retry_after_s: 1,
+    });
   });
 
   it("a refused expensive call uses no pacing slot", async () => {
@@ -311,10 +361,77 @@ describe("429 and Retry-After", () => {
     expect(await pending).toEqual({ ok: true });
   });
 
-  it("a later response with budget headers lifts the hold", async () => {
-    const limiter = new RateLimiter(limits);
+  it("budget headers seen during the hold do not lift it: they answer earlier requests", async () => {
+    const limiter = limiterAt(100, 90);
     limiter.observe(429, retryAfter("600"));
-    limiter.observe(200, budget(100, 90));
-    expect(await limiter.acquire("expensive")).toEqual({ ok: true });
+    expect(limiter.observe(200, budget(100, 90))).toBe(0);
+    expect(refusal(await limiter.acquire("cheap"))).toMatchObject({ retry_after_s: 600 });
+  });
+
+  it("the hold ends with its Retry-After, and headers count again", async () => {
+    const limiter = limiterAt(100, 90);
+    limiter.observe(429, retryAfter("5"));
+    vi.advanceTimersByTime(5000);
+    limiter.observe(200, budget(100, 19));
+    expect(refusal(await limiter.acquire("expensive")).message).toContain("19 of 100");
+  });
+
+  it.each(["0", "000"])("a Retry-After of %s still holds for MIN_HOLD_S", async (value) => {
+    const limiter = limiterAt(100, 3);
+    expect(limiter.observe(429, retryAfter(value))).toBe(MIN_HOLD_S * 1000);
+    const pending = limiter.acquire("expensive");
+    await vi.advanceTimersByTimeAsync(MIN_HOLD_S * 1000 - 1);
+    expect(await settlesNow(pending)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ ok: true });
+  });
+
+  it("caps an absurd Retry-After at MAX_HOLD_S: the limiter recovers by itself", async () => {
+    const limiter = limiterAt(100, 90);
+    expect(limiter.observe(429, retryAfter("999999999"))).toBe(MAX_HOLD_S * 1000);
+    expect(refusal(await limiter.acquire("cheap")).retry_after_s).toBe(MAX_HOLD_S);
+    vi.advanceTimersByTime(MAX_HOLD_S * 1000);
+    expect(await limiter.acquire("cheap")).toEqual({ ok: true });
+  });
+
+  it("a Retry-After too large to be a number falls back to a whole window", async () => {
+    const limiter = new RateLimiter(limits);
+    expect(limiter.observe(429, retryAfter("9".repeat(400)))).toBe(WINDOW_S * 1000);
+    expect(refusal(await limiter.acquire("cheap")).retry_after_s).toBe(WINDOW_S);
+  });
+
+  it("everyone waiting on a hold is released when it ends", async () => {
+    const limiter = limiterAt(100, 90);
+    limiter.observe(429, retryAfter("2"));
+    const waiting = [limiter.acquire("cheap"), limiter.acquire("cheap")];
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await Promise.all(waiting)).toEqual([{ ok: true }, { ok: true }]);
+  });
+});
+
+describe("the bound covers one call's waits together", () => {
+  const retryAfter = (value: string) => new Headers({ "Retry-After": value });
+
+  // The call starts 1 s before the window's end and sleeps; a 429 lands while
+  // it sleeps and moves the end.
+  async function waitThenHold(seconds: number) {
+    const limiter = limiterAt(100, 4);
+    vi.advanceTimersByTime((WINDOW_S - 1) * 1000);
+    const start = Date.now();
+    const pending = limiter.acquire("cheap").then((result) => ({ result, at: Date.now() - start }));
+    limiter.observe(429, retryAfter(String(seconds)));
+    await vi.runAllTimersAsync();
+    return pending;
+  }
+
+  it("waits again when the new end is still inside the bound", async () => {
+    // 1 s for the old end, 14 s more for the new one: exactly the bound.
+    expect(await waitThenHold(MAX_WAIT_S)).toEqual({ result: { ok: true }, at: MAX_WAIT_S * 1000 });
+  });
+
+  it("refuses as soon as the new end is beyond it, without sleeping the bound twice", async () => {
+    const { result, at } = await waitThenHold(MAX_WAIT_S + 1);
+    expect(at).toBe(1000);
+    expect(refusal(result).retry_after_s).toBe(MAX_WAIT_S);
   });
 });

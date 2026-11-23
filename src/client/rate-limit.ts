@@ -8,10 +8,11 @@
 //   - Every allowed call takes one token from the local count; the next
 //     response's headers replace that count with the account's real one.
 //   - Reserve: below `reserve_pct` of Total, `expensive` is refused.
-//   - Floor: below `floor_pct` of Total, and after a 429, every call waits
-//     for the window's end when that is at most MAX_WAIT_S away, and is
-//     refused at once when it is further.
+//   - Floor: below `floor_pct` of Total, at zero, and after a 429, every call
+//     waits for the window's end, or is refused when that is too far.
 //   - Pacing: `expensive` calls start at most `pacing_rps` per second.
+//   - One `acquire` waits MAX_WAIT_S at most, all its waits together (floor,
+//     429 and pacing): a wait that would end later is refused at once.
 //   - A refusal is a `rate_limited` error with `retry_after_s`, never a throw.
 //
 // Freshdesk sends no window-end header. The limiter assumes a fixed window of
@@ -19,10 +20,19 @@
 // last response seen, or the `Retry-After` of a 429. A state older than that
 // is dropped and the budget assumed fresh; the next response corrects it.
 //
+// After a 429 nothing goes out until its `Retry-After` has passed, kept
+// between MIN_HOLD_S and MAX_HOLD_S whatever the header says. Budget headers
+// seen meanwhile are ignored: they answer requests sent before the 429.
+//
+// Known limit: outside a 429 hold, responses are taken in arrival order, so
+// one that arrives late can raise the count again, and calls still in flight
+// are not counted once a response has replaced the local count. The error
+// is at most the number of calls in flight.
+//
 // MAX_WAIT_S is 15 s: long enough to ride out the tail of a window, short
 // enough that a tool call answers well inside an MCP client's timeout.
 
-import { type FreshdeskError, parseRetryAfter } from "./errors.js";
+import type { FreshdeskError } from "./errors.js";
 
 export type CostClass = "cheap" | "expensive";
 
@@ -41,10 +51,13 @@ interface HeaderReader {
 
 /** Assumed length of Freshdesk's rate-limit window, seconds. */
 export const WINDOW_S = 60;
-/** Longest wait for the window's end before a call is refused instead, seconds. */
+/** Longest one `acquire` waits before the call is refused instead, seconds. */
 export const MAX_WAIT_S = 15;
 /** Calls per window assumed until a response says otherwise. */
 export const DEFAULT_TOTAL = 50;
+/** Shortest and longest hold after a 429, whatever its `Retry-After`, seconds. */
+export const MIN_HOLD_S = 1;
+export const MAX_HOLD_S = 3600;
 
 export class RateLimiter {
   private readonly options: RateLimitOptions;
@@ -65,34 +78,34 @@ export class RateLimiter {
 
   /** Resolves when the call may go out, or with the reason it may not. */
   async acquire(cost: CostClass): Promise<Acquired> {
+    const deadline = Date.now() + MAX_WAIT_S * 1000;
     for (;;) {
       const now = Date.now();
-      if (this.windowEnd !== undefined && now >= this.windowEnd) {
-        this.remaining = this.total;
-        this.exhausted = false;
-        this.windowEnd = undefined;
-      }
+      this.expire(now);
       const windowEnd = (this.windowEnd ??= now + WINDOW_S * 1000);
 
-      if (this.exhausted || this.below(this.options.floor_pct)) {
-        const wait = windowEnd - now;
-        if (wait > MAX_WAIT_S * 1000) {
-          return this.refuse(
-            this.exhausted ? "Freshdesk rate limit reached" : `${this.left()}: too few to go on`,
-            wait,
-          );
+      if (this.exhausted || this.remaining <= 0 || this.below(this.options.floor_pct)) {
+        if (windowEnd > deadline) {
+          const why = this.exhausted ? "Freshdesk rate limit reached" : this.left();
+          return refuse(`${why}: no call goes out until the window resets`, windowEnd - now);
         }
-        await sleep(wait);
+        await sleep(windowEnd - now);
         continue;
       }
       if (cost === "expensive") {
         if (this.below(this.options.reserve_pct)) {
-          return this.refuse(
+          return refuse(
             `${this.left()}: below the reserve, expensive operations are refused`,
             windowEnd - now,
           );
         }
         if (now < this.nextExpensiveAt) {
+          if (this.nextExpensiveAt > deadline) {
+            return refuse(
+              "Too many expensive operations are queued for pacing",
+              this.nextExpensiveAt - now,
+            );
+          }
           await sleep(this.nextExpensiveAt - now);
           continue;
         }
@@ -104,27 +117,39 @@ export class RateLimiter {
   }
 
   /**
-   * Feed every response in. Returns how long the server asked to wait, in
-   * milliseconds: 0 unless the status is 429. The next `acquire` serves that
-   * wait (or refuses, beyond MAX_WAIT_S); the caller does not sleep.
+   * Feed every response in. Returns the hold a 429 starts, in milliseconds
+   * (its `Retry-After`, within MIN_HOLD_S..MAX_HOLD_S), and 0 for any other
+   * status. The value is for reporting only: the next `acquire` serves the
+   * hold or refuses, and the caller must not sleep on it.
    */
   observe(status: number, headers: HeaderReader): number {
     const now = Date.now();
+    this.expire(now);
     if (status === 429) {
-      const delay = (parseRetryAfter(headers.get("retry-after")) ?? WINDOW_S) * 1000;
+      const asked = count(headers.get("retry-after")) ?? WINDOW_S;
+      const hold = Math.min(Math.max(asked, MIN_HOLD_S), MAX_HOLD_S) * 1000;
       this.exhausted = true;
-      this.windowEnd = now + delay;
-      return delay;
+      this.windowEnd = now + hold;
+      return hold;
     }
+    if (this.exhausted) return 0;
     const total = count(headers.get("x-ratelimit-total"));
     const remaining = count(headers.get("x-ratelimit-remaining"));
     if (total !== undefined && remaining !== undefined && total > 0 && remaining <= total) {
       this.total = total;
       this.remaining = remaining;
-      this.exhausted = false;
       this.windowEnd = now + WINDOW_S * 1000;
     }
     return 0;
+  }
+
+  /** Past the window's end the state is stale: assume a fresh budget. */
+  private expire(now: number): void {
+    if (this.windowEnd !== undefined && now >= this.windowEnd) {
+      this.remaining = this.total;
+      this.exhausted = false;
+      this.windowEnd = undefined;
+    }
   }
 
   private below(pct: number): boolean {
@@ -132,27 +157,30 @@ export class RateLimiter {
   }
 
   private left(): string {
-    return `${Math.max(this.remaining, 0)} of ${this.total} API calls left in this window`;
-  }
-
-  private refuse(why: string, waitMs: number): Acquired {
-    const seconds = Math.ceil(waitMs / 1000);
-    return {
-      ok: false,
-      error: {
-        code: "rate_limited",
-        http_status: null,
-        message: `${why}. Try again in ${seconds} s.`,
-        retryable: true,
-        retry_after_s: seconds,
-      },
-    };
+    return `${this.remaining} of ${this.total} API calls left in this window`;
   }
 }
 
+function refuse(why: string, waitMs: number): Acquired {
+  const seconds = Math.ceil(waitMs / 1000);
+  return {
+    ok: false,
+    error: {
+      code: "rate_limited",
+      http_status: null,
+      message: `${why}. Try again in ${seconds} s.`,
+      retryable: true,
+      retry_after_s: seconds,
+    },
+  };
+}
+
+/** A header holding a whole number of calls or seconds; anything else is no value. */
 function count(value: string | null): number | undefined {
   const trimmed = value?.trim();
-  return trimmed !== undefined && /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
+  if (trimmed === undefined || !/^\d+$/.test(trimmed)) return undefined;
+  const number = Number(trimmed);
+  return Number.isSafeInteger(number) ? number : undefined;
 }
 
 function sleep(ms: number): Promise<void> {

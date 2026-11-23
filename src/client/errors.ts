@@ -118,7 +118,7 @@ export function networkError(cause: unknown): FreshdeskError {
   };
 }
 
-export function parseRetryAfter(value: string | null): number | undefined {
+function parseRetryAfter(value: string | null): number | undefined {
   const trimmed = value?.trim();
   return trimmed !== undefined && /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
 }
