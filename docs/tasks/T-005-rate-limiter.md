@@ -66,7 +66,7 @@
 ## Open doubts
 - **`a46859c` was reviewed by no sub-agent.** It fixes the scoped round's
   one fail-open finding and touches the 429 hold (rule 9: no third round).
-  Owner to say whether the hold mechanism is settled or wants a look.
+  Owner, 2026-11-23: the 429 hold is settled. Closed.
 - Builder's choices, not yet the owner's: the 15 s bound per `acquire`
   (floor, 429 and pacing waits together); the assumed 60 s window, from
   memory of Freshdesk's documentation, not verified against it; the default

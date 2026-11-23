@@ -14,15 +14,15 @@
   carries four `docs/improvements.md` entries ("Local ticket history",
   stamped `01dabf9`) that were written outside this session while CI ran;
   `git commit -a` swept them in. They are not this session's work and were
-  left as written. This note is one more commit after the stamp, touching
-  only this file; CI was not observed for either.
+  left as written. Two more commits follow the stamp: this note (`57a658c`,
+  this file only) and the owner's ruling on the 429 hold (this file and
+  the T-005 task file); CI was not observed for any of the three.
 
 - **Current task:** T-005 Rate limiter (standalone), `done (2026-11-23)`.
   Code in `aa38280`, `4384a89` and `a46859c`; see
   `docs/tasks/T-005-rate-limiter.md` "Done".
 
-- **Next action:** the owner first rules on the first open doubt below
-  (`a46859c` unreviewed). Then `/pickup` takes T-006 (HTTP core):
+- **Next action:** `/pickup` takes T-006 (HTTP core):
   `docs/tasks/T-006-http-core.md`. It calls `acquire(cost)` before each
   request and `observe(status, headers)` on each response.
 
@@ -59,9 +59,9 @@
   confirm. None new.
 
 - **Open doubts:**
-  - **`a46859c` was reviewed by no sub-agent**: it is the fix for the
-    scoped round's fail-open finding and touches the 429 hold. Rule 9
-    stops there; the owner decides whether the hold is settled.
+  - `a46859c` was reviewed by no sub-agent (the fix for the scoped
+    round's fail-open finding, on the 429 hold). **Owner, 2026-11-23: the
+    429 hold is settled.** Closed.
   - New, from T-005 (detail in the task file's "Open doubts"): the 15 s
     bound, the assumed 60 s window (not verified against Freshdesk's
     documentation), the default budget of 50 and the 1 s..1 h hold clamp
