@@ -12,12 +12,25 @@
 //   - Redirects are not followed: a 3xx comes back as an error that is not
 //     retryable, so the API key never travels to a `Location`.
 //   - Limiter: `acquire` before sending, `observe` on every response.
+//   - Timeout: a request with no complete response after REQUEST_TIMEOUT_MS
+//     is aborted and comes back as a `network` error.
 //   - Result: a 2xx with its parsed JSON body, or a FreshdeskError. Nothing
 //     that comes from the network makes `request` throw.
 //   - stderr: one line per request sent, `METHOD template status ms`. Never
 //     a URL, a header or a body.
 //
-// No retries and no pagination here (T-007).
+// `request` is one attempt. `requestWithRetry` and `paginate` are built on it
+// and are what resource modules call:
+//   - Retries: MAX_RETRIES at most. A GET is retried on a 5xx or a network
+//     error (a timeout is one) after a backoff, and on a 429. Any other method
+//     is a write, whatever the caller thinks: it is retried on a 429 only,
+//     the one answer that says the request was not processed, so a write is
+//     never applied twice.
+//   - After a 429 the retry does not sleep here: the next attempt's `acquire`
+//     serves the limiter's hold, or refuses when the hold is beyond its
+//     bound, and that refusal is returned with nothing more sent.
+//   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
+//     through `request` and so through the host check, up to the caller's cap.
 
 import { type Dispatcher, fetch, type Headers } from "undici";
 import { ConfigError } from "../config.js";
@@ -28,6 +41,12 @@ const FRESHDESK_HOST = /^[a-z0-9-]+\.freshdesk\.com$/;
 const USER_AGENT = "freshdesk-mcp";
 /** What `path` may be, since it is logged: segments of names and `{params}`. */
 const TEMPLATE = /^(\/[A-Za-z0-9_{}-]+)+$/;
+/** Longest one attempt may take, headers and body together. */
+export const REQUEST_TIMEOUT_MS = 10_000;
+/** Attempts after the first. */
+export const MAX_RETRIES = 3;
+/** Wait before the first retry of a 5xx or network error; doubles each time. */
+export const BACKOFF_MS = 500;
 
 function notSent(why: string): HttpResult {
   return {
@@ -74,6 +93,16 @@ export type HttpResult =
   | { ok: true; status: number; headers: Headers; body: unknown }
   | { ok: false; error: FreshdeskError };
 
+/** A list request: always a GET, its URL built from the template. */
+export type PageRequest = Omit<HttpRequest, "method" | "body" | "url">;
+
+/** Where `paginate` stops, whatever `Link` says. */
+export interface PageCap {
+  pages: number;
+  /** Counted on pages whose body is an array; the last one is cut to fit. */
+  items?: number;
+}
+
 export class HttpClient {
   private readonly host: string;
   private readonly authorization: string;
@@ -97,6 +126,8 @@ export class HttpClient {
    * that is not a template, a parameter the template names and `params`
    * lacks, a `body` that JSON cannot carry. Values (a parameter's, a URL's)
    * are refused with a result.
+   *
+   * One attempt: resource modules call `requestWithRetry` or `paginate`.
    */
   async request(request: HttpRequest): Promise<HttpResult> {
     const method = request.method ?? "GET";
@@ -122,6 +153,10 @@ export class HttpClient {
     let status: number;
     let headers: Headers;
     let text: string;
+    const timeout = new AbortController();
+    const timer = setTimeout(() => {
+      timeout.abort(new DOMException("The request timed out.", "TimeoutError"));
+    }, REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(url, {
         method,
@@ -134,6 +169,7 @@ export class HttpClient {
         ...(payload === undefined ? {} : { body: payload }),
         dispatcher: this.dispatcher,
         redirect: "manual",
+        signal: timeout.signal,
       });
       ({ status, headers } = response);
       this.limiter.observe(status, headers);
@@ -141,6 +177,8 @@ export class HttpClient {
     } catch (cause) {
       log("network");
       return { ok: false, error: networkError(cause) };
+    } finally {
+      clearTimeout(timer);
     }
     log(status);
 
@@ -168,6 +206,48 @@ export class HttpClient {
       };
     }
     return { ok: true, status, headers, body };
+  }
+
+  /** `request`, attempted again where that cannot apply a write twice. */
+  async requestWithRetry(request: HttpRequest): Promise<HttpResult> {
+    const read = (request.method ?? "GET") === "GET";
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await this.request(request);
+      if (result.ok || attempt === MAX_RETRIES) return result;
+      const { code, http_status, retryable } = result.error;
+      // With no status the limiter refused the call: waiting is its business.
+      const limited = code === "rate_limited" && http_status !== null;
+      const transient = retryable && (code === "server" || code === "network");
+      if (!limited && !(read && transient)) return result;
+      if (!limited) await sleep(BACKOFF_MS * 2 ** attempt);
+    }
+  }
+
+  /**
+   * The pages of a list, one result each, following `Link` up to the cap. A
+   * failed page is yielded and ends the iteration.
+   */
+  async *paginate(request: PageRequest, cap: PageCap): AsyncGenerator<HttpResult, void, void> {
+    let next: HttpRequest | undefined = request;
+    let items = 0;
+    for (let page = 0; page < cap.pages && next !== undefined; page += 1) {
+      const result = await this.requestWithRetry(next);
+      if (!result.ok) {
+        yield result;
+        return;
+      }
+      if (cap.items !== undefined && Array.isArray(result.body)) {
+        const room = cap.items - items;
+        if (result.body.length >= room) {
+          yield { ...result, body: result.body.slice(0, room) };
+          return;
+        }
+        items += result.body.length;
+      }
+      yield result;
+      const link = /<([^>]*)>\s*;\s*rel="?next"?/.exec(result.headers.get("link") ?? "")?.[1];
+      next = link === undefined ? undefined : { ...request, url: link };
+    }
   }
 
   /** `undefined` when a parameter's value would change which resource is addressed. */
@@ -200,4 +280,8 @@ export class HttpClient {
       url.password === ""
     );
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
