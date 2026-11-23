@@ -31,7 +31,7 @@ test: ## run tests
 build: ## compile src/ to dist/ (tsconfig.build.json)
 	npm run build
 
-quality: lint format-check typecheck test ## full local gate
+quality: lint format-check typecheck test build ## full local gate
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py

@@ -1,13 +1,14 @@
 // Schema service (SPEC §7.3): the ticket fields, plus agents and groups as
 // id → name maps, loaded together and kept for a TTL in seconds the caller
-// gives (to be the team config's `limits.schema_ttl_s`, default 1 h; nothing
-// wires it yet).
+// gives (the team config's `limits.schema_ttl_s`, default 1 h, wired in
+// src/tools/context.ts).
 //
 //   - One load per TTL: the TTL runs from the moment the load started. Calls
 //     made while a load is in flight share it. A clock that went back before
 //     the load started counts as expired.
 //   - Every caller gets the same schema, so it is read-only: typed so, and
-//     frozen deep (the maps are read-only by type only).
+//     frozen deep. The name maps are a `FrozenMap`, which has no method
+//     that changes it, since freezing a Map does not stop its `set`.
 //   - A failed load is not cached: its error is returned unchanged and the
 //     next call loads again. The lists are read one after the other and the
 //     first failure stops the load.
@@ -34,8 +35,54 @@ export interface Schema {
   readonly groups: NameMap;
 }
 
+/**
+ * A read-only view of a Map. The Map is a private field: a caller that casts
+ * the view to `Map` finds no `set`, and `Map.prototype.set` refuses it.
+ */
+export class FrozenMap<K, V> implements ReadonlyMap<K, V> {
+  readonly #map: Map<K, V>;
+
+  constructor(entries: Iterable<readonly [K, V]>) {
+    this.#map = new Map(entries);
+  }
+
+  get size(): number {
+    return this.#map.size;
+  }
+
+  get(key: K): V | undefined {
+    return this.#map.get(key);
+  }
+
+  has(key: K): boolean {
+    return this.#map.has(key);
+  }
+
+  forEach(callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown): void {
+    this.#map.forEach((value, key) => {
+      callback.call(thisArg, value, key, this);
+    });
+  }
+
+  entries(): MapIterator<[K, V]> {
+    return this.#map.entries();
+  }
+
+  keys(): MapIterator<K> {
+    return this.#map.keys();
+  }
+
+  values(): MapIterator<V> {
+    return this.#map.values();
+  }
+
+  [Symbol.iterator](): MapIterator<[K, V]> {
+    return this.#map.entries();
+  }
+}
+
 function deepFreeze<T>(value: T): T {
-  if (typeof value === "object" && value !== null && !(value instanceof Map)) {
+  if (typeof value === "object" && value !== null) {
     for (const inner of Object.values(value)) deepFreeze(inner);
     Object.freeze(value);
   }
@@ -77,11 +124,11 @@ export class SchemaService {
     const schema: Schema = deepFreeze({
       fields: fields.fields,
       agents: {
-        names: new Map(agents.items.map((agent) => [agent.id, agent.contact.name])),
+        names: new FrozenMap(agents.items.map((agent) => [agent.id, agent.contact.name] as const)),
         truncated: agents.truncated,
       },
       groups: {
-        names: new Map(groups.items.map((group) => [group.id, group.name])),
+        names: new FrozenMap(groups.items.map((group) => [group.id, group.name] as const)),
         truncated: groups.truncated,
       },
     });

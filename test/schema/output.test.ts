@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
 import type { TicketField } from "../../src/client/resources/ticket-fields.js";
-import { type Schema, type SchemaResult, SchemaService } from "../../src/schema/index.js";
+import {
+  FrozenMap,
+  type Schema,
+  type SchemaResult,
+  SchemaService,
+} from "../../src/schema/index.js";
 import { ticketOutput } from "../../src/schema/output.js";
 import { agentPages, groupPages } from "../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../fixtures/schema.js";
@@ -96,7 +101,7 @@ describe("SchemaService: load and TTL cache", () => {
     const schema = schemaOf(await new SchemaService(http, TTL_S).get());
 
     const everything = JSON.stringify(schema, (_key, value: unknown) =>
-      value instanceof Map ? [...value] : value,
+      value instanceof FrozenMap ? [...value] : value,
     );
     expect(everything).toContain("Quill Ottersby");
     expect(everything).not.toContain("@example.com");
@@ -161,8 +166,16 @@ describe("SchemaService: load and TTL cache", () => {
     expect(() => {
       (schema.agents as { truncated: boolean }).truncated = true;
     }).toThrow(TypeError);
+    for (const names of [schema.agents.names, schema.groups.names]) {
+      const cast = names as Map<number, string>;
+      expect(() => cast.set(501, "Changed")).toThrow(TypeError);
+      expect(() => cast.clear()).toThrow(TypeError);
+      expect(() => Map.prototype.set.call(names, 501, "Changed")).toThrow(TypeError);
+    }
 
     const again = schemaOf(await service.get());
+    expect(again.agents.names.get(501)).toBe("Quill Ottersby");
+    expect(again.groups.names.get(701)).toBe("Sprocket Desk");
     expect(again.fields[0]!.label).toBe("Subject");
     expect(again.fields).toHaveLength(schemaFieldsPayload.length);
     expect(again.agents.truncated).toBe(false);
