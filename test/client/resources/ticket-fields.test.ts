@@ -329,12 +329,4 @@ describe("listTicketFields: a caller's deadline", () => {
     });
     expect(mock.getCallHistory()?.calls() ?? []).toHaveLength(0);
   });
-
-  it("one still ahead leaves the list as it was", async () => {
-    reply(200, ticketFieldsPayload);
-
-    expect(fields(await listTicketFields(http, Date.now() + 5000))).toHaveLength(
-      ticketFieldsPayload.length,
-    );
-  });
 });

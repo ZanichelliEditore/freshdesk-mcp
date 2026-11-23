@@ -39,7 +39,8 @@
 //     deadline is not started: the last answer is returned as it is.
 //   - A caller's deadline (epoch ms, optional) can only shorten that one: the
 //     call ends at the earlier of the two, by the same rules, and one already
-//     reached sends nothing and does not ask the limiter. `paginate` hands
+//     reached sends nothing and does not ask the limiter (`request` checks it
+//     after its own checks of the caller's code and of the URL). `paginate` hands
 //     its own to every page, so the pages share it; with none, each page
 //     gets the full TOTAL_DEADLINE_MS.
 //   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
@@ -76,7 +77,12 @@ function notSent(why: string): HttpResult {
   };
 }
 
-/** An aborted write may have been applied, as with the timeout of one attempt. */
+/**
+ * An aborted write may have been applied, as with the timeout of one attempt.
+ * A write refused because its deadline had already passed was not sent, and
+ * is still marked not retryable: the conservative answer, until T-014 gives
+ * a write that is not sent an answer of its own.
+ */
 function expired(method: string): HttpResult {
   return {
     ok: false,
@@ -177,11 +183,13 @@ export class HttpClient {
     if (!this.allowed(url)) {
       return notSent("the URL is not on the configured Freshdesk host");
     }
+    // A deadline already reached: the limiter is not asked. Written so that
+    // a deadline that is not a number sends nothing either.
+    if (!(deadline > Date.now())) return expired(method);
     const acquired = await this.limiter.acquire(request.cost ?? "cheap", deadline - Date.now());
     if (!acquired.ok) return acquired;
     // Read again: `acquire` may have slept. Its token is spent either way.
     const left = deadline - Date.now();
-    // Written so that a deadline that is not a number sends nothing either.
     if (!(left > 0)) return expired(method);
 
     const started = performance.now();
@@ -261,12 +269,8 @@ export class HttpClient {
    * TOTAL_DEADLINE_MS.
    */
   async requestWithRetry(request: HttpRequest, callerDeadline = Infinity): Promise<HttpResult> {
-    const method = request.method ?? "GET";
-    const read = method === "GET";
+    const read = (request.method ?? "GET") === "GET";
     const deadline = Math.min(Date.now() + TOTAL_DEADLINE_MS, callerDeadline);
-    // Before the limiter is asked. Written so that a deadline that is not a
-    // number sends nothing either.
-    if (!(deadline > Date.now())) return expired(method);
     for (let attempt = 0; ; attempt += 1) {
       const result = await this.request(request, deadline);
       if (result.ok) return result;
@@ -279,7 +283,8 @@ export class HttpClient {
       }
       if (attempt === MAX_RETRIES || !(limited || transient)) return result;
       const backoff = limited ? 0 : BACKOFF_MS * 2 ** attempt;
-      if (Date.now() + backoff >= deadline) return result;
+      // Written so that a deadline that is not a number starts no retry.
+      if (!(Date.now() + backoff < deadline)) return result;
       if (!limited) await sleep(backoff);
     }
   }

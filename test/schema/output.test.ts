@@ -315,15 +315,21 @@ describe("SchemaService: a cold load ends within 30 s", () => {
   });
 
   it("asks for no list once the 30 s have passed between two of them", async () => {
-    queueLoad();
+    // The fields come back, and the clock is at the deadline when they do.
+    mock
+      .get(ORIGIN)
+      .intercept({ path: FIELDS, method: "GET" })
+      .reply(
+        200,
+        () => {
+          vi.setSystemTime(Date.now() + 30_000);
+          return schemaFieldsPayload as object;
+        },
+        { headers: JSON_TYPE },
+      );
+    reply(AGENTS, agentPages[1]);
+    reply(GROUPS, groupPages[1]);
     const service = new SchemaService(http, TTL_S);
-    const request = http.requestWithRetry.bind(http);
-    vi.spyOn(http, "requestWithRetry").mockImplementation(async (options, deadline) => {
-      const result = await request(options, deadline);
-      // The fields come back, and the clock is at the deadline when they do.
-      vi.setSystemTime(Date.now() + 30_000);
-      return result;
-    });
 
     const { result } = await settle(service.get());
 

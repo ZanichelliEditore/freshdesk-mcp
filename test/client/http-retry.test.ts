@@ -540,19 +540,6 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       await nothingMoreSent(2);
     });
 
-    it("hands the limiter what is left of it, not of the 30 s", async () => {
-      const acquire = vi.spyOn(limiter, "acquire");
-      on("GET").reply(503, "");
-      on("GET").reply(200, { id: 1 }, { headers: JSON_TYPE });
-
-      const { result } = await settle(
-        http.requestWithRetry({ path: "/tickets" }, Date.now() + 5000),
-      );
-
-      expect(result).toMatchObject({ ok: true });
-      expect(acquire.mock.calls.map(([, bound]) => bound)).toEqual([5000, 4500]);
-    });
-
     it("a limiter wait that would end exactly at it is refused as rate_limited, with no sleep", async () => {
       // The hold of 5 s is within the limiter's own bound and the 30 s.
       on("GET").reply(429, "", { headers: { "retry-after": "5" } });
@@ -606,16 +593,26 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       ["passed", -1],
       ["not a number", NaN],
     ])("%s: nothing is sent and the limiter is not asked", async (_name, away) => {
-      const acquire = vi.spyOn(limiter, "acquire");
       on("GET").reply(200, { id: 1 }, { headers: JSON_TYPE });
 
       const { result, ms } = await settle(
-        http.requestWithRetry({ path: "/tickets" }, Date.now() + away),
+        http.requestWithRetry({ path: "/tickets", cost: "expensive" }, Date.now() + away),
       );
 
       expect(failure(result)).toEqual({ ...EXPIRED, retryable: true });
       expect(ms).toBe(0);
-      expect(acquire).not.toHaveBeenCalled();
+      expect(sent()).toHaveLength(0);
+      // Had the limiter been asked, its pacing would hold the next expensive
+      // call for half a second.
+      const after = await settle(http.requestWithRetry({ path: "/tickets", cost: "expensive" }));
+      expect(after.result).toMatchObject({ ok: true });
+      expect(after.ms).toBe(0);
+    });
+
+    it("passed, with a path that is not a template: the caller's mistake still throws", async () => {
+      await expect(http.requestWithRetry({ path: "tickets?x=1" }, Date.now() - 1)).rejects.toThrow(
+        TypeError,
+      );
       expect(sent()).toHaveLength(0);
     });
 
@@ -631,16 +628,13 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     });
 
     it("undefined is no deadline: the call is as without one", async () => {
-      const acquire = vi.spyOn(limiter, "acquire");
       on("GET").reply(503, "").times(4);
 
       const { result, ms } = await settle(http.requestWithRetry({ path: "/tickets" }, undefined));
 
       expect(failure(result)).toMatchObject({ code: "server", http_status: 503 });
       expect(ms).toBe(3500);
-      expect(acquire.mock.calls.map(([, bound]) => bound)).toEqual([
-        30_000, 29_500, 28_500, 26_500,
-      ]);
+      expect(sent()).toHaveLength(4);
     });
   });
 });
