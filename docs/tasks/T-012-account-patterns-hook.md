@@ -11,7 +11,7 @@ A commit that stages a real account value is refused on the owner's
 machine, before T-008 brings the first field-label fixtures.
 
 ## In scope
-- `tools/checks/account_patterns.py`: runs `git grep --cached -iE -f
+- `tools/checks/account_patterns.py`: runs `git grep --cached -n -iE -f
   docs/private/account-patterns` (gitignored file) over the whole index,
   the matcher T-001 used for the history scrub. It is not reimplemented
   with Python's `re` (not POSIX ERE: a bracket class would compile and
@@ -67,7 +67,7 @@ until it creates one.
 `none`
 
 ## Acceptance
-A local commit-stage hook (not in `make quality`, not in CI) runs `git grep --cached -iE -f docs/private/account-patterns` over the index: exit 0 refuses, 1 passes, any other exit fails; `tools/checks/test_account_patterns.py`, with temporary repositories and pattern files, proves a match is refused naming `file:line`, a match in a binary file is refused naming the file, content staged but absent from the working tree is caught, and a missing file, an empty or blank-only file and an invalid regex each exit non-zero with a message saying how to fix it; no output on any path, the invalid regex included, contains a pattern line or the matched text; a staged synthetic match is refused by the installed hook (positive control, output in HANDOFF); `make quality` green.
+A local commit-stage hook (not in `make quality`, not in CI) runs `git grep --cached -n -iE -f docs/private/account-patterns` over the index: exit 0 refuses, 1 passes, any other exit fails; `tools/checks/test_account_patterns.py`, with temporary repositories and pattern files, proves a match is refused naming `file:line`, a match in a binary file is refused naming the file, content staged but absent from the working tree is caught, and a missing file, an empty or blank-only file and an invalid regex each exit non-zero with a message saying how to fix it; no output on any path, the invalid regex included, contains a pattern line or the matched text; a staged synthetic match is refused by the installed hook (positive control, output in HANDOFF); `make quality` green.
 
 ---
 *Filled at `/handoff`:*

@@ -4,71 +4,77 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T11:44:23+01:00`
-- **Describes commit:** `24c1871`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45158863826
-  (ran on `24c1871`: `quality (22.19)`, `quality (24)`, `checks`). This file arrives in
-  the commit right after it. It replaces the handoff stamped in `8677ee5`
-  (which described `348fba6`, CI green, run 45156435154): after that
-  stamp the owner answered the two open decisions, and `24c1871` records
-  them, documents only.
+- **Written:** `2026-11-23T12:04:39+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file arrives
+  in the commit right after it.
 
-- **Current task:** T-007 HTTP retries + pagination, `done (2026-11-23)`.
-  Code in `f8f5d80` and `6d4013a`; see
-  `docs/tasks/T-007-http-retries-pagination.md` "Done".
+- **Current task:** `/decompose` of the two `proposed` rows, a plan session,
+  documents only: T-012 and T-013 are `todo (2026-11-23)`, each with a task
+  file, placed before T-008. Plan in `730ebf3`, review fixes in `f9927d8`
+  and the described commit. Approved by the owner on 2026-11-23 as
+  presented after the planner's pass; the review fixes came after that
+  approval and are the owner's to read (see "Open doubts").
 
-- **Next action:** `/pickup` takes T-008 (client resource: ticket fields):
-  `docs/tasks/T-008-client-ticket-fields.md`. It calls
-  `HttpClient.requestWithRetry` or `HttpClient.paginate`
-  (`src/client/http.ts`), never `request`. First ask the owner whether
-  T-013 (the 30 s deadline) becomes `todo` and runs before T-008.
+- **Next action:** `/pickup` takes T-012 (account-patterns commit hook):
+  `docs/tasks/T-012-account-patterns-hook.md`. Before any code, ask the
+  owner the question under "Owner decides before the build" there. Then
+  T-013, then T-008.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`; the T-008 task file;
-  the header comment of `src/client/http.ts` (lines 1-35) and the doc
-  comments of `requestWithRetry` and `paginate`; T-007's "Open doubts".
+- **Read before anything else:** `docs/tasks/PLAN.md` (the re-plan note of
+  2026-11-23 and rows T-012, T-013, T-008); the T-012 task file;
+  `.pre-commit-config.yaml` (the `rfc-status` local hook as the model);
+  `docs/improvements.md`, the entry stamped `f9927d8`.
 
-- **Reviews:** full round, range `f733ac1..f8f5d80`, R1 = `f8f5d80`; all
+- **Reviews:** full round, range `79014a3..730ebf3`, R1 = `730ebf3`; all
   four quotes matched for all three.
-  code-reviewer: every acceptance line met (by reading; `make quality` is
-  the main session's), no High; 3 Medium, 7 Low. Fixed in `6d4013a`: no
-  test had a write fail after its first 429; a test that could not fail
-  (pre-send refusal); the backoff test checked only the total; item caps
-  of zero, below zero and NaN; GET-only held by type alone; the limiter's
-  "never sleeps" comment. To the owner as doubts: no total deadline; the
-  "bounded default" of "In scope" not built. Parked: `Link` regex needs
-  `rel` first, duplicated test helper, SPEC out of sync.
-  security-reviewer: no High; 1 Medium, 6 Low. Fixed in `6d4013a`: a write
-  that timed out or got a 5xx came back `retryable: true` (Medium);
-  `paginate`'s method not pinned at runtime, the one fail-open path, narrow;
-  caps not validated. Parked: regex quadratic but bounded, regex looser and
-  stricter than RFC 8288, a `Link` to another path on the host, worst-case
-  duration.
+  code-reviewer: no finding falsified an acceptance line; no High; 4
+  Medium, 6 Low. security-reviewer: no High; 3 Medium, 3 Low; one fail-open
+  path in T-012 as specified (matcher and content source left open).
+  Fixed in `f9927d8`: T-012 names `git grep --cached` and its exits, no
+  pattern in any output (measured: git 2.53.0 exits 128 and prints the
+  pattern on an invalid regex), tests for index-only and binary content,
+  known limits listed, no placeholder file in `CONTRIBUTING.md`; T-013
+  says the limiter's refusal wins at the deadline, a caller's bound only
+  shortens `acquire`, time left computed after `acquire`; T-008 depends on
+  T-012; T-013's split point counted. Dismissed, measured: an interior
+  blank line in the patterns file does not match everything; a CRLF
+  patterns file still matches.
   compliance-reviewer: Wireframes `none`, nothing to check.
-  Scoped round, range `f8f5d80..6d4013a`, quotes matched for all three.
-  code-reviewer: list A empty, no regression; 9 items parked.
-  security-reviewer: list A empty; 5 items parked.
+  Scoped round, range `730ebf3..f9927d8`, quotes matched for all three.
+  code-reviewer: list A, one item: the mandated command lacked `-n`, so it
+  could not name `file:line` and would print the matched text; fixed in
+  the described commit (a flag in the wording, not a mechanism change, so
+  no third round; builder's judgement, said to the owner). 7 items parked.
+  security-reviewer: list A empty; 9 items parked.
   compliance-reviewer: `none`, nothing to check.
-  Parked items: `docs/improvements.md`, the two entries stamped `6d4013a`.
-  No code changed after the scoped round; no third round.
-  code-reviewer shelled out once in the scoped round (a read-only `git
-  grep`, which it reported itself); none in the full round.
+  Parked: `docs/improvements.md`, the entry stamped `f9927d8`.
+  No reviewer shelled out.
 
-- **Proposed plan changes:** T-012 still `proposed (2026-11-20)`, owner to
-  confirm. New: T-013 `proposed (2026-11-23)`, a total deadline of 30 s on
-  one `requestWithRetry` (owner's decision, 2026-11-23); it has no task
-  file and no place in the order yet. PLAN's sizing line still counts T-007's split point as
-  pending: it was not needed (`/decompose` owns that line).
+- **Proposed plan changes:** none. T-012 and T-013 are no longer
+  `proposed`.
 
 - **Open doubts:**
-  - Decided by the owner, 2026-11-23: (1) one `requestWithRetry` gets a
-    total deadline of 30 s; until T-013 is built it has none, about 103 s
-    at worst, 43.5 s for a GET nobody answers; (2) a 429 without
-    `Retry-After`, or with one above 15 s, stays as built: refused with
-    `retry_after_s`, not retried. Closed.
-  - New, from T-007, builder's choices: the 10 s timeout lives in
-    `request`; `request` stays public and still reports a write's failure
-    as retryable, only `requestWithRetry` says `retryable: false`; backoff
+  - New, owner to decide before T-012's build: what a contributor without
+    the account values does. The repo is public, the hook refuses every
+    commit without the patterns file, and a placeholder file is a bypass
+    in effect.
+  - New, owner to read: the acceptance of T-012 and T-013 changed after
+    the approval, by the review fixes (`git diff 730ebf3..HEAD --
+    docs/tasks`). T-013's plan-time choices (1 to 5 as presented) stand;
+    one was sharpened: a limiter wait ending at or after the deadline is
+    refused as `rate_limited`, so a write held by a 429 never gets the
+    `network` expiry error.
+  - New: T-013 leaves `paginate` without a total budget: each page gets
+    its own 30 s.
+  - New: PLAN's sizing line still counts T-001's split point as pending
+    though T-001 is `done`; whether it was taken is not recorded.
+  - Decided by the owner, 2026-11-23, closed: one `requestWithRetry` gets
+    a total deadline of 30 s (T-013); a 429 without `Retry-After`, or with
+    one above 15 s, is refused with `retry_after_s`, not retried.
+  - From T-007, builder's choices: the 10 s timeout lives in `request`;
+    `request` stays public and still reports a write's failure as
+    retryable, only `requestWithRetry` says `retryable: false`; backoff
     0.5/1/2 s without jitter, slept in `http.ts`; only GET is a read;
     `paginate` gives no sign it stopped at a cap with more to fetch; the
     item cap counts array bodies only; no cap on a response body's size.
@@ -97,7 +103,7 @@
   - Pre-scrub backup bundle (T-001) still holds account values; owner
     deletes it.
   - Two Dependabot branches on the remote (npm, GitHub Actions), not
-    reviewed; the npm one was force-updated before 2026-11-23T11:13.
+    reviewed.
 
 - **Dead ends:** none.
 
@@ -107,4 +113,5 @@
   (Node 22.23.5): eslint and ruff "All checks passed!"; prettier "All
   matched files use Prettier code style!"; `tsc --noEmit` clean; vitest
   "Test Files 8 passed (8)", "Tests 331 passed (331)"; `tools/checks` "Ran
-  25 tests", OK; both gitleaks scans passed. `make build` exit 0.
+  25 tests", OK; both gitleaks scans passed. `make build` exit 0. No code
+  changed in this session.
