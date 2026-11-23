@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-23T12:29:17+01:00`
-- **Describes commit:** `<hash>`. **CI:** `<pending>`. This file's hash
-  and CI line arrive in the commit right after it.
+- **Describes commit:** `dce5d64`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45165983442
+  (ran on `dce5d64`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-012 (account-patterns commit hook), `done
   (2026-11-23)`. Build in `054da94`, full-round fixes in `f79ffd2`,
