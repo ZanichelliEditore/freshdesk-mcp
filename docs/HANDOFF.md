@@ -4,12 +4,13 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T11:27:17+01:00`
-- **Describes commit:** `348fba6`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45156435154
-  (ran on `348fba6`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file arrives in the commit right after it.
+- **Written:** `2026-11-23T11:44:23+01:00`
+- **Describes commit:** `STAMP_HASH`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP_CI. This file arrives in
+  the commit right after it. It replaces the handoff stamped in `8677ee5`
+  (which described `348fba6`, CI green, run 45156435154): after that
+  stamp the owner answered the two open decisions, and `STAMP_HASH` records
+  them, documents only.
 
 - **Current task:** T-007 HTTP retries + pagination, `done (2026-11-23)`.
   Code in `f8f5d80` and `6d4013a`; see
@@ -18,8 +19,8 @@
 - **Next action:** `/pickup` takes T-008 (client resource: ticket fields):
   `docs/tasks/T-008-client-ticket-fields.md`. It calls
   `HttpClient.requestWithRetry` or `HttpClient.paginate`
-  (`src/client/http.ts`), never `request`. **Before it starts, the owner
-  answers the two "Owner to decide" doubts below.**
+  (`src/client/http.ts`), never `request`. First ask the owner whether
+  T-013 (the 30 s deadline) becomes `todo` and runs before T-008.
 
 - **Read before anything else:** `docs/tasks/PLAN.md`; the T-008 task file;
   the header comment of `src/client/http.ts` (lines 1-35) and the doc
@@ -52,15 +53,17 @@
   grep`, which it reported itself); none in the full round.
 
 - **Proposed plan changes:** T-012 still `proposed (2026-11-20)`, owner to
-  confirm. None new. PLAN's sizing line still counts T-007's split point as
+  confirm. New: T-013 `proposed (2026-11-23)`, a total deadline of 30 s on
+  one `requestWithRetry` (owner's decision, 2026-11-23); it has no task
+  file and no place in the order yet. PLAN's sizing line still counts T-007's split point as
   pending: it was not needed (`/decompose` owns that line).
 
 - **Open doubts:**
-  - **Owner to decide** (detail in T-007's "Open doubts"): (1) one
-    `requestWithRetry` has no total deadline, about 103 s at worst, 43.5 s
-    for a GET nobody answers; (2) a 429 without `Retry-After`, or with one
-    above 15 s, is not retried but refused with `retry_after_s`, where the
-    task asked for a bounded default wait.
+  - Decided by the owner, 2026-11-23: (1) one `requestWithRetry` gets a
+    total deadline of 30 s; until T-013 is built it has none, about 103 s
+    at worst, 43.5 s for a GET nobody answers; (2) a 429 without
+    `Retry-After`, or with one above 15 s, stays as built: refused with
+    `retry_after_s`, not retried. Closed.
   - New, from T-007, builder's choices: the 10 s timeout lives in
     `request`; `request` stays public and still reports a write's failure
     as retryable, only `requestWithRetry` says `retryable: false`; backoff

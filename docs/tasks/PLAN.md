@@ -46,6 +46,7 @@ became T-010 and T-011; acceptance lines tightened per the review.
 | T-010 | Schema service: load, TTL cache, output mapping | build | T-004, T-009 | `test/schema/output.test.ts`: one fetch per TTL (MockAgent count), refetch after TTL (fake clock); raw ticket → labelled output with names; hidden fields absent; `make quality` green. | todo (2026-11-20) |
 | T-011 | Schema service: input mapping + nested-choice validation | build | T-010 | `test/schema/input.test.ts` covers label and API-name inputs, the label case rule, a 3-level nested path, an invalid choice at each level, an unknown field and an ambiguous label; `make quality` green; **M0 done:** CI run on this commit observed green, URL in HANDOFF. | todo (2026-11-20) |
 | T-012 | Guard: account-value patterns in the commit hook | build | T-001 | A local pre-commit hook greps staged content with `docs/private/account-patterns`; a staged synthetic match is refused (positive control); a missing or empty patterns file fails loudly, never passes silently; `make quality` green. | proposed (2026-11-20) |
+| T-013 | Total deadline of 30 s on `requestWithRetry` | build | T-007 | `test/client/http-retry.test.ts` (MockAgent, fake clock): a call whose attempts, limiter waits and backoff would pass 30 s returns an error at or before 30 s and sends nothing after it; a write held by a 429 is not sent once the deadline has passed; a call that ends sooner is unchanged; `make quality` green. | proposed (2026-11-23) |
 
 ## Wireframes
 

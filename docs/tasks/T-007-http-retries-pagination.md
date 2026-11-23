@@ -73,7 +73,11 @@ MockAgent call counts: a read on 503 is attempted 4 times then fails `server`; a
 none
 
 ## Open doubts
-- **Owner to decide, both raised as Medium by `code-reviewer`:**
+- **Decided by the owner, 2026-11-23** (both raised as Medium by
+  `code-reviewer`): a total deadline of 30 s on one `requestWithRetry`,
+  not built here, PLAN row T-013 `proposed (2026-11-23)`; the 429 without
+  `Retry-After` stays as built, refused and not retried. Closed. As they
+  stood:
   - **No total deadline.** One `requestWithRetry` can take about 103 s
     (4 attempts of up to 15 s limiter wait and 10 s timeout, 3.5 s of
     backoff); a GET against a server that never answers takes 43.5 s. That
