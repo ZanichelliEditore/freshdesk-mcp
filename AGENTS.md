@@ -66,7 +66,10 @@ generic engineering contract; where the two overlap, this section wins.
    committed prose names an account by its slug. If gitleaks fires, the
    secret is already in the working tree: rotate it, don't just unstage it.
 3. **No way around the checks.** `--no-verify` is never acceptable. New
-   dependencies go through `/rfc`.
+   dependencies go through `/rfc`. One exception (owner, 2026-11-23): a
+   contributor without the gitignored patterns file commits with
+   `SKIP=account-patterns git commit`, as `CONTRIBUTING.md` describes; it
+   skips that one hook and no other.
 
 ### Session discipline (SPEC.md §14)
 

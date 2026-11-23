@@ -1,0 +1,57 @@
+# T-020 — Tool: `get_ticket_schema`
+
+- **Type:** build
+- **Phase:** M1
+- **Status:** todo (2026-11-23)
+- **Depends on:** T-019
+- **Created:** 2026-11-23
+
+## Goal
+The first `core` tool: ticket fields with labels, types, choices (nested
+tree) and team meanings (C1, C8).
+
+## In scope
+- Every field the schema has is listed: `hidden` is not applied here, hidden
+  fields are not handled beyond `ticketOutput` for now (owner, 2026-11-23).
+- A long choice list is capped with a marker; the description says the call
+  cost (cold and warm cache).
+
+## Out of scope
+- Wrapping labels or choices (not wrapped, owner 2026-11-23).
+- Hiding fields from this tool (parked, `docs/improvements.md`).
+
+## Spec sections to read
+- SPEC.md §8.2
+- SPEC.md §7.3
+- SPEC.md §8.4
+
+## Files expected to change
+- `src/tools/toolsets/core/get-ticket-schema.ts`
+- `src/tools/toolsets/core/index.ts`
+- `test/tools/core/get-ticket-schema.test.ts`
+
+## Wireframes
+`none`
+
+## Acceptance
+`test/tools/core/get-ticket-schema.test.ts` (in-memory client, MockAgent):
+the result has each fixture field's label, API name, type and choices, the
+3-level field as a tree with asserted values, and the team `meaning`; a
+second call within the TTL sends no request; a failed schema load returns
+its error code as `isError` and the next call tries again; `readOnlyHint` is
+true; `make quality` green.
+
+---
+*Filled at `/handoff`:*
+
+## Done
+
+## Dead ends
+none
+
+## Open doubts
+none
+
+## Context pressure
+
+## Next action

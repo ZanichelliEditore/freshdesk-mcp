@@ -71,8 +71,10 @@ is a private note (§8.4).
 2. A typed Freshdesk API v2 client whose **interfaces** (request/response
    types and method signatures) cover **every** resource, so new tools are
    a thin layer over it (owner, 2026-11-20: "prepare interfaces for all,
-   focus on few"). Implementations land with the toolset that first uses
-   them (builder's call); an endpoint the plan lacks returns a clear
+   focus on few"). Interfaces and implementations both land with the
+   toolset that first uses them (M5+ for the catalogue toolsets); until
+   then only the catalogue, `docs/tool-catalogue.md`, covers every
+   resource (owner, 2026-11-23). An endpoint the plan lacks returns a clear
    `not_available_on_plan` error, not a bare 403.
 3. Custom fields read and written by **label**, discovered from
    `ticket_fields`, never guessed by the model.
@@ -176,6 +178,11 @@ never imports MCP code, so it can be published or reused alone.
 - Retries: reads on 429/5xx/network with backoff (max 3); **writes only
   on 429** (request not processed), never on 5xx/timeouts, so a write is
   never applied twice.
+- Deadline (owner, 2026-11-23): one call with its retries, limiter waits
+  and backoff ends within 30 s. A limiter wait that would reach the
+  deadline is refused as `rate_limited`; an attempt in flight at it is
+  aborted as `network`. A write is not started with less than 10 s left:
+  it is refused as `rate_limited`, `retryable: true`, not sent.
 - Pagination: async iterator following `Link`; callers set a hard cap of
   pages/items.
 
@@ -195,7 +202,8 @@ never imports MCP code, so it can be published or reused alone.
 - 429: honour `Retry-After`. No headers seen yet: conservative defaults.
 - Operations that need many calls estimate their cost first and report
   it (e.g. export of 2,000 tickets with conversations ≈ 2,020 calls) and
-  refuse beyond a per-call budget unless `confirm:true`.
+  refuse beyond a per-call budget unless `confirm:true`. The budget is a
+  team-file key, default 250 calls (owner, 2026-11-23).
 
 ### 7.3 Schema service (custom fields)
 
@@ -206,8 +214,15 @@ never imports MCP code, so it can be published or reused alone.
 - Input: tools accept labels (`"Prodotto": "<product> > ..."`)
   or API names; the service validates against choices (nested levels
   included) and returns a validation error listing the valid choices.
+  A field whose type or choices the service cannot check is refused with
+  the per-field code `unsupported_field` (owner, 2026-11-23).
+- A cold load (fields, agents, groups) has a total deadline of 30 s; on
+  expiry the error is retryable and is not cached (owner, 2026-11-23).
 - Optional team config adds per-field **meaning** text for the model and
-  can hide fields (e.g. personal-data fields) from output.
+  can hide fields (e.g. personal-data fields) from a ticket's detail
+  output. `hidden` goes no further for now and is not an access control:
+  it is not applied to the schema tool, to queries, counts, exports or
+  input (owner, 2026-11-23).
 
 ### 7.4 Untrusted content
 
@@ -218,12 +233,18 @@ returns it says it is data, not instructions. HTML bodies are converted
 to text (`body_text` where Freshdesk provides it). Long threads are
 truncated with an explicit marker and a way to fetch the rest.
 
+Owner, 2026-11-23: knowledge-base articles and canned responses are
+wrapped the same way. Agent and group names, field labels and choice
+names are not wrapped; names and labels are stripped of HTML and
+length-capped.
+
 ## 8. Tool surface
 
 ### 8.1 Toolsets
 
-Tools are grouped in toolsets enabled by config
-(`FRESHDESK_TOOLSETS=core,write,...`). Default for a fresh install:
+Tools are grouped in toolsets enabled by the team config file's
+`toolsets` key, and only there: there is no `FRESHDESK_TOOLSETS` env
+variable (owner, 2026-11-23). Default for a fresh install:
 **`core`** only (read). Every tool carries MCP annotations
 (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 so clients can ask before running writes. Names are English
@@ -266,10 +287,10 @@ costs in API calls when it is more than one.
 
 ### 8.3 Prepared, not active (catalogue)
 
-The client implements **all** these resources with types and tests; the
-toolsets below are designed (names, inputs) and built when needed. The
-builder writes the catalogue as `docs/tool-catalogue.md` with one line per
-planned tool.
+Only the catalogue is written now (owner, 2026-11-23):
+`docs/tool-catalogue.md`, one line per planned tool. The client's
+interfaces and implementations for these resources, with their types and
+tests, land with the toolset that first uses them (M5+).
 
 | Toolset | Resources |
 |---|---|
@@ -290,7 +311,8 @@ planned tool.
 - Every list returns `{items, next_cursor?, has_more, truncated?,
   api_calls_used}`.
 - Dates ISO 8601 with time zone; durations in human form for urgency.
-- Personal-data fields hidden in output when the team config says so.
+- Personal-data fields hidden in a ticket's detail output when the team
+  config says so (§7.3: no further, not an access control).
 
 ## 9. Safety model (light)
 
@@ -322,11 +344,16 @@ Two levels:
 
 | Level | What | How |
 |---|---|---|
-| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY` | env vars (Claude Code) or `.mcpb` `user_config` (key marked `sensitive`, stored in the OS keychain by Claude Desktop) |
-| Team | enabled toolsets, field meanings and hidden fields, "uncategorised" definition, forward allow-list, caps, reserve %, export dir | JSON file, path via `FRESHDESK_MCP_CONFIG` / `user_config`; validated with zod at start, clear error on bad config |
+| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (`FRESHDESK_EXPORT_DIR`) | env vars (Claude Code) or `.mcpb` `user_config` (key marked `sensitive`, stored in the OS keychain by Claude Desktop) |
+| Team | enabled toolsets, field meanings and hidden fields, "uncategorised" definition, forward allow-list, caps, call budget, reserve % | JSON file, path via `FRESHDESK_MCP_CONFIG` / `user_config`; validated with zod at start, clear error on bad config |
 
 - **Uncategorised** default: a ticket where the configured category field
   (default: the last level of the first nested field) is empty. Overridable as a list of fields.
+- The export directory is personal, not a team setting (owner,
+  2026-11-23): a shared file does not choose a local path. With it unset,
+  `export_tickets` is refused with a message saying how to set it. File
+  export is not a rule-1 capability (no RFC); its task runs
+  `/security-review`.
 - Example team config ships in the repo with synthetic values; the
   Zanichelli one lives in an internal place (§12).
 - An internal `.mcpb` build may bake the Zanichelli team config in, so
@@ -351,10 +378,13 @@ Two levels:
     surveys are set to skip the tag before M2 starts (admin task, owner).
     The smoke script refuses to write to a ticket without the tag;
     forwards go only to the builders' own addresses.
-- Release: **public npm** (owner, 2026-11-20), scoped name (scope
-  decided at first publish, e.g. `@zanichelli/` if the org can own it on
-  npm), GitHub releases with the `.mcpb` built by
-  `@anthropic-ai/mcpb pack` in CI; semver; CHANGELOG.
+- Release: **public npm** (owner, 2026-11-20) as
+  `@zanichelli/freshdesk-mcp`, repository public (owner, 2026-11-23);
+  published from CI on a version tag, with provenance and every check run
+  again; the first publish is 0.1.0, after M1's smoke and on the owner's
+  explicit go; versions stay 0.x until M4, then 1.0.0. GitHub releases
+  with the `.mcpb` built by `@anthropic-ai/mcpb pack` in CI; semver;
+  CHANGELOG.
 - Docs: README (English, for technical users and a possible public
   release); operator guide in Italian (install `.mcpb`, get the API key,
   what each tool does, never "always allow" sends).
@@ -379,9 +409,14 @@ GitHub repo can be public from M1, while the **Zanichelli team config
 stays out of it** (domain, allow-list, field meanings) in an internal
 location chosen at M4.
 
-**Open (owner), not blocking M0:** GitHub owner (personal account or a
-Zanichelli org); npm scope; DPO validation before rollout beyond the
-builders.
+**Owner, 2026-11-23:** npm scope `@zanichelli`, repository public;
+toolsets from the team file only; export directory in personal env; call
+budget 250; hidden fields not handled beyond ticket detail output for
+now; wrapping per §7.4; deadlines per §7.1 and §7.3; only the catalogue
+for the §8.3 resources; the builder's choices parked up to T-013 accepted
+as built.
+
+**Open (owner):** DPO validation before rollout beyond the builders.
 
 ## 13. Milestones (phases with acceptance)
 
