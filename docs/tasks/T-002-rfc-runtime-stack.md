@@ -7,7 +7,7 @@
 - **Created:** 2026-11-20
 
 ## Goal
-An Active RFC that admits the dependencies M0 and M1 need: `zod`, `undici`, `vitest`, `@types/node` for M0, and `@modelcontextprotocol/sdk` for M1, with pinned major versions.
+An Active RFC that admits the dependencies M0 and M1 need: `zod`, `undici`, `vitest`, `@types/node` for M0, and `@modelcontextprotocol/sdk` for M1, with pinned major versions. *(2026-11-23: the RFC admits `@modelcontextprotocol/server` v2 instead, per SPEC §5; see its Alternatives.)*
 
 ## In scope
 - Draft with `/rfc`; alternatives weighed (Node global `fetch` vs undici's `fetch`, `node:test` vs vitest, valibot vs zod).

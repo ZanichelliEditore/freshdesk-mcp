@@ -120,7 +120,8 @@ From `customer-square` Phase 0 (2026-11-19/20) and research on 2026-11-20:
   `docs/private/account-facts.md`): names are mixed, some with the `cf_`
   prefix and some without; one is a **nested field** with three levels.
   Several carry personal data.
-- **SDKs:** `@modelcontextprotocol/server` 2.4.0 (v2 stable, Node ≥ 20);
+- **SDKs:** `@modelcontextprotocol/server` 2.4.0 (v2 stable, Node ≥ 20; project
+  floor ≥ 22.19, §11);
   `.mcpb` Node bundles are mature, Python `uv` bundles experimental.
 - **npm name** `freshdesk-mcp` is taken; use a scoped name (§12).
 - **Personal data:** tickets hold customers' data, sent to Claude. The DPO
@@ -333,7 +334,7 @@ Two levels:
 
 ## 11. Quality and distribution
 
-- TypeScript strict, ESM, Node ≥ 20; zod for inputs and config;
+- TypeScript strict, ESM, Node ≥ 22.19 (RFC 2026-11-23); zod for inputs and config;
   `vitest`; HTTP faked with undici `MockAgent` (no test calls real
   Freshdesk); eslint + prettier; GitHub Actions on every push.
 - Tests: client (auth, UA, host check, pagination, 429/`Retry-After`,

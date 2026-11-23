@@ -10,10 +10,11 @@
 TypeScript compiles and vitest runs under `make quality` and in CI, proven by the first real module: the normalised error shape of §7.1.
 
 ## In scope
-- `package.json`: `type: module`, `engines.node >=20`, `test: vitest run`; install `vitest`, `@types/node` (per T-002).
+- `package.json`: `type: module`, `engines.node >=22.19`, `test: vitest run`; install `vitest@^5`, `@types/node@^22` (per RFC 2026-11-23).
+- eslint (RFC 2026-11-23, rules 3-4): in `src/**`, `no-restricted-globals` on `fetch` and `no-restricted-properties` on `globalThis.fetch`; in `test/**` except `test/support/mock-dispatcher.ts`, `no-restricted-syntax` on `new MockAgent`, `new Agent` and `.enableNetConnect()`. The helper and the vitest network backstop land in T-006 with `undici`.
 - `tsconfig.json`: switch to `NodeNext` + emit to `dist/` (an npm/`npx` package needs output; switching later means touching every import) — owner confirms at pickup.
 - `src/client/errors.ts`: `{code, http_status, message, retryable, retry_after_s?}` with codes `auth|forbidden|not_found|validation|rate_limited|server|network`; Freshdesk `errors[]` passed through on `validation`; a defined fallback for statuses outside the list.
-- CI Node matrix 20 + 24 if the owner wants it at pickup (else Node 24 only, noted in HANDOFF).
+- CI Node matrix `22.19` + `24` if the owner wants it at pickup (else Node 24 only, with the untested floor noted in HANDOFF).
 
 ## Out of scope
 - HTTP calls, undici (T-006).
