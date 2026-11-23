@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpClient, type HttpResult } from "../../src/client/http.js";
+import {
+  HttpClient,
+  type HttpResult,
+  REQUEST_TIMEOUT_MS,
+  TOTAL_DEADLINE_MS,
+} from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
 import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
 
@@ -315,5 +320,161 @@ describe("requestWithRetry: writes on 429", () => {
 
     expect(failure(result)).toMatchObject({ code: "rate_limited", retry_after_s: 60 });
     expect(sent()).toHaveLength(1);
+  });
+});
+
+describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
+  const EXPIRED = {
+    code: "network",
+    http_status: null,
+    message: "No answer from Freshdesk within 30 s: the call was given up.",
+  };
+  const slow = (method: string) =>
+    on(method).reply(200, { slow: true }, { headers: JSON_TYPE }).delay(60_000);
+
+  /** Nothing goes out later either: the clock runs on and the count stays. */
+  async function nothingMoreSent(count: number) {
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(sent()).toHaveLength(count);
+  }
+
+  it("is 30 s", () => {
+    expect(TOTAL_DEADLINE_MS).toBe(30_000);
+  });
+
+  it("aborts the GET in flight at the deadline and sends nothing after it", async () => {
+    // 10 s + 0.5 s + 10 s + 1 s, then 8.5 s of a third attempt: without the
+    // deadline it would run to 31.5 s and a fourth would follow.
+    slow("GET").times(4);
+
+    const { result, ms } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: true });
+    expect(ms).toBe(TOTAL_DEADLINE_MS);
+    expect(sent()).toHaveLength(3);
+    await nothingMoreSent(3);
+  });
+
+  it.each(WRITES)("aborts a %s in flight at the deadline: not retryable", async (method) => {
+    on(method)
+      .reply(429, "", { headers: { "retry-after": "14" } })
+      .times(2);
+    slow(method).times(2);
+
+    const { result, ms } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
+
+    // Sent at 28 s and cut 2 s later, not after the 10 s of one attempt.
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(ms).toBe(TOTAL_DEADLINE_MS);
+    expect(sent()).toHaveLength(3);
+    await nothingMoreSent(3);
+  });
+
+  it("returns the last answer rather than start a backoff that would cross the deadline", async () => {
+    // Answers at 9.5 s, 19.5 s and 29.8 s; the third backoff is 2 s.
+    on("GET").reply(503, "").delay(9500).times(2);
+    on("GET").reply(503, "").delay(9300);
+    on("GET").reply(200, { late: true }, { headers: JSON_TYPE });
+
+    const { result, ms } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "server", http_status: 503, retryable: true });
+    expect(ms).toBeLessThan(TOTAL_DEADLINE_MS);
+    expect(sent()).toHaveLength(3);
+    await nothingMoreSent(3);
+  });
+
+  describe("a limiter wait at the deadline", () => {
+    /** Three 429s whose holds end at `first`, `first` + 14 s and `first` + 28 s. */
+    function holdsFrom(method: string, first: number) {
+      on(method)
+        .reply(429, "", { headers: { "retry-after": "1" } })
+        .delay(first - 1000);
+      on(method)
+        .reply(429, "", { headers: { "retry-after": "14" } })
+        .times(2);
+      on(method).reply(201, { id: 7 }, { headers: JSON_TYPE });
+    }
+
+    it.each(["GET", ...WRITES] as const)(
+      "a %s whose wait would end exactly at it is refused as rate_limited, with no sleep",
+      async (method) => {
+        const acquire = vi.spyOn(limiter, "acquire");
+        holdsFrom(method, 2000);
+
+        const { result, ms } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
+
+        // The third hold would end at 30 s: refused when it starts, at 16 s.
+        expect(failure(result)).toMatchObject({
+          code: "rate_limited",
+          http_status: null,
+          retry_after_s: 14,
+        });
+        expect(ms).toBe(16_000);
+        expect(acquire).toHaveBeenLastCalledWith("cheap", 14_000);
+        expect(sent()).toHaveLength(3);
+        await nothingMoreSent(3);
+      },
+    );
+
+    it("a wait that ends one millisecond before it is served", async () => {
+      holdsFrom("POST", 1999);
+      const started = Date.now();
+      let ended: number | undefined;
+      const call = http.requestWithRetry({ method: "POST", path: "/tickets" }).then((result) => {
+        ended = Date.now() - started;
+        return result;
+      });
+
+      const { result } = await settle(call);
+
+      expect(result).toMatchObject({ ok: true, status: 201 });
+      expect(ended).toBe(TOTAL_DEADLINE_MS - 1);
+      expect(sent()).toHaveLength(4);
+    });
+  });
+
+  it("sends nothing when the limiter lets the call go with no time left", async () => {
+    vi.spyOn(limiter, "acquire").mockImplementation(() => {
+      vi.setSystemTime(Date.now() + TOTAL_DEADLINE_MS);
+      return Promise.resolve({ ok: true });
+    });
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("leaves a call that ends sooner as it was", async () => {
+    const acquire = vi.spyOn(limiter, "acquire");
+    on("GET").reply(503, "").times(4);
+
+    const { result, ms } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "server", http_status: 503, retryable: true });
+    expect(sent()).toHaveLength(4);
+    expect(ms).toBe(3500);
+    // Each attempt hands the limiter what is left of the 30 s.
+    expect(acquire.mock.calls.map(([, bound]) => bound)).toEqual([30_000, 29_500, 28_500, 26_500]);
+  });
+});
+
+describe("request: a deadline cannot lengthen anything", () => {
+  it("a far deadline leaves the timeout of one attempt and the limiter's own bound in force", async () => {
+    on("GET").reply(200, { slow: true }, { headers: JSON_TYPE }).delay(60_000);
+
+    const { result, ms } = await settle(http.request({ path: "/tickets" }, Date.now() + 3_600_000));
+
+    expect(failure(result).message).toBe("Could not reach Freshdesk (TimeoutError).");
+    expect(ms).toBe(REQUEST_TIMEOUT_MS);
+
+    // The hold of 16 s is refused, as without a deadline.
+    on("GET").reply(429, "", { headers: { "retry-after": "16" } });
+    await settle(http.request({ path: "/tickets" }));
+    const refused = await settle(http.request({ path: "/tickets" }, Date.now() + 3_600_000));
+    expect(failure(refused.result)).toMatchObject({ code: "rate_limited", retry_after_s: 16 });
+    expect(refused.ms).toBe(0);
   });
 });

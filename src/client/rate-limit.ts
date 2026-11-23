@@ -14,6 +14,9 @@
 //   - Pacing: `expensive` calls start at most `pacing_rps` per second.
 //   - One `acquire` waits MAX_WAIT_S at most, all its waits together (floor,
 //     429 and pacing): a wait that would end later is refused at once.
+//   - A caller with less time than that passes its own bound: a wait that
+//     would end at or after it is refused at once too. The bound only ever
+//     refuses sooner; MAX_WAIT_S holds whatever the caller passes.
 //   - A refusal is a `rate_limited` error with `retry_after_s`, never a throw.
 //
 // Freshdesk sends no window-end header. The limiter assumes a fixed window of
@@ -77,16 +80,22 @@ export class RateLimiter {
     this.options = options;
   }
 
-  /** Resolves when the call may go out, or with the reason it may not. */
-  async acquire(cost: CostClass): Promise<Acquired> {
-    const deadline = Date.now() + MAX_WAIT_S * 1000;
+  /**
+   * Resolves when the call may go out, or with the reason it may not.
+   * `boundMs` is the time the caller has left: the call must go out strictly
+   * before it has passed. It cannot lengthen the wait beyond MAX_WAIT_S.
+   */
+  async acquire(cost: CostClass, boundMs = Infinity): Promise<Acquired> {
+    const start = Date.now();
+    const deadline = start + MAX_WAIT_S * 1000;
+    const tooFar = (end: number) => end > deadline || end >= start + boundMs;
     for (;;) {
       const now = Date.now();
       this.expire(now);
       const windowEnd = (this.windowEnd ??= now + WINDOW_S * 1000);
 
       if (this.exhausted || this.remaining <= 0 || this.below(this.options.floor_pct)) {
-        if (windowEnd > deadline) {
+        if (tooFar(windowEnd)) {
           const why = this.exhausted ? "Freshdesk rate limit reached" : this.left();
           return refuse(`${why}: no call goes out until the window resets`, windowEnd - now);
         }
@@ -101,7 +110,7 @@ export class RateLimiter {
           );
         }
         if (now < this.nextExpensiveAt) {
-          if (this.nextExpensiveAt > deadline) {
+          if (tooFar(this.nextExpensiveAt)) {
             return refuse(
               "Too many expensive operations are queued for pacing",
               this.nextExpensiveAt - now,

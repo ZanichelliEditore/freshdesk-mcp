@@ -462,3 +462,79 @@ describe("the bound covers one call's waits together", () => {
     expect(refusal(result).retry_after_s).toBe(MAX_WAIT_S);
   });
 });
+
+describe("a caller's bound", () => {
+  const retryAfter = (value: string) => new Headers({ "Retry-After": value });
+
+  /** A limiter held by a 429 for `seconds`, asked with `boundMs`. */
+  function held(seconds: number, boundMs: number) {
+    const limiter = limiterAt(100, 90);
+    limiter.observe(429, retryAfter(String(seconds)));
+    return limiter.acquire("cheap", boundMs);
+  }
+
+  it("serves a wait that ends one millisecond inside it", async () => {
+    const pending = held(5, 5001);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(await settlesNow(pending)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ ok: true });
+  });
+
+  it("refuses a wait that ends exactly at it, at once, with retry_after_s", async () => {
+    const pending = held(5, 5000);
+    expect(await settlesNow(pending)).toBe(true);
+    expect(refusal(await pending)).toMatchObject({ code: "rate_limited", retry_after_s: 5 });
+  });
+
+  it("does not hold back a call that has no wait to serve", async () => {
+    expect(await limiterAt(100, 90).acquire("cheap", 0)).toEqual({ ok: true });
+  });
+
+  it("covers the pacing wait too", async () => {
+    const limiter = limiterAt(100, 90);
+    expect(await limiter.acquire("expensive")).toEqual({ ok: true });
+    // The next slot is 500 ms away.
+    expect(refusal(await limiter.acquire("expensive", 500)).code).toBe("rate_limited");
+    const pending = limiter.acquire("expensive", 501);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await pending).toEqual({ ok: true });
+  });
+
+  it("covers a wait that grows while the call sleeps", async () => {
+    const limiter = limiterAt(100, 90);
+    limiter.observe(429, retryAfter("2"));
+    const start = Date.now();
+    const pending = limiter.acquire("cheap", 5000).then((result) => ({
+      result,
+      at: Date.now() - start,
+    }));
+    limiter.observe(429, retryAfter("5"));
+    await vi.runAllTimersAsync();
+    const { result, at } = await pending;
+    expect(at).toBe(2000);
+    expect(refusal(result).retry_after_s).toBe(3);
+  });
+
+  it.each([MAX_WAIT_S * 1000 + 1, 3_600_000, Infinity])(
+    "never lengthens the wait past MAX_WAIT_S: a bound of %d ms",
+    async (boundMs) => {
+      const refused = held(MAX_WAIT_S + 1, boundMs);
+      expect(await settlesNow(refused)).toBe(true);
+      expect(refusal(await refused).retry_after_s).toBe(MAX_WAIT_S + 1);
+
+      // And the wait of exactly MAX_WAIT_S is still served, as without a bound.
+      const served = held(MAX_WAIT_S, boundMs);
+      await vi.advanceTimersByTimeAsync(MAX_WAIT_S * 1000 - 1);
+      expect(await settlesNow(served)).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await served).toEqual({ ok: true });
+    },
+  );
+
+  it("a bound of exactly MAX_WAIT_S refuses the wait that ends at it", async () => {
+    const pending = held(MAX_WAIT_S, MAX_WAIT_S * 1000);
+    expect(await settlesNow(pending)).toBe(true);
+    expect(refusal(await pending).retry_after_s).toBe(MAX_WAIT_S);
+  });
+});

@@ -29,6 +29,15 @@
 //   - After a 429 the retry does not sleep here: the next attempt's `acquire`
 //     serves the limiter's hold, or refuses when the hold is beyond its
 //     bound, and that refusal is returned with nothing more sent.
+//   - Deadline: one `requestWithRetry` ends within TOTAL_DEADLINE_MS, its
+//     attempts, limiter waits and backoffs together. Each attempt carries the
+//     deadline: the limiter refuses a wait that would end at or after it
+//     (`rate_limited`, so that refusal wins over the expiry), and what is
+//     left caps the attempt's timeout, so an attempt in flight at the
+//     deadline is aborted and comes back as the expiry error: `network`,
+//     retryable for a GET only. A backoff that would end at or after the
+//     deadline is not started: the last answer is returned as it is.
+//     `paginate` has no budget of its own: each page gets the full deadline.
 //   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
 //     through `request` and so through the host check, up to the caller's cap.
 
@@ -47,6 +56,8 @@ export const REQUEST_TIMEOUT_MS = 10_000;
 export const MAX_RETRIES = 3;
 /** Wait before the first retry of a 5xx or network error; doubles each time. */
 export const BACKOFF_MS = 500;
+/** Longest one `requestWithRetry` may take, waits and attempts together. */
+export const TOTAL_DEADLINE_MS = 30_000;
 
 function notSent(why: string): HttpResult {
   return {
@@ -56,6 +67,19 @@ function notSent(why: string): HttpResult {
       http_status: null,
       message: `Not sent: ${why}.`,
       retryable: false,
+    },
+  };
+}
+
+/** An aborted write may have been applied, as with the timeout of one attempt. */
+function expired(method: string): HttpResult {
+  return {
+    ok: false,
+    error: {
+      code: "network",
+      http_status: null,
+      message: `No answer from Freshdesk within ${TOTAL_DEADLINE_MS / 1000} s: the call was given up.`,
+      retryable: method === "GET",
     },
   };
 }
@@ -128,8 +152,11 @@ export class HttpClient {
    * are refused with a result.
    *
    * One attempt: resource modules call `requestWithRetry` or `paginate`.
+   *
+   * `deadline` (epoch ms) is `requestWithRetry`'s. It only shortens: the
+   * limiter's wait and the attempt's timeout keep their own bounds under it.
    */
-  async request(request: HttpRequest): Promise<HttpResult> {
+  async request(request: HttpRequest, deadline = Infinity): Promise<HttpResult> {
     const method = request.method ?? "GET";
     if (!TEMPLATE.test(request.path)) {
       throw new TypeError("The path must be a template like /tickets/{id}.");
@@ -142,8 +169,11 @@ export class HttpClient {
     if (!this.allowed(url)) {
       return notSent("the URL is not on the configured Freshdesk host");
     }
-    const acquired = await this.limiter.acquire(request.cost ?? "cheap");
+    const acquired = await this.limiter.acquire(request.cost ?? "cheap", deadline - Date.now());
     if (!acquired.ok) return acquired;
+    // Read again: `acquire` may have slept. Its token is spent either way.
+    const left = deadline - Date.now();
+    if (left <= 0) return expired(method);
 
     const started = performance.now();
     const log = (outcome: number | "network") => {
@@ -154,9 +184,12 @@ export class HttpClient {
     let headers: Headers;
     let text: string;
     const timeout = new AbortController();
-    const timer = setTimeout(() => {
-      timeout.abort(new DOMException("The request timed out.", "TimeoutError"));
-    }, REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => {
+        timeout.abort(new DOMException("The request timed out.", "TimeoutError"));
+      },
+      Math.min(REQUEST_TIMEOUT_MS, left),
+    );
     try {
       const response = await fetch(url, {
         method,
@@ -176,6 +209,7 @@ export class HttpClient {
       text = await response.text();
     } catch (cause) {
       log("network");
+      if (timeout.signal.aborted && left <= REQUEST_TIMEOUT_MS) return expired(method);
       return { ok: false, error: networkError(cause) };
     } finally {
       clearTimeout(timer);
@@ -215,8 +249,9 @@ export class HttpClient {
    */
   async requestWithRetry(request: HttpRequest): Promise<HttpResult> {
     const read = (request.method ?? "GET") === "GET";
+    const deadline = Date.now() + TOTAL_DEADLINE_MS;
     for (let attempt = 0; ; attempt += 1) {
-      const result = await this.request(request);
+      const result = await this.request(request, deadline);
       if (result.ok) return result;
       const { code, http_status, retryable } = result.error;
       // With no status the limiter refused the call: waiting is its business.
@@ -226,7 +261,9 @@ export class HttpClient {
         return { ok: false, error: { ...result.error, retryable: false } };
       }
       if (attempt === MAX_RETRIES || !(limited || transient)) return result;
-      if (!limited) await sleep(BACKOFF_MS * 2 ** attempt);
+      const backoff = limited ? 0 : BACKOFF_MS * 2 ** attempt;
+      if (Date.now() + backoff >= deadline) return result;
+      if (!limited) await sleep(backoff);
     }
   }
 
