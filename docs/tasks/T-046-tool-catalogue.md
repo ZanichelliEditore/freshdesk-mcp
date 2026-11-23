@@ -16,6 +16,10 @@ land with the toolset that first uses them (M5+).
   Freshdesk resource, read or write. The active tools of SPEC §8.2 are
   listed as active.
 - A navigation line in `docs/architecture/overview.md`.
+- SPEC §8.3's last row (`discussions`, `surveys`, `threads`, "as Freshdesk
+  exposes them") names no resources: one line per toolset saying which
+  Freshdesk API section it would wrap, its tools not listed, and the
+  catalogue says so.
 
 ## Out of scope
 - Any type, interface or code; any tool input design beyond the one line.
@@ -34,10 +38,11 @@ land with the toolset that first uses them (M5+).
 
 ## Acceptance
 `docs/tool-catalogue.md` has at least one line for every resource named in
-SPEC §8.3's table (the task file's "Done" lists the resources and their line
-counts) and one per SPEC §8.2 tool marked active; every name is `snake_case`
-and unique (`sort | uniq -d` on the name column prints nothing); no `src/`
-or `test/` file changes; `make quality` green.
+SPEC §8.3's table, and one line for each of the three toolsets of its last
+row, (the task file's "Done" lists the resources and their line counts) and
+one per SPEC §8.2 tool marked active; every name is `snake_case` and no name
+appears twice (a duplicate check on the name column prints nothing); no
+`src/` or `test/` file changes; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

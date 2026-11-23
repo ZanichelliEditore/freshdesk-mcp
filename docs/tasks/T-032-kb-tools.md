@@ -36,12 +36,13 @@ second.
 
 ## Acceptance
 `test/tools/core/solutions.test.ts`: `search_solutions` returns the envelope
-with asserted ids and titles; `get_solution_article` returns the text with
-no HTML tag, the marker when over the cap, and inside `<ticket_content>`
-(asserted); `list_solution_tree` returns the fixture tree, stops at its cap
-with `truncated: true`, and `api_calls_used` equals the MockAgent count; one
-refusal per tool (`not_found`, or a client error) is `isError`; `make
-quality` green.
+with asserted ids and titles; article and folder titles pass through the
+name helper, one carrying an HTML tag coming back without it (asserted);
+`get_solution_article` returns the text with no HTML tag, the marker when
+over the cap, and inside `<ticket_content>` (asserted); `list_solution_tree`
+returns the fixture tree, stops at its cap with `truncated: true`, and
+`api_calls_used` equals the MockAgent count; one refusal per tool
+(`not_found`, or a client error) is `isError`; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

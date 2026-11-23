@@ -17,6 +17,8 @@ unless `confirm: true`.
   default 250 (owner, 2026-11-23), the example file updated.
 - `confirm: true` never overrides the limiter: below the reserve the refusal
   stands.
+- While in `src/config.ts`: the comment on `hidden` (`:73`, "Left out of
+  every output") is corrected to what SPEC §7.3 now says.
 
 ## Out of scope
 - `confirm.ts` for sends (M3).

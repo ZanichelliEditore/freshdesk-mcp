@@ -221,22 +221,26 @@ never imports MCP code, so it can be published or reused alone.
 - Optional team config adds per-field **meaning** text for the model and
   can hide fields (e.g. personal-data fields) from a ticket's detail
   output. `hidden` goes no further for now and is not an access control:
-  it is not applied to the schema tool, to queries, counts, exports or
-  input (owner, 2026-11-23).
+  it is not applied to the schema tool, to queries or to input, and it is
+  not guaranteed in rows, counts or exports (owner, 2026-11-23).
 
 ### 7.4 Untrusted content
 
 Customer-written text (subject, description, conversation bodies,
-attachment names) is returned inside explicit delimiters
+attachment names, requester and company names, a conversation's from, to
+and cc, and custom-field values unless the field's type is a known closed
+one: number, boolean, date, a validated choice) is returned inside
+explicit delimiters
 (`<ticket_content>…</ticket_content>`) and every tool description that
 returns it says it is data, not instructions. HTML bodies are converted
 to text (`body_text` where Freshdesk provides it). Long threads are
 truncated with an explicit marker and a way to fetch the rest.
 
 Owner, 2026-11-23: knowledge-base articles and canned responses are
-wrapped the same way. Agent and group names, field labels and choice
-names are not wrapped; names and labels are stripped of HTML and
-length-capped.
+wrapped the same way. Agent and group names, field labels, choice names
+and titles (article, folder, canned response) are not wrapped: they are
+stripped of HTML and length-capped. Exported files hold customer text
+unwrapped.
 
 ## 8. Tool surface
 
@@ -379,7 +383,10 @@ Two levels:
     The smoke script refuses to write to a ticket without the tag;
     forwards go only to the builders' own addresses.
 - Release: **public npm** (owner, 2026-11-20) as
-  `@zanichelli/freshdesk-mcp`, repository public (owner, 2026-11-23);
+  `@zanichelli/freshdesk-mcp`, repository public (owner, 2026-11-23),
+  once it is shown that the organisation owns the `@zanichelli` scope on
+  npm and the publisher is a member (evidence before the README names the
+  package); how a publish is authorised is decided by an RFC;
   published from CI on a version tag, with provenance and every check run
   again; the first publish is 0.1.0, after M1's smoke and on the owner's
   explicit go; versions stay 0.x until M4, then 1.0.0. GitHub releases
@@ -393,7 +400,8 @@ Two levels:
 
 **Owner, 2026-11-20:** approach A; MIT; GitHub repo; new start replacing
 the suspended customer-square, keeping its learnings, not its use cases;
-few active tools, interfaces for all; stateless MCP; technical users
+few active tools, a catalogue for all (interfaces with the toolset that
+first uses them: owner, 2026-11-23); stateless MCP; technical users
 first, operators daily within 6 months; forward to both agents and
 non-Freshdesk colleagues; light safety; real-account write tests on
 tagged test tickets in production (no sandbox); public npm; bulk
@@ -403,7 +411,8 @@ re-categorisation of old tickets left as a proposal.
 `core` default; reserve 20 %/5 % and pacing 2 req/s; bulk cap 50;
 per-ticket `PUT` instead of the async `bulk_update` job (clear
 per-ticket results); undici `MockAgent`; draft note header text; client
-implementations per toolset with all interfaces up front; since the
+interfaces and implementations per toolset, as each is first used (§4,
+§8.3); since the
 package is public on npm, the source is public in practice, so the
 GitHub repo can be public from M1, while the **Zanichelli team config
 stays out of it** (domain, allow-list, field meanings) in an internal

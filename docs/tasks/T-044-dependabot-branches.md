@@ -3,7 +3,7 @@
 - **Type:** spike
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-015
+- **Depends on:** none
 - **Created:** 2026-11-23
 
 ## Goal
@@ -14,8 +14,10 @@ decide. Nothing is merged, pushed or deleted without the owner's go (owner,
 ## In scope
 - Per branch: the package, the versions from and to, whether the bump stays
   inside the ranges RFC 2026-11-23 admits (outside them it needs `/rfc`,
-  AGENTS.md rule 3), the changelog's breaking notes, and what `make quality`
-  (with the build) prints on a local worktree of the branch.
+  AGENTS.md rule 3), the changelog's breaking notes, and what `make
+  quality`, then `make build`, print on a local worktree of the branch, run
+  with `FRESHDESK_API_KEY` unset; or, instead, the pull request's CI result
+  read with `gh`.
 - A recommendation per branch: merge, close, or wait.
 
 ## Out of scope
@@ -35,9 +37,10 @@ decide. Nothing is merged, pushed or deleted without the owner's go (owner,
 ## Acceptance
 The task file's "Done" has one entry per Dependabot branch on the remote
 (`git branch -r` output quoted): package, from → to, inside or outside the
-RFC's range, the last lines `make quality` printed on that branch, and a
-recommendation; `git log origin/main` and the remote's branch list are
-unchanged by the session; `make quality` green on `main`.
+RFC's range, the last lines `make quality` and `make build` printed on that
+branch (or the CI run's URL and result), and a recommendation; `git log
+origin/main` and the remote's branch list are unchanged by the session;
+`make quality` green on `main`.
 
 ---
 *Filled at `/handoff`:*

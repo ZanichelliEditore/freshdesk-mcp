@@ -31,9 +31,10 @@ Canned-response reads for C3 and C10.
 ## Acceptance
 `test/tools/core/canned.test.ts`: the list returns the fixture's folders and
 titles in the envelope with `api_calls_used` equal to the MockAgent count
-and `truncated: true` past its cap; one response returns its text with no
-HTML tag, inside `<ticket_content>` (asserted); an unknown id is `isError`
-`not_found`; `make quality` green.
+and `truncated: true` past its cap; folder and response titles pass through
+the name helper, one carrying an HTML tag coming back without it (asserted);
+one response returns its text with no HTML tag, inside `<ticket_content>`
+(asserted); an unknown id is `isError` `not_found`; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

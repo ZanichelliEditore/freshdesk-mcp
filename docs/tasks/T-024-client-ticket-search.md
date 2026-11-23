@@ -16,7 +16,7 @@ limits enforced before a request is sent.
 - Cost class (`cheap` or `expensive`) as T-022 says.
 
 ## Out of scope
-- Building queries from filters (T-027); the tool (T-028).
+- Building queries from filters (T-043); the tool (T-028).
 
 ## Spec sections to read
 - SPEC.md §5

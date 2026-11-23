@@ -40,7 +40,8 @@ id, status and priority names, category labels, agent and group names and an
 ISO date with zone; a subject of 121 characters is cut to 120 on a
 code-point boundary and is inside `<ticket_content>`; an agent or group name
 carrying an HTML tag comes back without it, one over the cap is cut, and
-neither is inside `<ticket_content>` (asserted); an agent id missing from a
+neither is inside `<ticket_content>` (asserted); a category label carrying
+an HTML tag comes back without it (asserted); an agent id missing from a
 truncated list is said to be not loaded, not guessed; `make quality` green.
 
 ---

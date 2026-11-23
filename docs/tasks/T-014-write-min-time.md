@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M2
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-013
+- **Depends on:** T-047
 - **Created:** 2026-11-23
 
 ## Goal
@@ -25,6 +25,7 @@ mechanism with its own tests, and no tool task should carry it.
 - `docs/architecture/overview.md` line for `http.ts`.
 - Must be `done` before the first write resource. May be taken during M1,
   preferably while M1 waits on an owner's run (owner, 2026-11-23).
+- After T-047: both change `requestWithRetry`, the caller deadline first.
 
 ## Out of scope
 - Any change for GET; `paginate`'s total budget.

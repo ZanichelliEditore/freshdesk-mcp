@@ -52,15 +52,17 @@ with the status still `doing`.
 
 ## Acceptance
 `docs/architecture/ticket-queries.md` has one row per filter of the five
-tools: endpoint, cap, calls per 100 tickets, and either `documented` with
-its URL or `measured` with the date of the owner's smoke run; it says how
+tools the goal names, and one for `get_ticket`'s recent tickets: endpoint,
+cap, calls per 100 tickets, and either `documented` with its URL or
+`measured` with the date of the owner's smoke run; it says how
 `uncategorized` is asked and what happens past 300 results; it names no
 account value (the commit hook passes); it lists the parameters of the list
 endpoint T-023 must send, the requester filter among them;
-`test/smoke.test.ts` (MockAgent): every probe sends GET only and no label,
-name, subject or id of the fixture appears in its output; a row that is
-neither documented nor measured is listed under "Open" and the tasks it
-blocks are named; `make quality` green.
+`test/smoke.test.ts` (MockAgent): every probe sends GET only; no label,
+name, subject or id of the fixture, and neither the `FRESHDESK_DOMAIN` value
+nor the API key, appears in its output; a failed probe prints its error code
+only; a row that is neither documented nor measured is listed under "Open"
+and the tasks it blocks are named; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

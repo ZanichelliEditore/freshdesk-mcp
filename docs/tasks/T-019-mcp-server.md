@@ -28,6 +28,11 @@ registry is proven with a fake one.
 - stdout carries protocol frames only; the undici `Agent` is built here with
   explicit timeouts and the default `maxHeaderSize` (`docs/improvements.md`
   `2a0e56c` (1), `6d4013a` (2)).
+- `examples/team-config.example.json`: `toolsets` becomes `["core"]`, the
+  only toolset this version has.
+- Tests never import `cli.ts` (runtime RFC, rule 4): the exit-code test
+  spawns the built entry. If this needs a package or a runner the runtime
+  RFC (2026-11-23) does not admit, stop and raise an RFC.
 
 ## Out of scope
 - Any `core` tool.
@@ -45,6 +50,7 @@ registry is proven with a fake one.
 - `src/tools/toolsets/index.ts`
 - `test/server.test.ts`
 - `docs/architecture/overview.md`
+- `examples/team-config.example.json`
 
 ## Wireframes
 `none`
@@ -61,11 +67,14 @@ or its call cost missing throws; the listed description of a fake tool
 contains its call cost, and that of one flagged as returning customer text
 contains the "data, not instructions" sentence; enabling `write` or `send`
 fails at start with a message naming the toolset, read from the team file's
-`toolsets`, and a `FRESHDESK_TOOLSETS` env variable changes nothing
-(asserted); a handler returning a `FreshdeskError` gives `isError` with its
-code, a handler that throws gives a generic message with no stack and no
-input text; `cli` with `FRESHDESK_API_KEY` unset exits non-zero, the message
-on stderr, nothing on stdout; `make build` clean; `make quality` green.
+`toolsets`; as a guard against its return, a server built for `core` with
+`FRESHDESK_TOOLSETS=write` in the environment still lists the `core` tools
+only; a handler returning a `FreshdeskError` gives `isError` with its code,
+a handler that throws gives a generic message with no stack and no input
+text; the built `cli`, run as a spawned process from a build the test makes
+in a temporary directory, with `FRESHDESK_API_KEY` unset exits non-zero, the
+message on stderr, nothing on stdout; the example team file parses with
+`toolsets: ["core"]`; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

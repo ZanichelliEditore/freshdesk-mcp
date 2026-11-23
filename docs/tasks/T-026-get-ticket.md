@@ -41,10 +41,12 @@ Ticket, thread and requester first; `include_recent` second.
 come back by label with names, a hidden field absent; subject, description
 and each conversation body are inside `<ticket_content>`; a thread of 2+
 pages returns `next_cursor` and the second call returns the rest; the
-requester block has name, email and company name; `include_recent` adds the
-requester's recent tickets as compact rows; an unknown id is `isError`
-`not_found`; `api_calls_used` equals the MockAgent count; no stderr line
-contains a fixture body string; `make quality` green.
+requester's name and company name are inside `<ticket_content>`, with the
+email beside them; a field label used as a key and carrying an HTML tag
+comes back without it (asserted); `include_recent` adds the requester's
+recent tickets as compact rows; an unknown id is `isError` `not_found`;
+`api_calls_used` equals the MockAgent count; no stderr line contains a
+fixture body string; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

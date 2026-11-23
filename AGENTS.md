@@ -65,11 +65,12 @@ generic engineering contract; where the two overlap, this section wins.
    entry. Real values go in a gitignored file the tracked one reads, and
    committed prose names an account by its slug. If gitleaks fires, the
    secret is already in the working tree: rotate it, don't just unstage it.
-3. **No way around the checks.** `--no-verify` is never acceptable. New
-   dependencies go through `/rfc`. One exception (owner, 2026-11-23): a
-   contributor without the gitignored patterns file commits with
-   `SKIP=account-patterns git commit`, as `CONTRIBUTING.md` describes; it
-   skips that one hook and no other.
+3. **No way around the checks.** `--no-verify` is never acceptable. One
+   exception (owner, 2026-11-23): an outside contributor who was never
+   given the patterns file may commit with `SKIP=account-patterns`, that
+   one hook id only; never a maintainer or an agent session, for whom a
+   missing file is a stop. A maintainer with the file checks such commits
+   for account values before merge. New dependencies go through `/rfc`.
 
 ### Session discipline (SPEC.md §14)
 

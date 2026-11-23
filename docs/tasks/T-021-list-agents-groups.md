@@ -29,7 +29,8 @@ envelope.
 
 ## Files expected to change
 - `src/tools/toolsets/core/list-agents.ts`, `list-groups.ts`
-- `src/client/resources/agents.ts` (the email kept by the schema)
+- `src/client/resources/agents.ts` (the email kept by the resource's zod
+  schema)
 - `test/tools/core/list-agents-groups.test.ts`
 
 ## Wireframes

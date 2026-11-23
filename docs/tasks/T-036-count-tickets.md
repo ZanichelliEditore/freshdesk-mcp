@@ -11,7 +11,9 @@ Counts grouped by up to two fields over a period and a filter, aggregated in
 code (C7).
 
 ## In scope
-- Group keys are labels.
+- Group keys are labels; a free-text value used as a key passes through
+  T-017's name helper. Built on `ticketOutput` as it is: nothing about
+  hidden fields is added or guaranteed here.
 - Never a silent undercount: a source cut by a cap says so.
 
 ## Out of scope
@@ -32,9 +34,10 @@ code (C7).
 ## Acceptance
 `test/tools/core/count-tickets.test.ts`: fixture tickets over 2+ pages give
 the asserted counts by one field and by two, keys as labels; a third field
-is a `validation` error with no request; an estimate over the budget is
-refused without `confirm`; a source cut at a cap gives `truncated: true`
-beside the counts; `api_calls_used` equals the MockAgent count; `make
+is a `validation` error with no request; a free-text group key carrying an
+HTML tag comes back without it and capped (asserted); an estimate over the
+budget is refused without `confirm`; a source cut at a cap gives `truncated:
+true` beside the counts; `api_calls_used` equals the MockAgent count; `make
 quality` green.
 
 ---

@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-019
+- **Depends on:** T-017, T-019
 - **Created:** 2026-11-23
 
 ## Goal
@@ -13,11 +13,12 @@ tree) and team meanings (C1, C8).
 ## In scope
 - Every field the schema has is listed: `hidden` is not applied here, hidden
   fields are not handled beyond `ticketOutput` for now (owner, 2026-11-23).
+- Field labels and choice names through T-017's name helper (HTML stripped,
+  length capped), not wrapped (owner, 2026-11-23).
 - A long choice list is capped with a marker; the description says the call
   cost (cold and warm cache).
 
 ## Out of scope
-- Wrapping labels or choices (not wrapped, owner 2026-11-23).
 - Hiding fields from this tool (parked, `docs/improvements.md`).
 
 ## Spec sections to read
@@ -37,9 +38,13 @@ tree) and team meanings (C1, C8).
 `test/tools/core/get-ticket-schema.test.ts` (in-memory client, MockAgent):
 the result has each fixture field's label, API name, type and choices, the
 3-level field as a tree with asserted values, and the team `meaning`; a
-second call within the TTL sends no request; a failed schema load returns
-its error code as `isError` and the next call tries again; `readOnlyHint` is
-true; `make quality` green.
+label and a choice name carrying an HTML tag come back without it and capped
+(asserted); a choice list over the cap is cut with the marker; a field the
+team file marks `hidden` is listed like any other, since `hidden` is not
+applied here (asserted, so a later change is a decision); a second call
+within the TTL sends no request; a failed schema load returns its error code
+as `isError` and the next call tries again; `readOnlyHint` is true; `make
+quality` green.
 
 ---
 *Filled at `/handoff`:*

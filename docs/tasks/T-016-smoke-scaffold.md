@@ -24,6 +24,9 @@ the doubt "schemas follow the API v2 docs, not a live account".
 - The session does not run it (SPEC §14 rule 1). The owner runs it and keeps
   the output in the gitignored `docs/private/account-facts.md`; the tracked
   task file records shapes only.
+- How `scripts/smoke.ts` is run is the builder's choice within the admitted
+  stack. If this needs a package or a runner the runtime RFC (2026-11-23)
+  does not admit, stop and raise an RFC.
 
 ## Out of scope
 - Tool-level smoke (T-039).
@@ -49,9 +52,11 @@ the doubt "schemas follow the API v2 docs, not a live account".
 client are each refused with no request sent; on a fixture whose
 `default_agent`, `default_group` and `default_product` carry a name → id
 `choices` record the report says so, and on the current fixture it says they
-carry none; no label, name or choice value of the fixture appears in the
-output; a payload the zod schema refuses is reported as refused, exit
-non-zero; `make help` lists `smoke`; `make quality` green.
+carry none; no label, name, id or choice value of the fixture, and neither
+the `FRESHDESK_DOMAIN` value nor the API key, appears in the output; a
+failure prints its error code only, never the message; a payload the zod
+schema refuses is reported as refused, exit non-zero; `make help` lists
+`smoke`; `make quality` green.
 
 ---
 *Filled at `/handoff`:*

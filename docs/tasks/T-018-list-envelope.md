@@ -13,8 +13,9 @@ api_calls_used}` (SPEC §8.4) through one function, with an opaque cursor
 
 ## In scope
 - Envelope builder; `truncated` carried from `listAll` / `paginate` caps.
-- Cursor: encodes a position and a digest of the tool name and filters,
-  nothing else. It is model-supplied input: validated before any request.
+- Cursor: encodes a position and a digest of the tool name, every argument
+  of the call and the position, nothing else. It is model-supplied input:
+  validated before any request.
 
 ## Out of scope
 - Any tool (T-021 is the first user).
@@ -34,11 +35,12 @@ api_calls_used}` (SPEC §8.4) through one function, with an opaque cursor
 `test/tools/list.test.ts`: the envelope always has `items`, `has_more` and
 `api_calls_used`; `next_cursor` is present exactly when `has_more` is true;
 a source cut by a cap gives `truncated: true`; a cursor round-trips its
-position; a cursor used with another tool or other filters, one whose digest
-does not match its position, tool and filters (tampered), one over the
-length cap and one that does not decode are each a `validation` error with
-no request sent; no cursor content can become a URL, host or path (it
-decodes to a whole number and a digest only); `make quality` green.
+position; a cursor used with another tool or with any argument of the call
+changed, one whose digest does not match (it covers the tool name, every
+argument and the position), one over the length cap and one that does not
+decode are each a `validation` error with no request sent; no cursor content
+can become a URL, host or path (it decodes to a whole number and a digest
+only); `make quality` green.
 
 ---
 *Filled at `/handoff`:*
