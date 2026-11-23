@@ -5,9 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-23T15:33:52+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's hash
-  and CI line arrive in the commit right after it.
+- **Describes commit:** `c8a9e7f`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45195667420
+  (ran on `c8a9e7f`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-015, app context
   (`docs/tasks/T-015-app-context.md`), `done (2026-11-23)`. Commits
