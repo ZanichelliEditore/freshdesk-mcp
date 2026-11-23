@@ -74,41 +74,54 @@ updated to match.
 
 **Rule for `http.ts`:**
 
-1. Import `fetch` and `Agent` from `undici`; pass the dispatcher on every
-   call (`{ dispatcher, redirect: 'manual' }`).
+1. Import `fetch` and `Agent` from `undici`. The one send function sets
+   `{ dispatcher, redirect: 'manual' }` itself; callers cannot pass or
+   override either.
 2. The dispatcher is a **required** constructor argument with no default.
-   The entry point (`server.ts`, M1) builds the one keep-alive `Agent`;
-   tests pass the `MockAgent` from the helper (rule 4). Interception never
-   relies on the global dispatcher, so results depend only on the pinned
-   undici.
-3. The global `fetch` is banned in `src/` by eslint:
-   `no-restricted-globals` on `fetch` (bare reference) and
-   `no-restricted-properties` on `globalThis.fetch`, scoped to
-   `files: ["src/**"]`. Added by T-003 with the first TypeScript lint
-   config.
-4. SPEC §11 "no test calls real Freshdesk" is held by two layers, each
-   covering a different path:
-   - **Injected dispatcher (lint).** Tests get their `MockAgent` only from
-     one helper, `test/support/mock-dispatcher.ts`, which returns it with
-     `disableNetConnect()` already called. In `test/**` except that helper,
-     eslint `no-restricted-syntax` refuses `new MockAgent(...)`,
-     `new Agent(...)` and any `.enableNetConnect(...)` call. The production
-     `Agent` is built only in the entry point (`server.ts`), which tests do
-     not import.
-   - **Anything else (runtime).** The vitest setup file installs a global
-     `MockAgent` with `disableNetConnect()`, so a request that bypasses the
-     injected dispatcher (a stray `fetch` in a test) fails instead of
-     reaching the network. It blocks; it is never used to intercept.
+   `server.ts` takes it as an argument too; only the CLI entry point
+   (`cli.ts`, SPEC §7) builds the one keep-alive `Agent`. Tests pass the
+   `MockAgent` from the helper (rule 4). Interception never relies on the
+   global dispatcher, so results depend only on the pinned undici.
+3. The global `fetch` is banned in `src/` by eslint, scoped to
+   `files: ["src/**"]`: `no-restricted-globals` on `fetch` (bare
+   reference) and `no-restricted-properties` on `globalThis.fetch` and
+   `global.fetch`. Added by T-003 with the first TypeScript lint config.
+4. SPEC §11 "no test calls real Freshdesk" is held by three layers:
+   - **Import ban (lint).** In `test/**`, `no-restricted-imports` refuses
+     `undici`, `node:http`, `node:https`, `node:net` and `node:tls` (and
+     their bare names), and `cli.ts`. Only two files are exempt by path:
+     `test/support/mock-dispatcher.ts`, which returns a `MockAgent` with
+     `disableNetConnect()` already called, and the vitest setup file. A
+     ban by import path cannot be dodged by renaming, and covers every
+     undici class (`Agent`, `Pool`, `Client`, `ProxyAgent`, ...) and
+     `setGlobalDispatcher` at once.
+   - **Runtime backstop.** The vitest setup file installs a global
+     `MockAgent` with `disableNetConnect()`, so a `fetch` or undici call
+     without an explicit dispatcher fails instead of reaching the network.
+     It blocks; it is never used to intercept. It does not cover
+     `node:http` and friends; the import ban does.
+   - **No real credentials.** The vitest setup file overwrites every
+     `FRESHDESK_*` environment variable with a dummy value before any
+     test runs, so even a miss cannot carry the real key or domain.
 
-   The lint lands in T-003 with the eslint config; the helper and the setup
-   file land in T-006 with `undici`. T-004 and T-005 make no HTTP calls.
-5. Redirects: `redirect: 'manual'`. A 3xx comes back unfollowed as a
-   response (Check B) and is mapped to a non-retryable error code, so the
-   auth header never follows a redirect and T-007 never retries one.
+   T-003 lands the lint and the setup file with the env overwrite; T-006
+   adds the helper and the global `MockAgent` with `undici`. T-004 and
+   T-005 make no HTTP calls.
+5. Redirects: a 3xx comes back unfollowed as a response (Check B), so the
+   auth header never follows it. It must map to a code with
+   `retryable: false`; T-003's fallback for unlisted statuses has to
+   respect that, so T-007 never retries a redirect.
 
 **Audit:** the five at the versions above, installed together in a scratch
 project, gave `npm audit --audit-level=high` "found 0 vulnerabilities"
 (2026-11-23). CI re-runs the audit on every push once they are installed.
+
+**Transitive packages** are admitted with their parent, at the versions
+the lockfile pins: notably `@modelcontextprotocol/core` (same version as
+`@modelcontextprotocol/server`) and vitest's dev-only tree, which runs
+install scripts (esbuild). CI must install with plain `npm ci` so it tests
+and audits the committed tree (the `|| npm install` fallback is parked in
+`docs/improvements.md`; T-003 is the first task that installs packages).
 
 **Not covered here:** `@anthropic-ai/mcpb` and release tooling (M4, their
 own RFC); build and emit settings (`tsconfig`, T-003); any other runtime
@@ -199,6 +212,25 @@ without a third round (2026-11-23):
    `no-restricted-properties` (rule 3).
 3. RFC said `redirect: 'manual'`, T-006 said `'error'` → `'manual'`,
    3xx mapped non-retryable (rule 5); T-006 updated.
+
+`/handoff` review round (2026-11-23; code-, security-, compliance-
+reviewer). The rule 4 change went to the owner, who approved applying it
+without a further round (2026-11-23):
+
+- Name-based test lint dodgeable (renamed imports, other undici classes,
+  `setGlobalDispatcher`, `node:http`) and the real key possibly in the
+  test env → import-path ban, env overwrite (rule 4).
+- `server.ts` named as the `Agent` builder though tests will import it →
+  `cli.ts` builds it, `server.ts` takes it (rule 2).
+- Backstop claimed more than it covers → coverage stated (rule 4).
+- 3xx code unnamed; `redirect` passable by callers → send function sets
+  it, `retryable: false` required (rules 1, 5).
+- Setup file would trip the `new MockAgent` ban → exempt by path (rule 4).
+- `global.fetch` unbanned → added (rule 3).
+- Transitive packages and `npm ci` unstated → stated.
+- Parked: acceptance lines for the 3xx case in T-003/T-006, and a lint
+  against `rejectUnauthorized: false` in `src/**`
+  (`docs/improvements.md`).
 
 Parked: the T-003 wording on where the backstop lands is fixed in T-003;
 "never calls the bundled one" holds only while rule 3's lint holds (true by

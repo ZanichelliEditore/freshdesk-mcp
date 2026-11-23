@@ -4,60 +4,61 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-20T11:18:25+01:00`
-- **Describes commit:** `4f68e32`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (public). **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/44718199337
-  (ran on `4f68e32`). This file arrives in the commit right after it.
-  Earlier: run on `80c7aae` green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/44716765351;
-  first run on `27a7f16` red (unpinned ruff 0.17.6 rules; `gitleaks-action`
-  needs a license key on org repos), fixed in `80c7aae`, gitleaks step
-  replaced by the same CLI history scan as `make gitleaks`, not weakened.
+- **Written:** `2026-11-23T09:30:54+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file arrives
+  in the commit right after it.
 
-- **Current task:** T-001 connect the remote, `done (2026-11-20)`.
-  History rewritten (all hashes before `27a7f16` changed); account values
-  in gitignored `docs/private/`. Dependabot alerts and security updates on.
-  Scrub check: `git grep -iEf docs/private/account-patterns
-  $(git rev-list --all)` pre-scrub exit 0 (121 lines), after exit 1, fresh
-  GitHub clone exit 1. See `docs/tasks/T-001-connect-remote.md` "Done".
+- **Current task:** T-002 RFC: adopt the runtime and test stack,
+  `done (2026-11-23)`. RFC
+  `docs/rfc/active/2026-11-23-adopt-runtime-stack.md` (Active): Node ≥
+  22.19; `zod ^4.2`, `undici ^8`, `@modelcontextprotocol/server ^2`,
+  `vitest ^5`, `@types/node ^22`. See `docs/tasks/T-002-rfc-runtime-stack.md`
+  "Done".
 
-- **Next action:** `/pickup` takes T-002 (RFC: runtime and test stack, no
-  dependencies): `docs/tasks/T-002-rfc-runtime-stack.md`. T-003 waits on it.
+- **Next action:** `/pickup` takes T-003 (TypeScript toolchain + client
+  error model): `docs/tasks/T-003-ts-toolchain-errors.md`. Its in-scope now
+  carries the RFC's eslint rules (rule 3-4) and the `FRESHDESK_*` env
+  overwrite in the vitest setup file.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`; the T-002 task file.
-  Owner decisions still open, recorded in their tasks: `tsconfig` NodeNext
-  + emit (T-003), Node 20+24 CI matrix (T-003).
+- **Read before anything else:** `docs/tasks/PLAN.md`; the T-003 task file;
+  the RFC's "Rule for `http.ts`" (rules 1-5). Owner decisions still open in
+  T-003: `tsconfig` NodeNext + emit; CI matrix `22.19` + `24` or Node 24
+  only (the old "Node 20 + 24" is void: floor is 22.19).
 
-- **Reviews:** one full round, R1 = `80c7aae`, range `59e3395..80c7aae`.
-  code-reviewer: no blockers; Medium "acceptance evidence not recorded"
-  resolved by this HANDOFF and the task file; Low ruff-pin drift parked;
-  Info stale `gitleaks-action` docs: grep found none. security-reviewer:
-  gitleaks step stronger, HEAD free of account values, `docs/private/`
-  ignored; Medium "nothing stops values re-entering" → proposed T-012;
-  Low hash pinning and Info scan defined in `.pre-commit-config.yaml`
-  parked; asked fresh-clone check: done, exit 1. compliance-reviewer:
-  Wireframes `none`, nothing to check. All quotes matched. Parked:
-  `docs/improvements.md` entry stamped `80c7aae`. No scoped round (no
-  mechanism changed by fixes).
+- **Reviews:** `rfc-reviewer` round 1 (8 findings) and round 2 scoped (3,
+  mechanism changes, owner-approved), all recorded in the RFC "Review".
+  `/handoff` full round, R1 = `2fd2230`, range `7ad29f2..2fd2230`, all four
+  quotes matched for all three:
+  code-reviewer: 3 Medium (Agent built in `server.ts` which tests import;
+  backstop overclaimed; 3xx code unnamed), 2 Low (setup file trips own
+  lint; `global.fetch`): all fixed in the RFC. security-reviewer: Medium
+  name-based test lint dodgeable + real key in test env → import-path ban
+  and env overwrite (owner approved applying without another round,
+  2026-11-23); Low 3xx untested, `npm ci` fallback, transitive deps, TLS
+  lint: 3xx acceptance and TLS lint parked in `docs/improvements.md`,
+  transitive deps and `npm ci` stated in the RFC. compliance-reviewer:
+  Wireframes `none`, nothing to check. No scoped round: owner's call.
 
-- **Proposed plan changes:** T-012 "Guard: account-value patterns in the
-  commit hook" (`proposed (2026-11-20)` in PLAN), owner to confirm.
+- **Proposed plan changes:** T-012 still `proposed (2026-11-20)`, owner to
+  confirm. None new.
 
 - **Open doubts:**
-  - CI gitleaks step not shown to fail on a planted secret.
-  - Hashes quoted in docs up to `59e3395` predate the rewrite and no
-    longer resolve (`docs/improvements.md`, `docs/journal.md`).
-  - Pre-scrub backup bundle in the session scratchpad still holds the
-    values; owner deletes it.
-  - Host override exact hostname in personal env (T-004, T-006), still to
-    confirm.
+  - RFC rule 4 lint is specified, not yet shown to refuse a planted
+    `import 'undici'` in `test/` (first chance: T-003).
+  - CI gitleaks step not shown to fail on a planted secret (from T-001).
+  - Hashes quoted in docs up to `59e3395` predate the history rewrite.
+  - Pre-scrub backup bundle (T-001) still holds account values; owner
+    deletes it.
+  - Host override exact hostname in personal env (T-004, T-006).
 
-- **Dead ends:** none.
+- **Dead ends:** Node ≥ 20 with `undici@7`/`vitest@4`: works, rejected by
+  owner (RFC Alternatives).
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `80c7aae`: eslint and ruff "All
-  checks passed!"; prettier "All matched files use Prettier code style!";
-  ruff "6 files already formatted"; tsc "no TypeScript yet";
-  `tools/checks` "Ran 25 tests", OK; both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on `2fd2230` (Node 22.23.5): eslint
+  and ruff "All checks passed!"; prettier "All matched files use Prettier
+  code style!"; ruff "6 files already formatted"; tsc "no TypeScript yet";
+  `tools/checks` "Ran 25 tests", OK; both gitleaks scans passed. Local Node
+  default is now 22.23.5 (nvm); open a new shell.

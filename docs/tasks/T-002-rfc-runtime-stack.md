@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** none
 - **Created:** 2026-11-20
 
@@ -40,18 +40,32 @@ RFC file is in `docs/rfc/active/` after `make rfc-sync`, status Active, names th
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `c1ff7fb` start; `2fd2230` RFC `docs/rfc/active/2026-11-23-adopt-runtime-stack.md`
+  Active after `make rfc-sync` (five packages, exclusions, MockAgent
+  evidence Checks A/B with scripts in its appendix, re-run verbatim on Node
+  22.19.0 and 24.22.3); SPEC §5/§11, T-003, T-006, architecture overview
+  aligned. The handoff commit (`T-002: done; ...`) applies the `/handoff`
+  review fixes to rules 1-5 and parks two items.
+- Reviews recorded in the RFC's "Review" section: `rfc-reviewer` round 1
+  (8 findings), round 2 scoped (3, owner-approved), `/handoff` round (code,
+  security, compliance; rule 4 change owner-approved).
+- Owner decisions 2026-11-23: Node ≥ 22.19; `@modelcontextprotocol/server`
+  v2 over `sdk` v1; `redirect: 'manual'`; flip without a third round.
+- `make quality`: 25 tests OK, both gitleaks scans passed. No tests added:
+  plan task, no code.
 
 ## Dead ends
-none
+- Keeping Node ≥ 20 with `undici@7`/`vitest@4`: works (Check A on 20.19.4),
+  rejected by the owner; recorded in the RFC's Alternatives.
 
 ## Open doubts
-none
+- The test-isolation lint (RFC rule 4) is specified, not yet run: T-003 is
+  the first chance to see it refuse a planted `import 'undici'` in `test/`.
+- T-003/T-006 acceptance lines do not yet test a 3xx (parked in
+  `docs/improvements.md`); `/decompose` decides.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

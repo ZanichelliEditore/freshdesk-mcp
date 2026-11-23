@@ -12,8 +12,8 @@
 ## In scope
 - Install `undici` (per T-002); `fetch` source as the T-002 RFC decided.
 - One send function every request goes through; it requires `https:` and the default port, and checks the host of **every** URL (built or absolute) against `^[a-z0-9-]+\.freshdesk\.com$`, or equal to the exact override hostname; checked at construction too.
-- `redirect: 'manual'` (RFC 2026-11-23, rule 5): a 3xx is returned unfollowed and mapped to a non-retryable code, so it is never followed with the auth header and never retried.
-- `test/support/mock-dispatcher.ts` (a `MockAgent` with `disableNetConnect()`) and the vitest setup file's global block-only `MockAgent` (RFC 2026-11-23, rule 4).
+- `redirect: 'manual'`, set by the send function itself, not by callers (RFC 2026-11-23, rules 1, 5): a 3xx is returned unfollowed and mapped to a code with `retryable: false`, so it is never followed with the auth header and never retried.
+- `test/support/mock-dispatcher.ts` (a `MockAgent` with `disableNetConnect()`) and, in the vitest setup file, the global block-only `MockAgent` (RFC 2026-11-23, rule 4).
 - stderr logs method, path template, status, duration only.
 - Synthetic fixtures under `test/fixtures/`.
 
