@@ -10,6 +10,12 @@
   https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45148456880
   (ran on `01dabf9`: `quality (22.19)`, `quality (24)`, `checks`). This
   file arrives in the commit right after it.
+  **Expected mismatch at `/pickup`:** the stamp commit `668172d` also
+  carries four `docs/improvements.md` entries ("Local ticket history",
+  stamped `01dabf9`) that were written outside this session while CI ran;
+  `git commit -a` swept them in. They are not this session's work and were
+  left as written. This note is one more commit after the stamp, touching
+  only this file; CI was not observed for either.
 
 - **Current task:** T-005 Rate limiter (standalone), `done (2026-11-23)`.
   Code in `aa38280`, `4384a89` and `a46859c`; see
