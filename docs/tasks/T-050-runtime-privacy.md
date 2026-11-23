@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-047
 - **Created:** 2026-11-23
 
@@ -224,7 +224,18 @@ context holds. `make quality` green.
 
 ## Done
 Built in one session, split point not taken. Starting commit `dd191ec`
-(its `src/` and `eslint.config.mjs` are those of `ff8420a`).
+(its `src/` and `eslint.config.mjs` are those of `ff8420a`). Commits:
+`416641e` (build), `d8b7967` (full review fixes), and the handoff commit
+(documents and one comment in `eslint.config.mjs`). Tests:
+`test/client/http.test.ts`, "HttpClient: a cast cannot re-point the client
+(A1, A2)"; `test/client/rate-limit.test.ts`, "private state: a cast loosens
+nothing (A3)"; `test/schema/output.test.ts`, "SchemaService: a cast reaches
+neither the cache nor the TTL (A3)"; `test/tools/context.test.ts`, "exposes
+the client, the schema service and the team settings, not the limiter or
+the key", "hands out a client and a schema service that are frozen and have
+no own keys", "builds the limiter from the team limits: the client's
+requests show it" (A4); `test/lint-rules.test.ts`, "eslint: a tool takes the
+context (src/tools/**)".
 
 - **Grep before editing** (`test/`, `spyOn(` on an instance; casts or
   bracket access to `host`, `limiter`, `cached`, `inFlight`, `ttlS`):
@@ -282,16 +293,21 @@ Built in one session, split point not taken. Starting commit `dd191ec`
 - **Full review fixes** (range `dd191ec..416641e`): probes on `416641e`'s
   config, in memory: `..//config.js`, `..\\config.js` (`src/tools/x.ts`),
   `../../client//http.js`, `../../schema//index.js` (`src/tools/core/x.ts`)
-  each gave no rule; `import type { X } from "./../config.js"` and
+  each gave no rule (the orchestrator's probe on `d8b7967`, after the
+  scoped round: `../.x/../config.js` and `../..x/../config.js` in
+  `src/tools/x.ts` still give none, `../../.x/../client/http.js` is refused
+  by the `**/client/http` glob; owner: its own row, see Open doubts);
+  `import type { X } from "./../config.js"` and
   `export { HttpClient } from "../../client/http.js"` were already refused
   (the task file's "applies to type imports too" stands). The regex gained
   `//|\\|%|\?|#`. Against `416641e`'s config 7 new cases failed: "refuses
-  in %s a value import of %s" for `..//config.js`, `..\\config.js`,
+  in %s a value import of %s" for `..//config.js`, `..\config.js`,
   `../../client//http.js`, `../../schema//index.js`, `../%63onfig.js`,
   `../config.js?x`, `../config.js#x`; the type-import and re-export cases
   pass on both. Against `dd191ec`'s `src/client/rate-limit.ts` the new rows
   "an assignment to %s through a cast leaves the refusal as it was" for
-  `below`, `expire`, `left` failed, with the nine earlier ones.
+  `below`, `expire`, `left` failed, with the seven earlier ones (the six
+  field rows and the own-keys case).
 - Wording: `grep -rn "hardening row" src docs/architecture` prints nothing;
   `grep -c "hostile code" docs/architecture/overview.md` prints 2.
 
@@ -299,8 +315,25 @@ Built in one session, split point not taken. Starting commit `dd191ec`
 none
 
 ## Open doubts
-none
+- Known gap, owner's decision of 2026-11-23 after the scoped round: a
+  segment starting with a dot followed by `..` (`../.x/../config.js`,
+  `../..x/../config.js` in `src/tools/x.ts`) is not refused; the regex's
+  `[^/.]` skips it and only `config`'s globs are anchored. It is PLAN's
+  `proposed` row T-051 (an allow-list of shortest-form specifiers), before
+  T-019, T-042 and T-043. Said in `eslint.config.mjs`, `src/tools/context.ts`
+  and `docs/architecture/overview.md`.
+- `.constructor` on `context.http` and `context.schema` reaches the class;
+  neither the freeze nor the lint block refuses it (stated in the same
+  three places).
+- `src/client/rate-limit.ts` is not in the ban list: a tool can build its
+  own `RateLimiter` (parked, `docs/improvements.md`, entry stamped
+  `d8b7967`).
+- Beyond the letter, accepted by the orchestrator: the limiter's `expire`,
+  `below` and `left` are `#` methods.
 
 ## Context pressure
+ok
 
 ## Next action
+`/decompose` sizes T-051 (T-019, T-042 and T-043 wait for it); then
+`/pickup` takes T-016.

@@ -12,8 +12,12 @@
 //     tool's mistake or a cast cannot re-point the host, swap the limiter or
 //     drop the cache. Not claimed: hostile code in the process, which can
 //     patch a prototype or read `process.env`; nor `.constructor` on the
-//     client or the service, which reaches the class (the lint block for
-//     src/tools/** is what keeps a tool from building its own).
+//     client or the service, which reaches the class: the lint block for
+//     src/tools/** does not refuse it either. That block refuses importing
+//     the config, the client and the two schema modules in the forms its
+//     tests list; a segment starting with a dot followed by `..`
+//     (`../.x/../config.js`) still reaches `config` (PLAN, the proposed
+//     allow-list row of 2026-11-23).
 //   - `ticketOutput` with the team `fields` already given.
 //   - The API key goes to the client, which keeps it in a private field: the
 //     context has no `config`, `domain` or `apiKey`, and the key cannot be

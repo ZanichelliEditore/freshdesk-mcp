@@ -89,6 +89,11 @@ export default tseslint.config(
               // A specifier not in its shortest form, which the globs above
               // let through: `./../x`, `a/./x`, `name/../x`; and any `//`,
               // `\`, `%`, `?` or `#`, which the globs do not see through.
+              // Refuses the forms test/lint-rules.test.ts lists, no more: a
+              // segment starting with a dot followed by `..`
+              // (`../.x/../config.js`) still reaches `config` (PLAN, the
+              // proposed allow-list row of 2026-11-23). `.constructor` on the
+              // client or the schema service is not refused by lint.
               regex: "^\\./\\.\\.(/|$)|/\\./|(^|/)[^/.][^/]*/\\.\\.(/|$)|//|\\\\|%|\\?|#",
               message:
                 "Write the import path in its shortest form: no `.` or `name/..` segment, no `//`, `\\`, `%`, `?` or `#`.",
