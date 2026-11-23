@@ -1,0 +1,46 @@
+// Every item of a paged list (agents, groups: SPEC §7.3), each page checked by
+// a zod schema before the next is asked for.
+//
+// Pages of PER_PAGE (Freshdesk's maximum) through `paginate`, at most
+// MAX_PAGES of them: past the cap the list ends where it stopped.
+//
+// A page in any other shape is `server` with that page's real status, not
+// retryable, and no further page is asked for. Its message is fixed text: it
+// quotes nothing from the body. An HTTP failure is returned unchanged.
+
+import type { z } from "zod";
+import type { FreshdeskError } from "../errors.js";
+import type { HttpClient } from "../http.js";
+
+export const PER_PAGE = 100;
+export const MAX_PAGES = 10;
+
+export type ListResult<T> = { ok: true; items: T[] } | { ok: false; error: FreshdeskError };
+
+/** `noun` names the list in the error message: "agents", "groups". */
+export async function listAll<T>(
+  http: HttpClient,
+  path: string,
+  item: z.ZodType<T>,
+  noun: string,
+): Promise<ListResult<T>> {
+  const items: T[] = [];
+  const pages = http.paginate({ path, query: { per_page: PER_PAGE } }, { pages: MAX_PAGES });
+  for await (const result of pages) {
+    if (!result.ok) return result;
+    const parsed = item.array().safeParse(result.body);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: {
+          code: "server",
+          http_status: result.status,
+          message: `Freshdesk sent ${noun} in an unexpected shape (HTTP ${result.status}).`,
+          retryable: false,
+        },
+      };
+    }
+    items.push(...parsed.data);
+  }
+  return { ok: true, items };
+}
