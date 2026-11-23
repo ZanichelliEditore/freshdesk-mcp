@@ -152,7 +152,7 @@ describe("createContext: team fields", () => {
     }
   });
 
-  it("freezes the team settings and itself: no tool can unhide a field or lower a limit", async () => {
+  it("freezes the team settings and the context object", async () => {
     const context = contextFor({ fields: { Hobby: { hidden: true } } });
     queueLoad();
     const schema = await schemaOf(context);

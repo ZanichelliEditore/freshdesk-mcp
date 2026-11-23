@@ -130,8 +130,9 @@ export interface PageCap {
 
 export class HttpClient {
   private readonly host: string;
-  // Real private fields: the key and the dispatcher that carries it are not
-  // properties, so no holder of the client can read or print them.
+  // Real private fields: the key and the dispatcher are not properties, so
+  // they cannot be read or printed from the client. Nothing more is claimed:
+  // `host` and `limiter` are ordinary properties (PLAN, the hardening row).
   readonly #authorization: string;
   readonly #dispatcher: Dispatcher;
   private readonly limiter: RateLimiter;

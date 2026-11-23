@@ -4,14 +4,14 @@
 //   - One limiter, shared by the client: built from the team `limits`.
 //   - One schema service on that client, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
-//     the context's own frozen copy, and the context is frozen: a tool cannot
-//     unhide a field or lower a limit, and a later change to the `Config`
-//     changes nothing here.
-//   - `ticketOutput` with the team `fields` already given, so no tool decides
-//     which fields are hidden.
+//     the context's own frozen copy, and the context object is frozen: a
+//     later change to the `Config` changes nothing here. The limiter, the
+//     client and the schema service are not frozen (PLAN, the hardening row).
+//   - `ticketOutput` with the team `fields` already given.
 //   - The API key goes to the client, which keeps it in a private field: the
-//     context has no `config`, `domain` or `apiKey`, and neither serialising
-//     nor inspecting it shows the key or the Authorization header.
+//     context has no `config`, `domain` or `apiKey`, and the key cannot be
+//     read or printed from the context (serialised or inspected, it shows
+//     neither the key nor the Authorization header).
 //
 // The dispatcher is the caller's (RFC 2026-11-23, rule 2): `cli.ts` passes
 // the Agent, tests the mock.
