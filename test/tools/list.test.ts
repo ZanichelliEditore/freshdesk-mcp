@@ -230,6 +230,101 @@ describe("readCursor: refused before anything is sent", () => {
   });
 });
 
+describe("readCursor: non-canonical forms carrying the real digest", () => {
+  const digestOf = (n: number): string => cursorFor(CALL, n).split(".")[1] as string;
+  it.each([
+    ["a leading zero", () => `030.${digestOf(30)}`],
+    ["an exponent", () => `1e3.${digestOf(1000)}`],
+    ["a leading space", () => ` 30.${digestOf(30)}`],
+    ["hexadecimal", () => `0x1e.${digestOf(30)}`],
+  ])("%s is refused as not this server's", (_name, make) => {
+    const error = refused(withCursor(CALL, make()));
+    expect(error.message).toMatch(/not one this server gave/);
+  });
+});
+
+describe("readCursor: the tool's maximum position", () => {
+  it("the maximum is accepted, one above it refused", () => {
+    expect(readCursor(withCursor(CALL, cursorFor(CALL, 100)), 100)).toEqual({
+      ok: true,
+      position: 100,
+    });
+    expect(readCursor(withCursor(CALL, cursorFor(CALL, 101)))).toEqual({ ok: true, position: 101 });
+    const result = readCursor(withCursor(CALL, cursorFor(CALL, 101)), 100);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatchObject({ code: "validation", http_status: null, retryable: false });
+    expect(result.error.message).toMatch(/past the last position/);
+    expect(result.error.message).not.toContain("101");
+  });
+
+  it("a maximum of 0 accepts no cursor and position 0 only", () => {
+    expect(readCursor(CALL, 0)).toEqual({ ok: true, position: 0 });
+    expect(readCursor(withCursor(CALL, cursorFor(CALL, 0)), 0)).toEqual({ ok: true, position: 0 });
+    expect(readCursor(withCursor(CALL, cursorFor(CALL, 1)), 0).ok).toBe(false);
+  });
+
+  it.each([-1, 1.5, Number.NaN, Infinity])("a maximum of %s throws", (max) => {
+    expect(() => readCursor(CALL, max)).toThrow(TypeError);
+  });
+});
+
+describe("arguments are the raw JSON ones: anything else throws", () => {
+  class Filter {
+    status = "Open";
+  }
+  const notJson: [string, unknown][] = [
+    ["a Date", new Date(0)],
+    ["a Map", new Map([["a", 1]])],
+    ["a Set", new Set([1])],
+    ["a class instance", new Filter()],
+    ["NaN", Number.NaN],
+    ["Infinity", Infinity],
+    ["-Infinity", -Infinity],
+    ["a BigInt", 10n],
+    ["a function", () => 1],
+    ["a symbol", Symbol("x")],
+  ];
+  it.each(notJson)("%s, at the top, in an array or in an object", (_name, value) => {
+    for (const args of [{ x: value }, { x: [value] }, { x: { y: value } }]) {
+      const call: ListCall = { tool: CALL.tool, args };
+      expect(() => listEnvelope(call, { items: [], next: 1, api_calls_used: 1 })).toThrow(
+        TypeError,
+      );
+      expect(() => readCursor({ tool: CALL.tool, args: { ...args, cursor: "1.x" } })).not.toThrow();
+      const good = cursorFor({ tool: CALL.tool, args: {} }, 1);
+      expect(() => readCursor({ tool: CALL.tool, args: { ...args, cursor: good } })).toThrow(
+        TypeError,
+      );
+    }
+  });
+
+  it("a null-prototype object is a plain object", () => {
+    const args = Object.assign(Object.create(null) as Record<string, unknown>, { status: "Open" });
+    const cursor = cursorFor({ tool: CALL.tool, args }, 5);
+    expect(readCursor({ tool: CALL.tool, args: { status: "Open", cursor } })).toEqual({
+      ok: true,
+      position: 5,
+    });
+  });
+
+  it("-0 is the same argument as 0, as in JSON", () => {
+    const cursor = cursorFor({ tool: CALL.tool, args: { n: 0 } }, 5);
+    expect(readCursor({ tool: CALL.tool, args: { n: -0, cursor } })).toEqual({
+      ok: true,
+      position: 5,
+    });
+  });
+
+  it("an undefined argument is an absent one", () => {
+    const cursor = cursorFor({ tool: CALL.tool, args: {} }, 5);
+    expect(readCursor({ tool: CALL.tool, args: { agent: undefined, cursor } })).toEqual({
+      ok: true,
+      position: 5,
+    });
+  });
+});
+
 describe("readCursor before a request: nothing is sent on a refusal", () => {
   const DOMAIN = "acme.freshdesk.com";
   let mock: MockAgent;
