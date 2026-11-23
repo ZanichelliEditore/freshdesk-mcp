@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-004, T-009
 - **Created:** 2026-11-20
 
@@ -37,18 +37,21 @@
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `f8d7db7`: `src/schema/index.ts` (`SchemaService.get()`: fields, agents, groups once per TTL, in-flight load shared, failure not cached, agents reduced to id and name, `truncated` kept), `src/schema/output.ts` (`ticketOutput`), `test/fixtures/schema.ts`, `test/schema/output.test.ts`.
+- `460a596`: review fixes: hidden keys also match a default field's ticket key and compare trimmed/NFC/lower-cased; `TICKET_KEY` a Map, status choices via `Object.hasOwn`; schema readonly and deep-frozen; clock gone back expires the cache; empty nested top level shows no path.
+- Acceptance: `test/schema/output.test.ts::SchemaService: load and TTL cache` (one fetch per TTL by MockAgent call history; `does not refetch 1 ms before the TTL ends, and refetches once it has`, fake clock); `ticketOutput: labelled values::maps a raw ticket to {label: value label}, ...`; `ticketOutput: hidden fields`. 34 tests.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Builder's choices for the owner: hidden-field matching ignores case (and, since `460a596`, spaces and Unicode form; also the ticket key); a key the ticket does not carry leaves the field out while `null` stays `null`; requester, company and product show raw ids; a hidden key that matches no field is silent (warning parked, `docs/improvements.md` `f8d7db7`).
+- Unresolved ids are strings (`unknown status 9`, `agent 9 (name not loaded: the agent list is incomplete)`), not a structured value: builder's choice.
+- The TTL is a constructor argument; nothing builds a `SchemaService` from `limits.schema_ttl_s` yet, and T-011 does not either: PLAN row T-015 `proposed`.
+- Still parked: about 5 min worst case per list load (T-009 Low 4); §7.4 wrapping of names and free text before `ticketOutput`'s first tool caller.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

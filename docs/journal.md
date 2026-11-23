@@ -52,3 +52,5 @@ stands for. End an entry with the task id it came from.
 - zod 4 does not copy a `__proto__` key from parsed JSON into its output, neither in `z.record` nor in `z.looseObject`: the key is dropped silently, not refused, and the result's prototype stays `Object.prototype` (zod ^4.2, probed in `test/client/resources/ticket-fields.test.ts`). (T-008)
 - An async generator's return value is invisible to `for await`: adding one (`paginate`'s `truncated`) breaks no existing caller, and a caller that needs it drives `next()` by hand. (T-009)
 - undici's `MockAgent` call history `path` has no query string; `fullUrl` has it. A test asserting `per_page` or `page` must read `fullUrl`. (T-009)
+- `Object.freeze` on a `Map` does not stop `set`/`delete`: a deep freeze that walks `Object.values` leaves a map mutable, and `ReadonlyMap` protects only at compile time. (T-010)
+- A `Record` lookup with a name from the tenant (`TICKET_KEY[name]`) reaches `Object.prototype` (`constructor`, `toString`); a `Map` or an `Object.hasOwn` guard does not. (T-010)
