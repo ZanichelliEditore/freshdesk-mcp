@@ -12,6 +12,9 @@
 // Freshdesk's `errors[]` is passed through on every `validation` error,
 // capped at MAX_FIELD_ERRORS items of MAX_FIELD_TEXT characters per string.
 // It is response-body text: return it to the caller, never log it.
+// A `validation` error is also built locally, with `http_status: null`, when
+// a tool's input fails the schema before anything is sent
+// (src/schema/input.ts): its `errors[]` echoes that input, under the same caps.
 // `message` is fixed text: it never quotes the response body, a header
 // value or a cause's free text.
 
@@ -26,12 +29,12 @@ export interface FieldError {
 
 export interface FreshdeskError {
   code: ErrorCode;
-  /** `null` when no response arrived (`network`). */
+  /** `null` when no response arrived (`network`) or nothing was sent (a local `validation`). */
   http_status: number | null;
   message: string;
   retryable: boolean;
   retry_after_s?: number;
-  /** Freshdesk's per-field errors, on `validation` only. */
+  /** Per-field errors, on `validation` only: Freshdesk's, or the schema's when built locally. */
   errors?: FieldError[];
 }
 

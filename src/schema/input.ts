@@ -3,10 +3,11 @@
 //
 //   - A field is named by its API name, compared exactly, or by its label,
 //     compared trimmed, NFC-normalised and lower-cased (`fold`, as for hidden
-//     fields). An API name wins over another field's label. A label two
-//     fields share is refused, naming their API names; so is a field given
-//     twice and a name no field has. A nested level is not a field: its top
-//     field takes the path.
+//     fields). A key that names more than one field, as a shared label or as
+//     one field's API name and another's label, is refused, naming their API
+//     names; so is a field given twice, a name no field has, and a key whose
+//     value would land where another key's already did. A nested level is not
+//     a field: its top field takes the path.
 //   - Where a value goes: a default field's at the body's top level under its
 //     ticket key (`agent` → `responder_id`), a custom field's under
 //     `custom_fields`, as output.ts reads them.
@@ -17,19 +18,31 @@
 //       status                  its agent name, or an id it has → the id
 //       priority, source        a name, or an id among them → the id
 //       nested field            "A > B > C": each level among the choices
-//                               under the one before; a shorter path is
-//                               allowed, a longer one refused
-//       anything else           passed through unchanged (agent, group and
-//                               requester stay ids: no name lookup here)
+//                               under the one before; a shorter path sends
+//                               `null` for the levels after it, a longer one
+//                               is refused
+//       any other type          with a non-empty list of choices, one of
+//                               them; with choices of another shape,
+//                               refused; with none, passed through unchanged
+//                               (agent, group and requester stay ids)
+//     A status, priority or source name two ids share is refused; a status
+//     key that is not a whole number is not offered.
 //   - `null` clears a field (every level of a nested one); a key not given
-//     is not sent. `null` and absent `choices` are alike: no valid choice.
+//     is not sent. `null` and absent `choices` are alike.
 //   - Every problem is reported, as one `validation` error whose `errors[]`
-//     has one entry per input key; an invalid choice lists the valid ones at
-//     the failing level. `http_status` is `null`: nothing was sent.
-//   - Lookups go through Maps and own keys only, and the body is built with
-//     defined properties: a name such as `__proto__` or `constructor` is data.
+//     has one entry per input key, at most MAX_FIELD_ERRORS; an invalid
+//     choice lists the valid ones at the failing level. Echoed keys and
+//     values and the choice lists are clipped, each message to
+//     MAX_FIELD_TEXT. `http_status` is `null`: nothing was sent.
+//   - Lookups use own keys only, and the body is built with defined
+//     properties: a name such as `__proto__` or `constructor` is data.
 
-import type { FieldError, FreshdeskError } from "../client/errors.js";
+import {
+  type FieldError,
+  type FreshdeskError,
+  MAX_FIELD_ERRORS,
+  MAX_FIELD_TEXT,
+} from "../client/errors.js";
 import type { TicketField } from "../client/resources/ticket-fields.js";
 import type { Schema } from "./index.js";
 import { fold, ticketKey } from "./output.js";
@@ -37,6 +50,10 @@ import { fold, ticketKey } from "./output.js";
 type Raw = Record<string, unknown>;
 
 export type InputResult = { ok: true; body: Raw } | { ok: false; error: FreshdeskError };
+
+/** Characters of an echoed key or value, and of a list of choices, in a message. */
+const MAX_QUOTE = 80;
+const MAX_LIST = 300;
 
 /** One problem with one input key, before it becomes a FieldError. */
 class Refusal {
@@ -59,23 +76,47 @@ function put(target: Raw, key: string, value: unknown): void {
   });
 }
 
-function findField(schema: Schema, key: string): TicketField | Refusal {
-  const byName = schema.fields.find((field) => field.name === key);
-  if (byName) return byName;
-  const byLabel = schema.fields.filter((field) => fold(field.label) === fold(key));
-  if (byLabel.length === 1) return byLabel[0]!;
-  if (byLabel.length > 1) {
-    const names = byLabel.map((field) => field.name).join(", ");
-    return new Refusal(
-      "ambiguous_field",
-      `The label "${key}" belongs to several fields (${names}): name one by its API name.`,
-    );
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** A key or value as JSON, clipped: what a message may echo of the input. */
+function quote(value: unknown): string {
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    text = undefined;
   }
-  return new Refusal("unknown_field", `No ticket field is named or labelled "${key}".`);
+  return clip(text ?? String(typeof value), MAX_QUOTE);
 }
 
 function listed(options: readonly string[]): string {
-  return options.length > 0 ? options.join(", ") : "(none)";
+  if (options.length === 0) return "(none)";
+  const shown: string[] = [];
+  let length = 0;
+  for (const option of options) {
+    const text = quote(option);
+    if (shown.length > 0 && length + text.length > MAX_LIST) break;
+    shown.push(text);
+    length += text.length + 2;
+  }
+  const rest = options.length - shown.length;
+  return shown.join(", ") + (rest > 0 ? ` … and ${rest} more` : "");
+}
+
+function findField(schema: Schema, key: string): TicketField | Refusal {
+  const found = schema.fields.filter(
+    (field) => field.name === key || fold(field.label) === fold(key),
+  );
+  if (found.length === 1) return found[0]!;
+  if (found.length > 1) {
+    return new Refusal(
+      "ambiguous_field",
+      `${quote(key)} names several fields (${listed(found.map((field) => field.name))}): name one by its API name or its own label.`,
+    );
+  }
+  return new Refusal("unknown_field", `No ticket field is named or labelled ${quote(key)}.`);
 }
 
 /** The option `wanted` names: exact first, then the one option that folds alike. */
@@ -87,13 +128,13 @@ function pick(options: readonly string[], wanted: unknown, where: string): strin
     if (alike.length > 1) {
       return new Refusal(
         "ambiguous_choice",
-        `"${wanted}" matches several choices for ${where} (${alike.join(", ")}): give one exactly.`,
+        `${quote(wanted)} matches several choices for ${where} (${listed(alike)}): give one exactly.`,
       );
     }
   }
   return new Refusal(
     "invalid_choice",
-    `${JSON.stringify(wanted)} is not a valid choice for ${where}. Valid choices: ${listed(options)}.`,
+    `${quote(wanted)} is not a valid choice for ${where}. Valid choices: ${listed(options)}.`,
   );
 }
 
@@ -104,7 +145,9 @@ function namedIds(field: TicketField): [string, number][] {
   const pairs: [string, number][] = [];
   for (const [key, entry] of Object.entries(choices)) {
     if (field.type === "default_status") {
-      if (Array.isArray(entry) && typeof entry[0] === "string") pairs.push([entry[0], Number(key)]);
+      if (/^\d+$/.test(key) && Array.isArray(entry) && typeof entry[0] === "string") {
+        pairs.push([entry[0], Number(key)]);
+      }
     } else if (typeof entry === "number") {
       pairs.push([key, entry]);
     }
@@ -115,13 +158,21 @@ function namedIds(field: TicketField): [string, number][] {
 function idValue(field: TicketField, value: unknown): number | Refusal {
   const pairs = namedIds(field);
   if (typeof value === "number" && pairs.some(([, id]) => id === value)) return value;
+  const where = `field ${field.label}`;
   const name = pick(
     pairs.map(([label]) => label),
     value,
-    `field ${field.label}`,
+    where,
   );
   if (name instanceof Refusal) return name;
-  return pairs.find(([label]) => label === name)![1];
+  const ids = pairs.filter(([label]) => label === name).map(([, id]) => id);
+  if (ids.length > 1) {
+    return new Refusal(
+      "ambiguous_choice",
+      `${quote(name)} names several ids for ${where} (${ids.join(", ")}): give the id.`,
+    );
+  }
+  return ids[0]!;
 }
 
 function levelFields(field: TicketField): { name: string; label: string }[] {
@@ -143,10 +194,10 @@ function nestedValues(field: TicketField, value: unknown): [string, unknown][] |
   if (parts.length > levels.length) {
     return new Refusal(
       "invalid_choice",
-      `Field ${field.label} has ${levels.length} levels; the path ${JSON.stringify(value)} has ${parts.length}.`,
+      `Field ${field.label} has ${levels.length} levels; the path ${quote(value)} has ${parts.length}.`,
     );
   }
-  const out: [string, unknown][] = [];
+  const out: [string, unknown][] = levels.map((level) => [level.name, null]);
   const chosen: string[] = [];
   let node: unknown = field.choices;
   for (const [i, part] of parts.entries()) {
@@ -156,9 +207,9 @@ function nestedValues(field: TicketField, value: unknown): [string, unknown][] |
         ? Object.keys(node)
         : [];
     const under = chosen.length > 0 ? ` under ${chosen.join(" > ")}` : "";
-    const picked = pick(options, part.trim(), `level ${levels[i]!.label}${under}`);
+    const picked = pick(options, part, `level ${levels[i]!.label}${under}`);
     if (picked instanceof Refusal) return picked;
-    out.push([levels[i]!.name, picked]);
+    out[i]![1] = picked;
     chosen.push(picked);
     node = isRecord(node) && Object.hasOwn(node, picked) ? node[picked] : undefined;
   }
@@ -179,13 +230,20 @@ function fieldValues(field: TicketField, value: unknown): [string, unknown][] | 
     case "custom_dropdown":
     case "default_ticket_type": {
       const options = Array.isArray(field.choices) ? field.choices : [];
-      const choice = pick(
-        options,
-        typeof value === "string" ? value.trim() : value,
-        `field ${field.label}`,
-      );
+      const choice = pick(options, value, `field ${field.label}`);
       return choice instanceof Refusal ? choice : [[field.name, choice]];
     }
+  }
+  const choices = field.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const choice = pick(choices, value, `field ${field.label}`);
+    return choice instanceof Refusal ? choice : [[field.name, choice]];
+  }
+  if (choices && !Array.isArray(choices) && Object.keys(choices).length > 0) {
+    return new Refusal(
+      "unsupported_field",
+      `Field ${field.label} has choices this server cannot check: it cannot be set here.`,
+    );
   }
   return [[field.name, value]];
 }
@@ -198,31 +256,47 @@ export function ticketInput(schema: Schema, input: Raw): InputResult {
 
   for (const [key, value] of Object.entries(input)) {
     const field = findField(schema, key);
-    const values =
+    let values =
       field instanceof Refusal
         ? field
         : seen.has(field.name)
           ? new Refusal("duplicate_field", `Field ${field.label} is given more than once.`)
           : fieldValues(field, value);
+    const isDefault = !(field instanceof Refusal) && field.default;
+    const target = isDefault ? body : custom;
+    if (
+      !(values instanceof Refusal) &&
+      values.some(([name]) => Object.hasOwn(target, ticketKey(name, isDefault)))
+    ) {
+      values = new Refusal(
+        "duplicate_field",
+        `${quote(key)} sets a ticket field another key already sets.`,
+      );
+    }
     if (values instanceof Refusal) {
-      problems.push({ field: key, code: values.code, message: values.message });
+      problems.push({
+        field: clip(key, MAX_FIELD_TEXT),
+        code: values.code,
+        message: clip(values.message, MAX_FIELD_TEXT),
+      });
       continue;
     }
-    const { default: isDefault, name: fieldName } = field as TicketField;
-    seen.add(fieldName);
-    for (const [name, shown] of values)
-      put(isDefault ? body : custom, ticketKey(name, isDefault), shown);
+    seen.add((field as TicketField).name);
+    for (const [name, shown] of values) put(target, ticketKey(name, isDefault), shown);
   }
 
   if (problems.length > 0) {
+    const hidden = problems.length - MAX_FIELD_ERRORS;
     return {
       ok: false,
       error: {
         code: "validation",
         http_status: null,
-        message: "Some ticket fields are not valid; nothing was sent.",
+        message:
+          "Some ticket fields are not valid; nothing was sent." +
+          (hidden > 0 ? ` ${hidden} more problems are not listed.` : ""),
         retryable: false,
-        errors: problems,
+        errors: problems.slice(0, MAX_FIELD_ERRORS),
       },
     };
   }

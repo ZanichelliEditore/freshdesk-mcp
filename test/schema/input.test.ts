@@ -38,11 +38,11 @@ describe("ticketInput: field names", () => {
     const accented = {
       id: 2001,
       name: "cf_cafe",
-      label: "Café",
+      label: "Caf" + String.fromCharCode(0xe9), // precomposed
       type: "custom_text",
       default: false,
     };
-    expect(body({ CAFÉ: "x" }, schema([accented]))).toEqual({
+    expect(body({ ["CAFE" + String.fromCharCode(0x301)]: "x" }, schema([accented]))).toEqual({
       custom_fields: { cf_cafe: "x" },
     });
   });
@@ -53,10 +53,16 @@ describe("ticketInput: field names", () => {
     ]);
   });
 
-  it("prefers an API name to another field's label", () => {
+  it("refuses a key that is one field's API name and another's label, naming both", () => {
     // `product` is the API name of "Catalogue"; "Product" is the label of cf_kit.
-    expect(body({ product: 7001 })).toEqual({ product_id: 7001 });
-    expect(body({ Product: "Tools" })).toEqual({ custom_fields: { cf_kit: "Tools" } });
+    const [error] = errors({ product: 7001 });
+    expect(error).toMatchObject({ field: "product", code: "ambiguous_field" });
+    expect(error!.message).toContain('"cf_kit", "product"');
+    // Each stays reachable by a key that names it alone.
+    expect(body({ Catalogue: 7001 })).toEqual({ product_id: 7001 });
+    expect(body({ Product: "Tools > Spanners" })).toMatchObject({
+      custom_fields: { cf_kit: "Tools", cf_family: "Spanners" },
+    });
   });
 
   it("puts a default field at the top level under its ticket key", () => {
@@ -172,7 +178,7 @@ describe("ticketInput: values", () => {
     const [error] = errors({ Colour: "Mauve" });
     expect(error).toMatchObject({ field: "Colour", code: "invalid_choice" });
     expect(error!.message).toContain("Mauve");
-    expect(error!.message).toContain("Amber, Teal");
+    expect(error!.message).toContain('"Amber", "Teal"');
   });
 
   it("refuses a value that is not a string where a choice is due", () => {
@@ -208,9 +214,9 @@ describe("ticketInput: values", () => {
   it("refuses an unknown status, priority or source, listing the names", () => {
     const [status, priority, source] = errors({ Status: 9, Priority: "Meh", Source: "Fax" });
     expect(status).toMatchObject({ field: "Status", code: "invalid_choice" });
-    expect(status!.message).toContain("Open, Closed");
-    expect(priority!.message).toContain("Low, Medium, High, Urgent");
-    expect(source!.message).toContain("Email, Portal, Phone");
+    expect(status!.message).toContain('"Open", "Closed"');
+    expect(priority!.message).toContain('"Low", "Medium", "High", "Urgent"');
+    expect(source!.message).toContain('"Email", "Portal", "Phone"');
   });
 });
 
@@ -256,11 +262,13 @@ describe("ticketInput: nested fields", () => {
     });
   });
 
-  it("accepts a path that stops before the last level", () => {
+  it("sends null for the levels after a path that stops early", () => {
     expect(body({ Product: "Gadgets > Widgets" })).toEqual({
-      custom_fields: { cf_kit: "Gadgets", cf_family: "Widgets" },
+      custom_fields: { cf_kit: "Gadgets", cf_family: "Widgets", cf_model: null },
     });
-    expect(body({ Product: "Tools" })).toEqual({ custom_fields: { cf_kit: "Tools" } });
+    expect(body({ Product: "Tools" })).toEqual({
+      custom_fields: { cf_kit: "Tools", cf_family: null, cf_model: null },
+    });
   });
 
   it("clears every level on null", () => {
@@ -274,21 +282,21 @@ describe("ticketInput: nested fields", () => {
     expect(error).toMatchObject({ field: "Product", code: "invalid_choice" });
     expect(error!.message).toContain("Gizmos");
     expect(error!.message).toContain("level Product");
-    expect(error!.message).toContain("Gadgets, Tools");
+    expect(error!.message).toContain('"Gadgets", "Tools"');
   });
 
   it("refuses an invalid second level, listing the choices under the first", () => {
     const [error] = errors({ Product: "Tools > Sprockets > Red sprocket" });
     expect(error).toMatchObject({ code: "invalid_choice" });
     expect(error!.message).toContain("level Family under Tools");
-    expect(error!.message).toContain(": Spanners.");
+    expect(error!.message).toContain(': "Spanners".');
   });
 
   it("refuses an invalid third level, listing the choices under the second", () => {
     const [error] = errors({ Product: "Gadgets > Sprockets > Small widget" });
     expect(error).toMatchObject({ code: "invalid_choice" });
     expect(error!.message).toContain("level Model under Gadgets > Sprockets");
-    expect(error!.message).toContain("Blue sprocket, Red sprocket");
+    expect(error!.message).toContain('"Blue sprocket", "Red sprocket"');
   });
 
   it("refuses a path longer than the field's levels", () => {
@@ -303,5 +311,156 @@ describe("ticketInput: nested fields", () => {
     });
     expect(errors({ Product: "" })[0]).toMatchObject({ code: "invalid_choice" });
     expect(errors({ Product: ["Gadgets"] })[0]).toMatchObject({ code: "invalid_choice" });
+  });
+});
+
+describe("ticketInput: fail-closed edges", () => {
+  it("checks a field of another type against its list of choices", () => {
+    const multi = {
+      id: 2007,
+      name: "cf_tags",
+      label: "Tags",
+      type: "custom_multi_select_dropdown",
+      default: false,
+      choices: ["A"],
+    };
+    const s = schema([multi]);
+    expect(ticketInput(s, { Tags: { any: "object" } }).ok).toBe(false);
+    expect(errors({ Tags: "B" }, s)[0]).toMatchObject({ code: "invalid_choice" });
+    expect(body({ Tags: "a" }, s)).toEqual({ custom_fields: { cf_tags: "A" } });
+  });
+
+  it("refuses a field of another type whose choices are not a list", () => {
+    const odd = {
+      id: 2008,
+      name: "cf_odd",
+      label: "Odd",
+      type: "custom_future_kind",
+      default: false,
+      choices: { Low: 1 },
+    };
+    expect(errors({ Odd: "Low" }, schema([odd]))[0]).toMatchObject({
+      field: "Odd",
+      code: "unsupported_field",
+    });
+  });
+
+  it("passes a field of another type through when its choices are empty", () => {
+    const text = {
+      id: 2009,
+      name: "cf_memo",
+      label: "Memo",
+      type: "custom_text",
+      default: false,
+      choices: [],
+    };
+    expect(body({ Memo: "hello" }, schema([text]))).toEqual({
+      custom_fields: { cf_memo: "hello" },
+    });
+  });
+
+  it("refuses a key whose value lands where another key's already did", () => {
+    // A field named like a nested level of Product.
+    const alias = {
+      id: 2010,
+      name: "cf_family",
+      label: "Family alias",
+      type: "custom_text",
+      default: false,
+    };
+    expect(errors({ Product: "Tools", "Family alias": "x" }, schema([alias]))).toEqual([
+      expect.objectContaining({ field: "Family alias", code: "duplicate_field" }),
+    ]);
+  });
+
+  it("refuses a status name two ids share", () => {
+    const s = schema();
+    s.fields.find((f) => f.name === "status")!.choices = {
+      "2": ["Open", "a"],
+      "3": ["Open", "b"],
+    };
+    expect(errors({ Status: "Open" }, s)[0]).toMatchObject({ code: "ambiguous_choice" });
+    expect(body({ Status: 3 }, s)).toEqual({ status: 3 });
+  });
+
+  it("refuses a status name that folds like two others, none exact", () => {
+    const s = schema();
+    s.fields.find((f) => f.name === "status")!.choices = {
+      "2": ["Open", "a"],
+      "3": ["OPEN", "b"],
+    };
+    expect(errors({ Status: "open" }, s)[0]).toMatchObject({ code: "ambiguous_choice" });
+  });
+
+  it("refuses an ambiguous choice on a nested level", () => {
+    const sizes = {
+      id: 2011,
+      name: "cf_garment",
+      label: "Garment",
+      type: "nested_field",
+      default: false,
+      choices: { Shirt: ["XL", "xl"] },
+      nested_ticket_fields: [{ name: "cf_fit", label: "Fit", level: 2 }],
+    };
+    expect(errors({ Garment: "Shirt > Xl" }, schema([sizes]))[0]).toMatchObject({
+      code: "ambiguous_choice",
+    });
+  });
+
+  it("refuses a status id given as a string", () => {
+    expect(errors({ Status: "2" })[0]).toMatchObject({ code: "invalid_choice" });
+  });
+
+  it("does not offer a status whose key is not a whole number", () => {
+    const s = schema();
+    s.fields.find((f) => f.name === "status")!.choices = { "2": ["Open", "a"], x: ["Weird", "b"] };
+    const [error] = errors({ Status: "Weird" }, s);
+    expect(error).toMatchObject({ code: "invalid_choice" });
+    expect(error!.message).not.toContain('Weird",');
+    expect(error!.message).toContain('Valid choices: "Open".');
+  });
+
+  it("refuses a path whose separator is not exactly ' > '", () => {
+    expect(errors({ Product: "Gadgets>Sprockets" })[0]).toMatchObject({ code: "invalid_choice" });
+    expect(errors({ Product: "Gadgets >Sprockets" })[0]).toMatchObject({ code: "invalid_choice" });
+  });
+
+  it("clips a long echoed value and a long list of choices", () => {
+    const many = {
+      id: 2012,
+      name: "cf_city",
+      label: "City",
+      type: "custom_dropdown",
+      default: false,
+      choices: Array.from({ length: 200 }, (_, i) => `Town number ${i}`),
+    };
+    const [error] = errors({ City: "z".repeat(5000) }, schema([many]));
+    expect(error!.message.length).toBeLessThanOrEqual(500);
+    expect(error!.message).toContain("…");
+    expect(error!.message).toMatch(/… and \d+ more\.$/);
+    expect(error!.message).not.toContain("z".repeat(100));
+  });
+
+  it("clips a message that quotes a long field label", () => {
+    const long = {
+      id: 2013,
+      name: "cf_long",
+      label: "L".repeat(1000),
+      type: "custom_dropdown",
+      default: false,
+      choices: ["A"],
+    };
+    const [error] = errors({ cf_long: "B" }, schema([long]));
+    expect(error!.message.length).toBeLessThanOrEqual(500);
+  });
+
+  it("clips a long key and caps the number of errors", () => {
+    const input = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, 1]));
+    const result = ticketInput(schema(), { ["q".repeat(1000)]: 1, ...input });
+    if (result.ok) throw new Error("expected an error");
+    expect(result.error.errors).toHaveLength(50);
+    expect(result.error.errors![0]!.field!.length).toBeLessThanOrEqual(500);
+    expect(result.error.errors![0]!.message).not.toContain("q".repeat(100));
+    expect(result.error.message).toContain("11 more problems are not listed");
   });
 });
