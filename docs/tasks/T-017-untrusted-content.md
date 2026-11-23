@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-011
 - **Created:** 2026-11-23
 
@@ -66,13 +66,64 @@ cap); `null` and numbers pass unchanged; `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+- `fef8a5f`: `src/tools/format.ts` (`untrusted`, `bodyText`, `htmlToText`,
+  `plainName`, `fieldValue`; `TEXT_CAP` 10,000, `NAME_CAP` 100) and
+  `test/tools/format.test.ts`; overview entry. No new dependency.
+- `1950f43` (full-round fixes, orchestrator's decisions of 2026-11-23):
+  every `<` inside a block and its entity spellings become `‹` (no
+  delimiter word is matched); `<` in JSON written `\u003c`; the truncation
+  marker follows CLOSE, outside the block; name types take only a string
+  or a number.
+- Handoff commit: one test, `test/tools/format.test.ts::truncation > cuts
+  a hostile value over the cap: one OPEN at the start, one CLOSE, then only
+  the marker`; comment wording (scoped round list B).
+- Acceptance, by test (`test/tools/format.test.ts`):
+  - each named value in one block: `untrusted: customer-written text is
+    one block > wraps a …` (subject to cc); free-text and unknown-type
+    fields: `fieldValue > wraps a free-text custom field`, `> wraps a field
+    of a type the code does not know`; closed types: `> does not wrap a
+    number, boolean or date`, `> does not wrap a choice found among the
+    field's choices…`;
+  - embedded delimiters, case, inner spaces, invisible characters,
+    look-alikes and entities in body_text and HTML: `an embedded delimiter
+    cannot end or open the block > …` (one OPEN at the start, one CLOSE, no
+    `<` inside);
+  - `body_text` first, HTML-only body with no tag: `bodyText: text, not
+    HTML > …`;
+  - code-point cut with marker and count: `truncation > …`;
+  - name helper on a name, a field label and a choice name, each with a tag
+    and over the cap: `plainName: admin-set text, not wrapped > strips tags
+    from …`;
+  - `null` and numbers unchanged: `untrusted … > passes null, undefined,
+    numbers and booleans unchanged`, `plainName … > passes null and numbers
+    unchanged`, `fieldValue … > passes null and numbers unchanged for any
+    type`.
+- Red first: before `format.ts` existed the file failed to load ("no
+  tests"); afterwards each mechanism was broken by hand in turn (entity
+  spellings, digit lookahead, JSON escape, marker position, name-type
+  guard, body_text first, code-point cut, choice check) and 1 to 23 cases
+  failed each time.
+- Linear time checked by hand on 1M-character adversarial inputs (runs of
+  `<`, `< `, `<script`, `<!--`, `&`, spaces): worst case under 200 ms,
+  ten times the 100k timing.
 
 ## Dead ends
-none
+- Recognising the delimiter word by pattern (`ticket…content` with a
+  backward walk to the `<`): invisible characters and look-alikes inside
+  the word passed it (full round, security #1). Replaced by turning every
+  `<` into `‹` (`1950f43`).
 
 ## Open doubts
-none
+- The acceptance's "one closing delimiter, at the end" predates the
+  marker-outside decision: a cut value ends with the marker after CLOSE.
+  Wording change proposed in HANDOFF (orchestrator's choice of 2026-11-23).
+- `ticketOutput` does not wrap: T-026 must apply `fieldValue` per field
+  (it needs the `TicketField`) and `plainName` to label keys; proposed
+  acceptance line in HANDOFF.
+- A `<` written by a customer (`"Ada" <ada@…>`) reads `‹` in every block.
 
 ## Context pressure
+ok
 
 ## Next action
+none: done.

@@ -10,9 +10,12 @@
 //     `<` becomes `‹`, and so does every entity spelling of it (`&lt`,
 //     `&#60`, `&#x3c`, any case, any leading zeros, with or without `;`), in
 //     plain text and in a decoded HTML body alike. No delimiter word is
-//     looked for, so invisible characters and look-alikes inside it change
-//     nothing. In JSON (an array or object) a `<` is written `\u003c`, so
-//     the value still parses the same.
+//     looked for, so invisible characters and look-alike letters inside the
+//     word change nothing. A look-alike of `<` itself (`＜` U+FF1C, `‹`, or a
+//     `‹` the customer typed) is left as written: it is not the delimiter.
+//     In JSON (an array or object) a `<` is written `\u003c`, so a `<` in a
+//     key or value parses back the same; its `&lt` / `&#60` / `&#x3c`
+//     spellings become `‹` as in any block.
 //   - Text, not HTML: `bodyText` takes `body_text` / `description_text` when
 //     it is a string, else converts the HTML body with `htmlToText`. No HTML
 //     parser: comments, script and style are dropped, `<br>` and the end of a
@@ -52,7 +55,11 @@ export const NAME_CAP = 100;
 export interface CutOptions {
   /** Code points kept; `TEXT_CAP` when absent. */
   cap?: number;
-  /** How to fetch the rest, said in the marker (e.g. "call get_ticket with ..."). */
+  /**
+   * How to fetch the rest, said in the marker (e.g. "call get_ticket with ...").
+   * The marker sits outside the block and `rest` is not neutralised: build it
+   * from server-written text only, never from ticket content.
+   */
   rest?: string;
 }
 
@@ -87,7 +94,8 @@ export function untrusted(value: unknown, options?: CutOptions): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "string") return wrap(value, options);
-  // `<` in a key or a value written as its JSON escape: it parses the same.
+  // `<` in a key or a value written as its JSON escape: it parses the same
+  // (the entity spellings still become `‹` in wrap).
   return wrap(JSON.stringify(value).replaceAll("<", "\\u003c"), options);
 }
 
