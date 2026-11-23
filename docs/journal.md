@@ -48,3 +48,5 @@ stands for. End an entry with the task id it came from.
 - A pre-commit hook with no `stages` runs at every installed stage (`default_install_hook_types` here has three); a commit-only hook needs `stages: [pre-commit]`. (T-012)
 - `x <= 0` is not the negation of `x > 0`: a `NaN` passes the first as "time left". A guard on a computed remainder is written `!(left > 0)`. (T-013)
 - When a wrapper rewrites a field (`requestWithRetry` forces `retryable: false` on a write), a test of that field through the wrapper cannot see the inner function get it wrong: test the inner function directly. (T-013)
+- An invented fixture name can still be an account value: the account-patterns hook refused a made-up custom-field name in T-008's first commit. Pick fixture names nothing real would use, and let the hook be the check, not the memory of the real names. (T-008)
+- zod 4 does not copy a `__proto__` key from parsed JSON into its output, neither in `z.record` nor in `z.looseObject`: the key is dropped silently, not refused, and the result's prototype stays `Object.prototype` (zod ^4.2, probed in `test/client/resources/ticket-fields.test.ts`). (T-008)

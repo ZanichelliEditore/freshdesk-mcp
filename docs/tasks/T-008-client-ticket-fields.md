@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-007, T-012, T-013
 - **Created:** 2026-11-20
 
@@ -36,18 +36,38 @@ A typed, runtime-validated read of `GET /ticket_fields`, nested fields included.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `58cbde7`: `src/client/resources/ticket-fields.ts` (`listTicketFields`, zod
+  schema, unknown keys passed through), fixture
+  `test/fixtures/ticket-fields.ts`,
+  `test/client/resources/ticket-fields.test.ts`.
+- `434c9f9` (review fixes): null `choices`/`nested_ticket_fields` accepted,
+  empty `label` refused, 7 more malformed rows, `__proto__` pinning tests,
+  line in `docs/architecture/overview.md`.
+- Acceptance: `ticket-fields.test.ts::"sends one GET to /ticket_fields and
+  yields every field's label in order"`, `::"yields the nested field's
+  3-level choice tree and its level labels"`, `::"refuses %s as server, with
+  the real status and no body text"` (15 rows); 25 tests in the file.
+  `make quality` green on `434c9f9`: 387 vitest, 54 `tools/checks`.
+- Hand mutant: loosening the third tree level to `z.unknown()` failed 2
+  tests.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- A malformed body is `server` with the real status, not retryable, fixed
+  message: builder's choice, accepted by the orchestrator for the owner on
+  2026-11-23.
+- The schema follows Freshdesk's API v2 documentation, not a live account:
+  one odd field fails the whole list (fail-closed). Whether to check it
+  against a live account is the owner's call.
+- A `null` `choices` or `nested_ticket_fields` is kept as `null`, not
+  turned into `undefined`, though the header says "taken as absent"
+  (parked, `434c9f9`): T-010 must handle both.
+- The first commit attempt was refused by the account-patterns hook: an
+  invented field name in the fixture matched an account-value pattern. It
+  was renamed before any commit (never committed, never pushed); the
+  patterns file was not printed.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
-
-## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+ok

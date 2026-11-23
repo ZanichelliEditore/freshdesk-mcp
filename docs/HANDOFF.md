@@ -4,93 +4,73 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T12:53:11+01:00`
-- **Describes commit:** `6b348c7`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45169330254
-  (ran on `6b348c7`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T13:06:28+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's hash
+  and CI line arrive in the commit right after it.
 
-- **Current task:** T-013 (total deadline of 30 s on `requestWithRetry`),
-  `done (2026-11-23)`. Build in `64f014c`, review fixes in `cf4dd28`.
+- **Current task:** T-008 (ticket fields, read), `done (2026-11-23)`. Build
+  in `58cbde7`, review fixes in `434c9f9`.
 
-- **Next action:** `/pickup` takes T-008 (ticket fields, read):
-  `docs/tasks/T-008-client-ticket-fields.md`. First, the owner confirms or
-  sizes the `proposed` row T-014.
+- **Next action:** `/pickup` takes T-009 (agents and groups, read):
+  `docs/tasks/T-009-client-agents-groups.md`.
 
-- **Read before anything else:** `docs/tasks/PLAN.md` (rows T-008, T-014);
-  the T-008 task file; T-013's "Open doubts"
-  (`docs/tasks/T-013-http-total-deadline.md`).
+- **Read before anything else:** `docs/tasks/PLAN.md` (rows T-009, T-014);
+  the T-009 task file; T-008's "Open doubts"
+  (`docs/tasks/T-008-client-ticket-fields.md`).
 
-- **Reviews:** full round, range `58b7955..64f014c`, R1 = `64f014c`; all
+- **Reviews:** full round, range `775f60d..58cbde7`, R1 = `58cbde7`; all
   four quotes matched for all three.
-  code-reviewer: no High; 2 Medium: a write's expiry `retryable: false`
-  had no test that could fail (fixed, `cf4dd28`, test on `request`
-  directly, mutant killed); a write sent with milliseconds left (owner:
-  `proposed` T-014). 5 Low: backoff boundary untested (fixed, mutant
-  killed), "is 30 s" test removed, rest parked.
-  security-reviewer: no High; 1 Medium, the same late write (T-014). 3 Low:
-  a `NaN` deadline on `request` sent a write and called it retryable
-  (reproduced red, fixed in `cf4dd28`); token spent on expiry after
-  `acquire` and wall clock, parked.
+  code-reviewer: no High; Medium 1 (schema rests on documented shape,
+  `null` refused): `null` now accepted for `choices` and
+  `nested_ticket_fields`, rest kept fail-closed, live check to the owner;
+  Low 2 (untested rules, empty label), Low 3 (overview line), Low 4 (status
+  vs 2-level tree comment): all fixed in `434c9f9`.
+  security-reviewer: no High or Medium; 1 Low (`__proto__` key): probe run
+  first, passed on unchanged code, kept as pinning tests in `434c9f9`.
   compliance-reviewer: Wireframes `none`, nothing to check.
-  Scoped round, range `64f014c..cf4dd28`, quotes matched for all three.
-  code-reviewer: list A empty, 5 parked. security-reviewer: list A empty, 4
-  parked. compliance-reviewer: `none`, nothing to check.
-  Parked: `docs/improvements.md`, the two T-013 entries stamped `cf4dd28`.
-  code-reviewer made one read-only Bash `grep` in the full round (said so).
+  Scoped round, range `58cbde7..434c9f9`, quotes matched for all three;
+  list A empty for all three. Parked: `docs/improvements.md`, the T-008
+  entry stamped `434c9f9`.
 
 - **Proposed plan changes:** T-014, "A write is not started without time to
-  finish", `proposed (2026-11-23)`, owner's choice in session. Placed
-  before T-008 in PLAN, but T-008..T-011 are reads: the owner may order it
-  later, before the first write resource.
+  finish", still `proposed (2026-11-23)`; owner to size it before the first
+  write resource. T-009..T-011 are reads.
 
 - **Open doubts:**
-  - New, owner to confirm (T-013 builder's choices): the deadline reaches
-    `acquire` through an optional second argument of the public `request`;
-    a backoff that would cross the deadline is skipped and the last answer
-    returned; a caller's bound of exactly 15 s refuses a 15 s wait.
-  - New: SPEC §7.1 does not mention the 30 s deadline.
-  - New: the 29.9 s and 29.999 s tests rely on the mock answering inside
-    one 100 ms `settle` step; 15 runs green, not proven stable.
-  - `paginate` has no total budget: each page gets its own 30 s.
+  - New (T-008): malformed body → `server`, real status, not retryable:
+    builder's choice, accepted by the orchestrator for the owner.
+  - New: the ticket-fields schema follows API v2 docs, not a live account;
+    owner to decide on a live check.
+  - New: a `null` `choices`/`nested_ticket_fields` is kept as `null`; T-010
+    must treat `null` and absent alike.
+  - New: the account-patterns hook refused T-008's first commit (an
+    invented fixture name matched a pattern); renamed, never committed.
+  - From T-013: the deadline reaches `acquire` through an optional second
+    argument of `request`; a backoff crossing the deadline is skipped; a
+    caller's bound of exactly 15 s refuses a 15 s wait; SPEC §7.1 does not
+    mention the 30 s deadline; the 29.9 s/29.999 s tests not proven stable;
+    `paginate` has no total budget.
   - From T-012: `9fbaa8d` is a mechanism change no reviewer read;
     `SKIP=account-patterns` for contributors without the patterns file,
-    owner to confirm; AGENTS.md hard rule 3 does not record that exception;
-    a caller in the C locale gets no case folding of accented letters.
-  - PLAN's sizing line still counts T-001's split point as pending though
-    T-001 is `done`.
-  - From T-007: the 10 s timeout lives in `request`; `request` stays public
-    and reports a write's 5xx or network failure as retryable, only
-    `requestWithRetry` says `retryable: false`; backoff 0.5/1/2 s without
-    jitter; only GET is a read; `paginate` gives no sign it stopped at a
-    cap; the item cap counts array bodies only; no cap on body size.
-  - From T-006: a URL must be on exactly the configured host; a refusal
-    before sending is `validation` with `http_status: null`; a non-JSON 2xx
-    is `server`; the UA has no version; `TEMPLATE` passes a literal id;
-    `test/setup.test.ts:34` carries an `eslint-disable`, owner to accept.
-  - From T-005: the 15 s bound, the assumed 60 s window, the default budget
-    of 50 and the 1 s..1 h hold clamp are the builder's choices;
-    `floor_pct` above `reserve_pct` throws a bare `RangeError`.
-  - From T-004: key names and `FRESHDESK_HOST_OVERRIDE` are the builder's
-    choice; SPEC §8.1, §10 and §7.1 out of sync; no key for §7.2's budget.
-  - Fallback error codes are T-003's choice, not yet the owner's.
-  - The test network ban has known holes: parked.
+    owner to confirm; AGENTS.md hard rule 3 does not record it; the C locale
+    does not fold accented letters.
+  - PLAN's sizing line still counts T-001's split point as pending.
+  - Earlier (T-003..T-007) builder's choices awaiting the owner: see the
+    "Open doubts" of each task file and HANDOFF at `6b348c7`.
   - `make quality` does not run `make build`; CI does (ran locally on
-    `64f014c`: clean).
-  - CI gitleaks step not shown to fail on a planted secret (from T-001).
-  - Hashes quoted in docs up to `59e3395` predate the history rewrite.
-  - Pre-scrub backup bundle (T-001) still holds account values; owner
-    deletes it.
-  - Two Dependabot branches on the remote, not reviewed.
+    `58cbde7`: clean).
+  - CI gitleaks step not shown to fail on a planted secret (T-001); hashes
+    quoted up to `59e3395` predate the history rewrite; the pre-scrub
+    backup bundle still holds account values, owner deletes it; two
+    Dependabot branches on the remote, not reviewed.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `cf4dd28` (Node 22): eslint and
+- **Checkpoint:** `make quality` exit 0 on `434c9f9` (Node 22): eslint and
   ruff "All checks passed!"; prettier "All matched files use Prettier code
-  style!"; `tsc --noEmit` clean; vitest "Test Files 8 passed (8)", "Tests
-  362 passed (362)"; `tools/checks` "Ran 54 tests", OK; both gitleaks scans
-  passed. `test/client/http-retry.test.ts` alone: 56 passed, 15 runs in a
-  row.
+  style!"; `tsc --noEmit` clean; vitest "Test Files 9 passed (9)", "Tests
+  387 passed (387)"; `tools/checks` "Ran 54 tests", OK; both gitleaks scans
+  passed. `test/client/resources/ticket-fields.test.ts` alone: 25 passed.
