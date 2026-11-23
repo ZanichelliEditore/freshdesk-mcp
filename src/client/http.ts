@@ -26,6 +26,20 @@ import type { CostClass, RateLimiter } from "./rate-limit.js";
 
 const FRESHDESK_HOST = /^[a-z0-9-]+\.freshdesk\.com$/;
 const USER_AGENT = "freshdesk-mcp";
+/** What `path` may be, since it is logged: segments of names and `{params}`. */
+const TEMPLATE = /^(\/[A-Za-z0-9_{}-]+)+$/;
+
+function notSent(why: string): HttpResult {
+  return {
+    ok: false,
+    error: {
+      code: "validation",
+      http_status: null,
+      message: `Not sent: ${why}.`,
+      retryable: false,
+    },
+  };
+}
 
 export interface HttpClientOptions {
   /** A hostname, as in FRESHDESK_DOMAIN: `acme.freshdesk.com`. */
@@ -45,7 +59,10 @@ export interface HttpRequest {
   path: string;
   params?: Record<string, string | number>;
   query?: Record<string, string | number | boolean>;
-  /** A whole URL to send to instead of the built one (a `Link` header's). */
+  /**
+   * A whole URL to send to instead of the built one (a `Link` header's).
+   * `params` and `query` are then unused; `path` is still what is logged.
+   */
   url?: string;
   /** Sent as JSON. */
   body?: unknown;
@@ -75,20 +92,24 @@ export class HttpClient {
     this.limiter = options.limiter;
   }
 
-  /** Throws only on a template misused by the caller (`TypeError`). */
+  /**
+   * Throws a `TypeError` only for what the calling code got wrong: a `path`
+   * that is not a template, a parameter the template names and `params`
+   * lacks, a `body` that JSON cannot carry. Values (a parameter's, a URL's)
+   * are refused with a result.
+   */
   async request(request: HttpRequest): Promise<HttpResult> {
     const method = request.method ?? "GET";
+    if (!TEMPLATE.test(request.path)) {
+      throw new TypeError("The path must be a template like /tickets/{id}.");
+    }
+    const payload = request.body === undefined ? undefined : JSON.stringify(request.body);
     const url = request.url ?? this.build(request);
+    if (url === undefined) {
+      return notSent("a path parameter is empty or a dot segment");
+    }
     if (!this.allowed(url)) {
-      return {
-        ok: false,
-        error: {
-          code: "validation",
-          http_status: null,
-          message: "Not sent: the URL is not on the configured Freshdesk host.",
-          retryable: false,
-        },
-      };
+      return notSent("the URL is not on the configured Freshdesk host");
     }
     const acquired = await this.limiter.acquire(request.cost ?? "cheap");
     if (!acquired.ok) return acquired;
@@ -108,9 +129,9 @@ export class HttpClient {
           authorization: this.authorization,
           "user-agent": USER_AGENT,
           accept: "application/json",
-          ...(request.body === undefined ? {} : { "content-type": "application/json" }),
+          ...(payload === undefined ? {} : { "content-type": "application/json" }),
         },
-        ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
+        ...(payload === undefined ? {} : { body: payload }),
         dispatcher: this.dispatcher,
         redirect: "manual",
       });
@@ -149,15 +170,19 @@ export class HttpClient {
     return { ok: true, status, headers, body };
   }
 
-  private build(request: HttpRequest): string {
+  /** `undefined` when a parameter's value would change which resource is addressed. */
+  private build(request: HttpRequest): string | undefined {
+    let usable = true;
     const path = request.path.replace(/\{(\w+)\}/g, (_match, name: string) => {
       const value = request.params?.[name];
-      // "." and ".." survive encoding and would climb out of the template.
-      if (value === undefined || value === "." || value === "..") {
-        throw new TypeError(`Path parameter "${name}" is missing or not usable.`);
+      if (value === undefined) {
+        throw new TypeError(`The path names a parameter "${name}" that params lacks.`);
       }
+      // "" drops a segment; "." and ".." survive encoding and climb out.
+      if (value === "" || value === "." || value === "..") usable = false;
       return encodeURIComponent(value);
     });
+    if (!usable) return undefined;
     const query = new URLSearchParams(
       Object.entries(request.query ?? {}).map(([name, value]) => [name, String(value)]),
     ).toString();

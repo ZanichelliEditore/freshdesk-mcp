@@ -95,16 +95,62 @@ describe("HttpClient: what goes out", () => {
     expect(result.ok).toBe(true);
   });
 
-  it.each([".", ".."])("refuses the path parameter %j, sending nothing", async (id) => {
-    await expect(client().request({ path: "/tickets/{id}", params: { id } })).rejects.toThrow(
-      TypeError,
-    );
+  it.each(["", ".", ".."])("refuses the path parameter %j, sending nothing", async (id) => {
+    const result = await client().request({
+      method: "DELETE",
+      path: "/tickets/{id}",
+      params: { id },
+    });
+
+    expect(failure(result)).toMatchObject({
+      code: "validation",
+      http_status: null,
+      retryable: false,
+    });
+    expect(sent()).toHaveLength(0);
+    expect(logLines()).toEqual([]);
+  });
+
+  it("throws on a path with a parameter left unfilled, sending nothing", async () => {
+    await expect(client().request({ path: "/tickets/{id}" })).rejects.toThrow(TypeError);
     expect(sent()).toHaveLength(0);
   });
 
-  it("refuses a path with a parameter left unfilled, sending nothing", async () => {
-    await expect(client().request({ path: "/tickets/{id}" })).rejects.toThrow(TypeError);
+  it.each([
+    "/tickets/42?include=requester",
+    "/contacts/x@y.example",
+    "/tickets\n/1",
+    "tickets",
+    "/tickets/",
+    "//evil.example/x",
+    `https://${DOMAIN}/api/v2/tickets`,
+    "",
+  ])("throws on the path %j, which is not a template, and logs nothing", async (path) => {
+    await expect(client().request({ path })).rejects.toThrow(TypeError);
+    await expect(client().request({ path, url: `${ORIGIN}/api/v2/tickets` })).rejects.toThrow(
+      TypeError,
+    );
     expect(sent()).toHaveLength(0);
+    expect(logLines()).toEqual([]);
+  });
+
+  it("throws on a body that is not JSON, before taking a token or logging", async () => {
+    const http = client();
+    reply("GET", "/api/v2/tickets", 200, [], {
+      ...JSON_TYPE,
+      "x-ratelimit-total": "100",
+      "x-ratelimit-remaining": "5",
+    });
+    await http.request({ path: "/tickets" });
+    stderr.mockClear();
+
+    // The budget sits on the floor: one token spent and the next call is refused.
+    await expect(
+      http.request({ method: "POST", path: "/tickets", body: { id: 1n } }),
+    ).rejects.toThrow(TypeError);
+    expect(logLines()).toEqual([]);
+    reply("GET", "/api/v2/tickets", 200, []);
+    expect((await http.request({ path: "/tickets" })).ok).toBe(true);
   });
 
   it("sends a body as JSON", async () => {
@@ -196,6 +242,18 @@ describe("HttpClient: host check on every URL", () => {
 
     expect((await overridden.request({ path: "/tickets" })).ok).toBe(true);
     expect(sent()[0]!.fullUrl).toBe("https://support.example.com/api/v2/tickets");
+  });
+
+  it("an override the domain does not use admits no second host", async () => {
+    const http = client({ hostOverride: "support.example.com" });
+
+    const result = await http.request({
+      path: "/tickets",
+      url: "https://support.example.com/api/v2/tickets",
+    });
+
+    expect(failure(result).code).toBe("validation");
+    expect(sent()).toHaveLength(0);
   });
 
   it("with an override, still refuses every other host", async () => {
@@ -300,6 +358,19 @@ describe("HttpClient: what comes back", () => {
 
     expect(result).toMatchObject({ ok: true, status: 204 });
     expect(result.ok && result.body).toBeUndefined();
+  });
+
+  it.each([
+    [502, "server", true],
+    [404, "not_found", false],
+  ])("maps HTTP %i by its status when the body is not JSON", async (status, code, retryable) => {
+    reply("GET", "/api/v2/tickets", status, "<html>Bad gateway</html>", {
+      "content-type": "text/html",
+    });
+
+    const error = failure(await client().request({ path: "/tickets" }));
+
+    expect(error).toMatchObject({ code, http_status: status, retryable });
   });
 
   it("refuses a 200 whose body is not JSON", async () => {
