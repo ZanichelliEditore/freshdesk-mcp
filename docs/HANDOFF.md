@@ -5,9 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T17:35:05+01:00`
-- **Describes commit:** `<hash>` (pending), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** pending. This file's hash and
-  CI line arrive in the commit right after it.
+- **Describes commit:** `ea97d1c`
+  (`ea97d1ce2cc31aa68c1d9ae7fd588a007a8e957d`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45218344196
+  (ran on `ea97d1c`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-016 `done (2026-11-23)`,
   `docs/tasks/T-016-smoke-scaffold.md`. Commits `2850999` (build),
