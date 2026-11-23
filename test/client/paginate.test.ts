@@ -260,3 +260,76 @@ describe("paginate", () => {
     }
   });
 });
+
+describe("paginate: whether a cap cut the list", () => {
+  /** Every page, then the generator's return value. */
+  async function run(cap: PageCap): Promise<{ pages: HttpResult[]; truncated: boolean }> {
+    const iterator = http.paginate({ path: "/tickets", query: { per_page: 2 } }, cap);
+    const pages: HttpResult[] = [];
+    for (;;) {
+      const step = await iterator.next();
+      if (step.done) return { pages, truncated: step.value.truncated };
+      pages.push(step.value);
+    }
+  }
+
+  it("is false when the last page has no Link", async () => {
+    threePages();
+
+    const { pages, truncated } = await run({ pages: 3 });
+
+    expect(pages).toHaveLength(3);
+    expect(truncated).toBe(false);
+  });
+
+  it("is true at the page cap with a Link still to follow, and that Link is not asked for", async () => {
+    threePages();
+
+    const { truncated } = await run({ pages: 2 });
+
+    expect(truncated).toBe(true);
+    expect(sentUrls()).toHaveLength(2);
+  });
+
+  it("is true when the item cap cuts a page", async () => {
+    page("/api/v2/tickets?per_page=2", [{ id: 1 }, { id: 2 }]);
+
+    const { pages, truncated } = await run({ pages: 10, items: 1 });
+
+    expect(bodies(pages)).toEqual([[{ id: 1 }]]);
+    expect(truncated).toBe(true);
+  });
+
+  it("is true when the item cap is met exactly with a Link still to follow", async () => {
+    threePages();
+
+    expect((await run({ pages: 10, items: 4 })).truncated).toBe(true);
+  });
+
+  it("is false when the item cap is met exactly on the last page", async () => {
+    threePages();
+
+    expect((await run({ pages: 10, items: 6 })).truncated).toBe(false);
+  });
+
+  it("is true with a page cap of zero: the first page was never asked for", async () => {
+    threePages();
+
+    expect((await run({ pages: 0 })).truncated).toBe(true);
+    expect(sentUrls()).toHaveLength(0);
+  });
+
+  it("is false after a failed page: the failure is the answer", async () => {
+    page(
+      "/api/v2/tickets?per_page=2",
+      [{ id: 1 }],
+      next(`${ORIGIN}/api/v2/tickets?per_page=2&page=2`),
+    );
+    page("/api/v2/tickets?per_page=2&page=2", [], undefined, 404);
+
+    const { pages, truncated } = await run({ pages: 10 });
+
+    expect(bodies(pages)).toEqual([[{ id: 1 }], "not_found"]);
+    expect(truncated).toBe(false);
+  });
+});

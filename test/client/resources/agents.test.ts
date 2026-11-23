@@ -2,13 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient } from "../../../src/client/http.js";
 import { RateLimiter } from "../../../src/client/rate-limit.js";
 import { type AgentsResult, listAgents } from "../../../src/client/resources/agents.js";
-import { MAX_PAGES, PER_PAGE } from "../../../src/client/resources/list-all.js";
 import { agentPages } from "../../fixtures/agents-groups.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
 
 const DOMAIN = "acme.freshdesk.com";
 const ORIGIN = `https://${DOMAIN}`;
-const FIRST = `/api/v2/agents?per_page=${PER_PAGE}`;
+const FIRST = "/api/v2/agents?per_page=100";
 const JSON_TYPE = { "content-type": "application/json" };
 /** Put in malformed bodies: no error message may quote it. */
 const CANARY = "Canary-Body-Text-7781";
@@ -77,7 +76,8 @@ describe("listAgents: well-formed pages", () => {
     page(1, agentPages[0], true);
     page(2, agentPages[1], false);
 
-    const result = agents(await listAgents(http));
+    const listed = await listAgents(http);
+    const result = agents(listed);
 
     expect(result.map((agent) => [agent.id, agent.contact.name])).toEqual([
       [501, "Quill Ottersby"],
@@ -85,6 +85,7 @@ describe("listAgents: well-formed pages", () => {
       [503, "Ferro Lumen"],
     ]);
     expect(sentPaths()).toEqual([pathOf(1), pathOf(2)]);
+    expect(listed).toMatchObject({ ok: true, truncated: false });
   });
 
   it("passes keys it does not know through", async () => {
@@ -104,11 +105,20 @@ describe("listAgents: well-formed pages", () => {
     expect(agents(await listAgents(http))).toEqual([]);
   });
 
-  it(`stops after ${MAX_PAGES} pages whatever Link says`, async () => {
-    for (let n = 1; n <= MAX_PAGES; n += 1) page(n, [], true);
+  it("stops after 10 pages when page 10 still has a Link, and says the list is cut", async () => {
+    for (let n = 1; n <= 10; n += 1) page(n, [], true);
 
-    expect(agents(await listAgents(http))).toEqual([]);
-    expect(sentPaths()).toHaveLength(MAX_PAGES);
+    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: true });
+    expect(sentPaths()).toHaveLength(10);
+    expect(sentPaths().at(-1)).toBe(pathOf(10));
+  });
+
+  it("says the list is whole when page 10 has no Link", async () => {
+    for (let n = 1; n <= 9; n += 1) page(n, [], true);
+    page(10, [], false);
+
+    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: false });
+    expect(sentPaths()).toHaveLength(10);
   });
 });
 

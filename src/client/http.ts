@@ -40,6 +40,7 @@
 //     `paginate` has no budget of its own: each page gets the full deadline.
 //   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
 //     through `request` and so through the host check, up to the caller's cap.
+//     Its return value says whether a cap cut the list (`truncated`).
 
 import { type Dispatcher, fetch, type Headers } from "undici";
 import { ConfigError } from "../config.js";
@@ -272,8 +273,15 @@ export class HttpClient {
    * The pages of a list, one result each, following `Link` up to the cap. A
    * failed page is yielded and ends the iteration. Throws a `TypeError` for a
    * cap that is not a whole number, zero or more.
+   *
+   * Returns `truncated`: true when a cap ended the list with more of it left,
+   * a `Link` not followed or a page cut; false when the list ended, or a
+   * failed page did (the failure is the answer).
    */
-  async *paginate(request: PageRequest, cap: PageCap): AsyncGenerator<HttpResult, void, void> {
+  async *paginate(
+    request: PageRequest,
+    cap: PageCap,
+  ): AsyncGenerator<HttpResult, { truncated: boolean }, void> {
     if (!isCount(cap.pages) || (cap.items !== undefined && !isCount(cap.items))) {
       throw new TypeError("A page cap and an item cap are whole numbers, zero or more.");
     }
@@ -290,18 +298,19 @@ export class HttpClient {
       const result = await this.requestWithRetry(next);
       if (!result.ok) {
         yield result;
-        return;
+        return { truncated: false };
       }
       const body: unknown = result.body;
-      if (Array.isArray(body)) {
-        yield body.length > room ? { ...result, body: body.slice(0, room) } : result;
-        room -= body.length;
-      } else {
-        yield result;
+      if (Array.isArray(body) && body.length > room) {
+        yield { ...result, body: body.slice(0, room) };
+        return { truncated: true };
       }
+      yield result;
+      if (Array.isArray(body)) room -= body.length;
       const link = /<([^>]*)>\s*;\s*rel="?next"?/.exec(result.headers.get("link") ?? "")?.[1];
       next = link === undefined ? undefined : { ...first, url: link };
     }
+    return { truncated: next !== undefined };
   }
 
   /** `undefined` when a parameter's value would change which resource is addressed. */
