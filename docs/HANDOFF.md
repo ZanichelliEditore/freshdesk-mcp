@@ -5,9 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-23T11:05:04+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file
-  arrives in the commit right after it.
+- **Describes commit:** `d55a2ab`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45153019352
+  (ran on `d55a2ab`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file arrives in the commit right after it.
 
 - **Current task:** T-006 HTTP core, `done (2026-11-23)`. Code in
   `ab43199` and `1201868`; see `docs/tasks/T-006-http-core.md` "Done".
