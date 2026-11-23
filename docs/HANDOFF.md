@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-23T18:15:41+01:00`
-- **Describes commit:** `<hash>` (filled in the stamp commit). **CI:**
-  filled in the stamp commit.
+- **Describes commit:** `d20c83b`
+  (`d20c83bf36a43adf72b750d1d011b9d65d53d1e6`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45225882485
+  (ran on `d20c83b`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-018 `done (2026-11-23)`,
   `docs/tasks/T-018-list-envelope.md` ("Done"). Commits `86d293c` (build),
