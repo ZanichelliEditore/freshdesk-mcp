@@ -4,57 +4,56 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T15:33:52+01:00`
-- **Describes commit:** `c8a9e7f`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45195667420
-  (ran on `c8a9e7f`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T15:50:19+01:00`
+- **Describes commit:** STAMP-HASH, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP-CI. This file's hash and
+  CI line arrive in the commit right after it.
 
-- **Current task:** T-015, app context
-  (`docs/tasks/T-015-app-context.md`), `done (2026-11-23)`. Commits
-  `da373b7` (build), `b4a1571` (full-round fixes) and the one this file
-  describes (wording after the scoped round, documents).
+- **Current task:** sizing of T-050 (`/decompose`, scoped to that row; task
+  file `docs/tasks/PLAN.md`), `done (2026-11-23)`. Commits `3479402`
+  (T-050 `todo`, `docs/tasks/T-050-runtime-privacy.md`), `f61f70b`
+  (full-round fixes) and the one this file describes (scoped round's list A
+  as wording, documents). No `src/` or `test/` file changed.
 
-- **Next action:** `/decompose` sizes the `proposed` row T-050 (and may
-  confirm or drop T-041 and T-049); then `/pickup` takes T-047
-  (`docs/tasks/T-047-caller-deadline.md`). T-019 is
-  not taken before T-050 is `done`.
+- **Next action:** `/pickup` takes T-047
+  (`docs/tasks/T-047-caller-deadline.md`). Then T-050; T-016, T-019, T-042
+  and T-043 are not taken before T-050 is `done`.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`, rows T-050 and
-  T-047; `docs/tasks/T-015-app-context.md`, "Open doubts".
+- **Read before anything else:** `docs/tasks/PLAN.md`, rows T-047 and
+  T-050.
 
 - **Reviews:**
-  - Full round, range `6bdcca3..da373b7`, R1 = `da373b7`; the four quotes
-    matched for all three, no Bash calls. security-reviewer: 2 Medium, 1
-    Low. code-reviewer: 2 Medium, 4 Low. compliance-reviewer: Wireframes
-    `none`. All fixed in `b4a1571`; one note parked
-    (`docs/improvements.md`, entry stamped `da373b7`).
-  - Scoped round, range `da373b7..b4a1571`; quotes matched for all three,
-    no Bash calls; compliance `none`. code-reviewer: list A empty.
-    security-reviewer: list A 4 items, each needing another mechanism
-    change, so reported to the owner (rule 9). Owner, 2026-11-23: close
-    T-015, the hardening is its own task (T-050). List B parked:
-    `docs/improvements.md`, entry stamped `b4a1571`. The wording changes
-    of the commit this file describes were **not reviewed again**.
+  - `planner` review and full round, range `b330f08..3479402`, R1 =
+    `3479402`; the four quotes matched for all three, no Bash calls.
+    security-reviewer: 3 Medium, 4 Low. code-reviewer: 3 Medium, 4 Low.
+    planner: 3 findings. compliance-reviewer: Wireframes `none`. All
+    applied in `f61f70b`.
+  - Scoped round, range `3479402..f61f70b`; quotes matched for all three,
+    no Bash calls; compliance `none`. security-reviewer: list A 2.
+    code-reviewer: list A 1. Applied in the commit this file describes as
+    acceptance wording (task files and PLAN rows of T-050 and T-016),
+    **not reviewed again**. List B parked: `docs/improvements.md`, entry
+    stamped `f61f70b`. No third round.
 
-- **Proposed plan changes:**
-  - T-050, harden runtime privacy of the HTTP client, limiter and schema
-    service: `proposed (2026-11-23)`, **confirmed by the owner** on
-    2026-11-23, to be sized by the next `/decompose` and `done` before
-    T-019 is taken.
-  - T-041 and T-049, both `proposed (2026-11-23)`, still to confirm or
-    drop.
+- **Proposed plan changes:** T-041 and T-049 stay `proposed (2026-11-23)`:
+  T-041 waits on the owner's smoke run (OD-4), T-049 on the owner's
+  confirm or drop.
 
 - **Open doubts (owner):**
-  - Until T-050: the client's `host` and `limiter`, the limiter's state
-    and the schema service's cache are ordinary properties. What is
-    proven is only that the key cannot be read or printed from the
-    context, and that the team settings and the context object are
-    frozen.
+  - T-050's lint block gained a second pattern in the scoped round's
+    wording pass (a regex refusing `./../config.js` and
+    `../tools/../config.js`, which the anchored globs let through). It was
+    tried in memory only (`docs/tasks/T-050-runtime-privacy.md`, In scope,
+    Lint) and not reviewed.
+  - A4: `limiter` is dropped from `AppContext`, not given a read-only
+    view (the orchestrator's brief, the builder's choice of the smaller);
+    to confirm.
+  - Until T-050 is `done`: the client's `host` and `limiter`, the
+    limiter's state and the schema service's cache are ordinary
+    properties.
   - Threat model: private fields protect against a tool's mistake or a
-    cast, not against hostile code in the process (`process.env` keeps
-    the key); the owner's model is the former.
+    cast, not against hostile code in the process (`process.env` keeps the
+    key); the owner's model is the former.
   - T-048: approve the mechanism that authorises a publish (the RFC
     recommends), then set it up before the first tag.
   - T-038: evidence that the organisation owns the npm scope and the
@@ -78,9 +77,9 @@
     planted secret (T-001); hashes quoted up to `59e3395` predate the
     history rewrite; two Dependabot branches on the remote (T-044).
 
-- **Dead ends:** none in T-015. From before: a root `server.json` and an
-  MCP Registry listing were withdrawn by the owner on 2026-11-23: not
-  parked, do not raise again unasked.
+- **Dead ends:** none in this session. From before: a root `server.json`
+  and an MCP Registry listing were withdrawn by the owner on 2026-11-23:
+  not parked, do not raise again unasked.
 
 - **Known red:** none.
 

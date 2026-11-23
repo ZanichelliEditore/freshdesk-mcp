@@ -62,11 +62,24 @@ Line numbers are those of `b330f08`; T-047 moves those of
     `../../config.ts`, `**/client/http`, `**/client/http.js`,
     `**/client/http.ts`, `**/schema/output`, `**/schema/output.js`,
     `**/schema/output.ts`, `**/schema/index`, `**/schema/index.js`,
-    `**/schema/index.ts`. Tried in memory on 2026-11-23 (eslint 10.15.0,
-    typescript-eslint 8.73.0): they give the results the acceptance lists.
-    `config` is anchored with `../` so a tool-local `./config.js` passes;
-    a file named `config` directly under `src/tools/` would be refused from
-    a subfolder, so none is given that name.
+    `**/schema/index.ts`, and for `config` also `../../../config`,
+    `../../../config.js`, `../../../config.ts`, `**/src/config`,
+    `**/src/config.js`, `**/src/config.ts`. `config` is anchored with `../`
+    so a tool-local `./config.js` passes; a file named `config` directly
+    under `src/tools/` would be refused from a subfolder, so none is given
+    that name.
+  - A second `patterns` entry refuses a specifier that is not in its
+    shortest form, which the anchored globs let through (`./../config.js`,
+    `../tools/../config.js`): `regex:
+    "^\\./\\.\\.(/|$)|/\\./|(^|/)[^/.][^/]*/\\.\\.(/|$)"` as written in
+    the config file's string. It applies to type imports too.
+  - Tried in memory, nothing written, on 2026-11-23 (eslint 10.15.0,
+    typescript-eslint 8.73.0), twice: the first list, then at
+    `2026-11-23T15:49+01:00` with the additions of the scoped round. Both
+    entries give the results the acceptance lists; without the second
+    entry `./../config.js` and `../tools/../config.js` pass; with the block
+    written for `src/**` the three `src/server.ts` cases are refused, so
+    they can fail.
   - `import type` is allowed for the four modules, a value import refused:
     `schema/index` is in the list so a tool cannot build its own
     `SchemaService` or call `deepFreeze`, and still names the `Schema` type.
@@ -76,6 +89,12 @@ Line numbers are those of `b330f08`; T-047 moves those of
     `../client/http.js`, `../client/rate-limit.js`, `../config.js` (types),
     `../schema/index.js` and `../schema/output.js`.
   - `test/lint-rules.test.ts`'s `BANS` set gains the two rule ids.
+- Limiter cases need named setups, or they pass without proving anything
+  (`docs/improvements.md`, entry stamped `f61f70b`): pacing refuses only
+  when `acquire` is given a `boundMs` shorter than the pacing gap or the gap
+  is over 15 s; a 429 hold refuses only with a `Retry-After` above 15 s;
+  the `total` and `remaining` values assigned must be ones that would lift
+  the limiter above the reserve.
 - Wording, to what is then proven and no more: the comment on the client's
   private fields (`src/client/http.ts:133-135`), the header of
   `src/tools/context.ts` (`:8-9`, "are not frozen (PLAN, the hardening
@@ -130,11 +149,11 @@ and in HANDOFF, and none of the three is taken before the next `/decompose`
 has sized that row and added it to their dependencies.
 
 ## Acceptance
-Each of A1 to A4, and each lint refusal, has a case that fails on
-`b330f08`'s code: for A2 and A3 each assignment, taken alone, releases the
-refusal or changes the answer there, and the builder shows it by running the
-new cases against `b330f08`'s `src/` and quoting the failing test names in
-"Done". An assignment "through a cast" is
+Each of A1 to A4, and each lint refusal, has a case that fails on the
+code of the commit T-050 starts from: for A2 and A3 each assignment, taken
+alone, releases the refusal or changes the answer there, and the builder
+shows it by running the new cases against that commit's `src/` and quoting
+the failing test names in "Done". An assignment "through a cast" is
 `(x as unknown as Record<string, unknown>).name = value`.
 `test/client/http.test.ts` (MockAgent, two intercepted origins): on a built
 client `Object.isFrozen` is true and an assignment through a cast to each of
@@ -178,16 +197,23 @@ one is sent (A4).
 `src/tools/x.ts`, and of `../../config.js`, `../../client/http.js`,
 `../../schema/output.js` and `../../schema/index.js` in
 `src/tools/core/x.ts`, each gives `@typescript-eslint/no-restricted-imports`,
-and so does each of the four written with `.ts` and with no extension; an
-`import type` of each of the four, and an inline `import { type Schema }`
+and so does each of the five written with `.ts` and with no extension, and
+so do `../../../config.js` in `src/tools/a/b/x.ts`, `../../src/config.js`,
+`./../config.js`, `.././config.js` and `../tools/../config.js` in
+`src/tools/x.ts`, and `../../tools/../config.js` in `src/tools/core/x.ts`;
+no file under `src/tools/` sits deeper than one subfolder (the test walks
+the directory), so the anchored `config` patterns cover every depth in use;
+an `import type` of each of the five, and an inline `import { type Schema }`
 from `../../schema/index.js`, give none; `./config.js` in `src/tools/x.ts`
 and in `src/tools/core/x.ts`, `../context.js` and
 `../../client/resources/agents.js` give none; a dynamic
 `import("../../config.js")` in `src/tools/core/x.ts` gives
 `no-restricted-syntax`; value imports of `../client/http.js`,
 `../schema/output.js` and `../schema/index.js` in `src/tools/context.ts`
-give none, and a value import of `./config.js` in `src/server.ts` gives
-none.
+give none; outside `src/tools/`, value imports of `./client/http.js` and
+`./schema/index.js` in `src/server.ts` give none and a dynamic `import()`
+there gives no `no-restricted-syntax` (these fail if the block is written
+for `src/**`).
 Wording: `grep -rn "hardening row" src docs/architecture` prints nothing;
 `grep -c "hostile code" docs/architecture/overview.md` is at least 1; the
 overview's `context.ts` entry no longer lists the limiter among what the

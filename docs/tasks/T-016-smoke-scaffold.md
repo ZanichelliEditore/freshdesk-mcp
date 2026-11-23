@@ -14,14 +14,17 @@ only send GET, and its first report gives the shape of `/ticket_fields`,
 the doubt "schemas follow the API v2 docs, not a live account".
 
 ## In scope
-- A wrapper around `HttpClient` that refuses any method but GET before
-  anything is sent. It is a subclass of `HttpClient` that adds no instance
-  field, never a `Proxy` of one and never a separate wrapper class. After
-  T-050 the client is frozen and its internals are `#` members: a `Proxy`
-  receiver does not have them, a subclass field cannot be added to a frozen
-  instance, and a wrapper is not assignable to the resources' `HttpClient`
-  parameter (code-reviewer B7, range `da373b7..b4a1571`; full round on
-  `b330f08..3479402`).
+- The smoke client: a subclass of `HttpClient` that adds no instance field
+  and whose guard overrides `request`, refusing any method but GET before
+  anything is sent. `request` is the base entry: `requestWithRetry` calls
+  `this.request` and `paginate` calls `requestWithRetry`, so one override
+  covers the three. It is never a `Proxy` of a client and never a separate
+  class holding one. After T-050 the client is frozen and its internals are
+  `#` members: a `Proxy` receiver does not have them, a subclass field
+  cannot be added to a frozen instance, and a class that only holds a client
+  is not assignable to the resources' `HttpClient` parameter (code-reviewer
+  B7, range `da373b7..b4a1571`; review rounds on `b330f08..3479402` and
+  `3479402..f61f70b`).
 - `schema` report: per default field and per custom-field type, the shape of
   `choices` (list, name → id record, id → names record, tree depth) and
   counts; whether the zod schemas of T-008/T-009 accepted the payloads. No
@@ -55,8 +58,10 @@ the doubt "schemas follow the API v2 docs, not a live account".
 `none`
 
 ## Acceptance
-`test/smoke.test.ts` (MockAgent): a POST, PUT and DELETE through the smoke
-client are each refused with no request sent; the smoke client is an
+`test/smoke.test.ts` (MockAgent): each of POST, PUT, DELETE and (through a
+cast) PATCH is refused with no request sent through the smoke client's
+`request`, through its `requestWithRetry`, and through its `paginate` given
+the method through a cast; the smoke client is an
 `instanceof HttpClient`, `util.types.isProxy` of it is false,
 `Reflect.ownKeys` of it is empty, and `listTicketFields` takes it with no
 cast (`make typecheck`); on a fixture whose
