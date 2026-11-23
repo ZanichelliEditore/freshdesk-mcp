@@ -5,11 +5,13 @@
 "none".*
 
 - **Written:** `2026-11-23T11:44:23+01:00`
-- **Describes commit:** `STAMP_HASH`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP_CI. This file arrives in
+- **Describes commit:** `24c1871`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45158863826
+  (ran on `24c1871`: `quality (22.19)`, `quality (24)`, `checks`). This file arrives in
   the commit right after it. It replaces the handoff stamped in `8677ee5`
   (which described `348fba6`, CI green, run 45156435154): after that
-  stamp the owner answered the two open decisions, and `STAMP_HASH` records
+  stamp the owner answered the two open decisions, and `24c1871` records
   them, documents only.
 
 - **Current task:** T-007 HTTP retries + pagination, `done (2026-11-23)`.
