@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-011
 - **Created:** 2026-11-23
 
@@ -46,13 +46,36 @@ only); `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+- `86d293c` (build): `src/tools/list.ts` (`listEnvelope`, `readCursor`,
+  `CURSOR_MAX_LENGTH`; module picked: `list.ts`), `test/tools/list.test.ts`.
+  Red first (module missing), then green; six hand mutations each caught.
+- `14487fa` (full-round fixes): arguments that are not JSON throw a
+  `TypeError` (`test/tools/list.test.ts` "arguments are the raw JSON ones:
+  anything else throws"); `readCursor(call, maxPosition?)` refuses a
+  position above the tool's bound ("readCursor: the tool's maximum
+  position"); non-canonical forms with the real digest refused
+  ("readCursor: non-canonical forms carrying the real digest"); messages
+  reworded.
+- Acceptance, by test name: "listEnvelope" (keys, `next_cursor` exactly
+  when `has_more`, `truncated`), "readCursor: round trip", "readCursor:
+  refused before anything is sent" (another tool, each argument changed,
+  edited position or digest, over the cap, undecodable), "readCursor before
+  a request: nothing is sent on a refusal" (MockAgent call count 0).
+- Imports: `node:crypto` and `../client/errors.js`, both on T-051's list.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The digest is unkeyed (stated in the header): a forged cursor carries a
+  whole number only, bounded by `maxPosition` when the tool passes one.
+- `maxPosition` is optional until T-021 (parked `14487fa`, HANDOFF's
+  proposed plan changes).
+- With no cursor, arguments that are not JSON are caught only by
+  `listEnvelope`, after the requests (fails closed; parked `14487fa`).
 
 ## Context pressure
+ok
 
 ## Next action
+none (done). Next session: see `docs/HANDOFF.md`.
