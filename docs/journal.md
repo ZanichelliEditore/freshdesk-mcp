@@ -46,3 +46,5 @@ stands for. End an entry with the task id it came from.
 - git strips a carriage return from a `-f` pattern line only when a line feed follows: a last line ending in a bare CR, or CR-only line endings, leaves a pattern that matches nothing, with exit 1. (T-012)
 - A new whole-index guard fired on its first run against a file tracked since T-004: run a guard on the real index before its first commit, not only on synthetic repositories. (T-012)
 - A pre-commit hook with no `stages` runs at every installed stage (`default_install_hook_types` here has three); a commit-only hook needs `stages: [pre-commit]`. (T-012)
+- `x <= 0` is not the negation of `x > 0`: a `NaN` passes the first as "time left". A guard on a computed remainder is written `!(left > 0)`. (T-013)
+- When a wrapper rewrites a field (`requestWithRetry` forces `retryable: false` on a write), a test of that field through the wrapper cannot see the inner function get it wrong: test the inner function directly. (T-013)

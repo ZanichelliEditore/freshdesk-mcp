@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-007
 - **Created:** 2026-11-23
 
@@ -74,18 +74,35 @@ case first, the deadline in `http.ts` second.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `64f014c`: `TOTAL_DEADLINE_MS` and the expiry error in `src/client/http.ts`;
+  `RateLimiter.acquire(cost, boundMs)` in `src/client/rate-limit.ts`;
+  `docs/architecture/overview.md`. Tests:
+  `test/client/http-retry.test.ts` › "requestWithRetry: one call ends within
+  TOTAL_DEADLINE_MS" (in-flight abort for GET and each write, exact limiter
+  boundary for each method, 1 ms inside it, no time left after `acquire`,
+  unchanged shorter call) and › "request: a deadline cannot lengthen
+  anything"; `test/client/rate-limit.test.ts` › "a caller's bound".
+- `cf4dd28` (review fixes): a deadline that is not a number sends nothing;
+  tests › "returns the last answer when the backoff would end exactly at the
+  deadline", › "serves a backoff that ends before the deadline", › "one
+  attempt of a %s cut by the deadline", › "sends nothing for a deadline of
+  %d".
+- `make quality`: vitest 362 passed (was 331).
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Builder's choices, owner to confirm: the deadline reaches `acquire` as an
+  optional second argument of the public `request` (epoch ms, can only
+  shorten); a backoff that would end at or after the deadline is not
+  started and the last answer is returned as it is; a caller's bound of
+  exactly 15 s refuses the wait ending at 15 s, which the limiter alone
+  would serve.
+- A write held by 429s can go out with milliseconds left and be aborted,
+  possibly applied: the owner chose a `proposed` row (T-014), 2026-11-23.
+- SPEC §7.1 says nothing of the deadline (editing it was out of scope).
+- Other parked items: `docs/improvements.md`, the two T-013 entries.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
-
-## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+ok
