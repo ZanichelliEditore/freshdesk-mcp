@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-015
+- **Depends on:** T-015, T-050
 - **Created:** 2026-11-23
 
 ## Goal
@@ -14,7 +14,11 @@ the doubt "schemas follow the API v2 docs, not a live account".
 
 ## In scope
 - A wrapper around `HttpClient` that refuses any method but GET before
-  anything is sent.
+  anything is sent. It wraps the client (held in a `#` field) or subclasses
+  it without adding instance fields; it is never a `Proxy` of it. After
+  T-050 the client is frozen and its internals are `#` members, which a
+  `Proxy` receiver does not have (code-reviewer B7, range
+  `da373b7..b4a1571`).
 - `schema` report: per default field and per custom-field type, the shape of
   `choices` (list, name → id record, id → names record, tree depth) and
   counts; whether the zod schemas of T-008/T-009 accepted the payloads. No
