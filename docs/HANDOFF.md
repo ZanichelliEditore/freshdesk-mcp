@@ -4,98 +4,90 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T16:51:58+01:00`
-- **Describes commit:** `1671260`
-  (`1671260c9d4df4f59335471e4237cc64ba5589b5`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45210203469
-  (ran on `1671260`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T17:16:19+01:00`
+- **Describes commit:** pending: this file's hash and CI line arrive in
+  the commit right after it.
 
-- **Current task:** T-050, harden runtime privacy of the HTTP client,
-  limiter and schema service, plus the `src/tools/**` lint block
-  (`docs/tasks/T-050-runtime-privacy.md`), `done (2026-11-23)`. Commits
-  `416641e` (build), `d8b7967` (full review fixes) and the one this file
-  describes (documents, and one comment in `eslint.config.mjs`). Red runs
-  against the starting `src/` and config: the task file's "Done". Split
-  point not taken.
+- **Current task:** plan session, `/decompose` scoped to T-051, the task
+  file `docs/tasks/PLAN.md`. Commits `b3fdd32` (sized), `83acc09` (full
+  review fixes) and the one this file describes (rewrite to an exact
+  allow-list, the owner's option A). T-051 is `todo (2026-11-23)`,
+  `docs/tasks/T-051-lint-import-allow-list.md`, right before T-019. T-019,
+  T-042 and T-043 depend on it (rows and task files). T-016 does not, and
+  it stays next.
 
-- **Next action:** `/decompose` sizes the `proposed` row T-051 (lint
-  allow-list); T-019, T-042 and T-043 are not taken before it is `done`.
-  Then `/pickup` takes T-016 (`docs/tasks/T-016-*.md`).
+- **Next action:** `/pickup` takes T-016 (`docs/tasks/T-016-*.md`).
 
-- **Read before anything else:** `docs/tasks/PLAN.md`, row T-051;
-  `docs/improvements.md`, the entries stamped `416641e` and `d8b7967`;
-  `docs/tasks/T-050-runtime-privacy.md`, "Open doubts".
+- **Read before anything else:** `docs/tasks/PLAN.md`, the M1 note on
+  T-051 and row T-051; `docs/tasks/T-051-lint-import-allow-list.md`,
+  "Re-plans".
 
 - **Reviews:**
-  - Full round, range `dd191ec..416641e`, R1 = `416641e`; the four quotes
-    matched for all three, no Bash calls. security-reviewer: 1 Medium, 3
-    Low; code-reviewer: 1 Medium, 3 Low, 1 nit; all fixed in `d8b7967`
-    (the shortest-form regex also refuses `//`, `\`, `%`, `?`, `#`; limiter
-    helper rows; wording). compliance-reviewer: Wireframes `none`. The
-    builder's extra (`expire`, `below`, `left` as `#` methods) accepted by
-    the orchestrator. Parked: entry stamped `416641e`.
-  - Scoped round, range `416641e..d8b7967`; quotes matched for all three,
-    no Bash calls; compliance `none`. code-reviewer list A empty.
-    security-reviewer list A, 1: a segment starting with a dot followed by
-    `..` (`../.x/../config.js`) reaches `config`; confirmed by the
-    orchestrator's in-memory probe on `d8b7967`. Owner's decision
-    (2026-11-23, rule 9): close T-050, the fix is its own row (T-051); the
-    handoff commit only states the gap. List B parked: entry stamped
-    `d8b7967` (code B2, security B4 and the stale part of `f61f70b` fixed in
-    the documents). No third round.
+  - **Full round** on `81ee087..b3fdd32`, R1 = `b3fdd32`, plus the
+    `planner`'s review. The four quotes matched for all three reviewers,
+    with no Bash calls. compliance-reviewer: Wireframes `none`.
+    security-reviewer: 1 Medium, 1 Low, 2 info. code-reviewer: 3 Low.
+    planner: 1 finding and notes. All were applied in `83acc09` by the
+    orchestrator's decisions.
+  - **Scoped round** on `b3fdd32..83acc09`. The four quotes matched for
+    all three. compliance-reviewer: `none`. code-reviewer made one Bash
+    call, a no-op `echo`, and said so.
+    - code-reviewer, list A (1): a generated `%2e` or tab case at position
+      0 yields a bare specifier the rule cannot refuse.
+    - security-reviewer, list A (1): the planned rule checked only
+      specifiers starting with `.`, `/` or `file:`, which is weaker than
+      T-050's deny regex (`ms/../../src/./config.js`, a `file:` with a
+      leading space).
 
-- **Proposed plan changes:** T-051, "Lint: allow-list of shortest-form
-  relative specifiers in src/tools/**", `proposed (2026-11-23)`, placed
-  before T-019: owner-confirmed on 2026-11-23, to be sized by the next
-  `/decompose` (it adds it to T-019's, T-042's and T-043's dependencies).
-  T-041 and T-049 stay `proposed (2026-11-23)`: T-041 waits on the owner's
-  smoke run (OD-4), T-049 on the owner's confirm or drop.
+    Under rule 9 this was reported to the owner, who chose option A: an
+    exact allow-list, rewritten in the handoff commit. The rewrite was not
+    reviewed again as a plan (owner, 2026-11-23); the reviews of T-051's
+    build cover it. No third round.
+
+- **Proposed plan changes:** none new. T-041 and T-049 stay
+  `proposed (2026-11-23)`: T-041 waits on OD-4, T-049 on the owner's
+  confirm or drop.
 
 - **Open doubts (owner):**
-  - T-050: the dot-segment gap above (T-051); `.constructor` on
-    `context.http` and `context.schema` reaches the class, refused by
-    neither the freeze nor lint; `src/client/rate-limit.ts` is not in the
-    ban list (parked, `d8b7967`). Threat model: a tool's mistake or a cast,
-    not hostile code in the process.
-  - `test/lint-rules.test.ts`, first eslint case, 5 s timeout: not hit in
-    this session's runs (load average under 2.5); still parked
-    (`97c11e8`).
-  - T-047, builder's choices accepted by the orchestrator on 2026-11-23,
-    to confirm: the expiry message no longer names 30 s; a deadline already
-    reached (`NaN` included) is refused as `network` without asking the
-    limiter, a write so refused `retryable: false` though not sent (T-014
-    decides). A NaN bound on a direct `acquire` is still unguarded (parked,
-    `c44a36e`, `97c11e8`; not in T-050's scope).
-  - T-048: approve the mechanism that authorises a publish, then set it up
-    before the first tag. T-038: evidence that the organisation owns the
-    npm scope and the publisher is a member. The npm token, if T-048 keeps
-    one, and the explicit go for the first publish (0.1.0, after T-039).
-  - OD-2 and OD-3 (per-tool writable fields, safety core): by the RFC of
-    T-040; the parked note stamped `da373b7` feeds it.
-  - OD-4: the owner runs `make smoke` after T-016, then T-022's probes;
-    T-022 to T-024, T-043, T-026 to T-030, T-036 and T-037 wait on it.
-  - Orchestrator's choices of 2026-11-23, to confirm: choice names stripped
-    of HTML and capped like labels (SPEC §7.4); `count_tickets` refuses a
-    group-by field of a non-closed type (SPEC §8.2, T-036); the variable
-    name `FRESHDESK_EXPORT_DIR` (SPEC §10, T-037); hidden fields "not
-    guaranteed" in rows, counts and exports (SPEC §7.3).
-  - `examples/team-config.example.json` still carries `export_dir` and
-    three toolsets until T-019 and T-037 change it.
-  - From before, still open: schemas follow the API v2 docs, not a live
-    account (T-016 measures it); CI's gitleaks step not shown to fail on a
-    planted secret (T-001); hashes quoted up to `59e3395` predate the
-    history rewrite; two Dependabot branches on the remote (T-044).
+  - **Parking not done.** The orchestrator asked to park code B1–B5 and
+    security B1–B3 from the scoped round in `docs/improvements.md`. Their
+    text did not reach this session, so they are not parked yet. The
+    orchestrator holds them.
+  - **T-051's places.** The M1 task files put the tools in
+    `src/tools/toolsets/core/`. T-050's lint tests and its depth test
+    assumed `src/tools/core/`, at most one subfolder deep. T-051 follows
+    the task files, moves those cases and replaces the depth test. To
+    confirm.
+  - **T-051's list** is drawn from the M1 task files: modules, eight
+    resources, `node:path`, `node:fs/promises`, `node:crypto`, and the root
+    entry of `@modelcontextprotocol/server`. A task that needs another
+    module adds it as a reviewed config line.
+  - **Carried from before**, unchanged; see HANDOFF at `81ee087`:
+    - T-050: `.constructor`; `rate-limit.ts` not banned.
+    - The 5 s lint-test timeout (`97c11e8`).
+    - T-047's builder choices.
+    - T-048 and T-038 publish gates.
+    - OD-2, OD-3, OD-4.
+    - The orchestrator's choices of 2026-11-23.
+    - `examples/team-config.example.json`, until T-019 and T-037.
+    - Schemas taken from the docs, not measured.
+    - The gitleaks planted-secret check (T-001).
+    - Hashes from before the history rewrite.
+    - Two Dependabot branches (T-044).
 
-- **Dead ends:** none in this session. From before: a root `server.json`
-  and an MCP Registry listing were withdrawn by the owner on 2026-11-23:
-  not parked, do not raise again unasked.
+- **Dead ends:** the shortest-form grammar for T-051 (`b3fdd32`,
+  `83acc09`). Each review round found a form it missed, and the exact
+  allow-list replaced it. From before: the root `server.json` and the MCP
+  Registry listing were withdrawn by the owner on 2026-11-23. Do not raise
+  them again unasked.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (Node 22): eslint clean, ruff "All
-  checks passed!"; prettier "All matched files use Prettier code style!";
-  `tsc --noEmit` clean; vitest "Test Files 14 passed (14)", "Tests 615
-  passed (615)"; `tools/checks` "Ran 54 tests", OK; `npm run build` clean;
-  both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 (Node 22):
+  - eslint clean, ruff "All checks passed!";
+  - prettier "All matched files use Prettier code style!";
+  - `tsc --noEmit` clean;
+  - vitest "Test Files 14 passed (14)", "Tests 615 passed (615)";
+  - `tools/checks` "Ran 54 tests", OK;
+  - `npm run build` clean;
+  - both gitleaks scans passed.
