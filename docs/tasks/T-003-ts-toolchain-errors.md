@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M0
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** T-001, T-002
 - **Created:** 2026-11-20
 
@@ -40,18 +40,40 @@ TypeScript compiles and vitest runs under `make quality` and in CI, proven by th
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `68acf47`: toolchain and error model. `347b52d`: handoff review fixes.
+- Error model: `src/client/errors.ts`, proven by `test/client/errors.test.ts`
+  (the seven codes; fallback: other 4xx → `validation`, 3xx/1xx/2xx →
+  `server`, both `retryable: false`; `errors[]` capped at 50 items of 500
+  characters; undici's `cause` read by `networkError`).
+- Env scrub: `test/support/env.ts`, called by `test/setup.ts`; canary in
+  `test/setup.test.ts::has already run on process.env before this test`
+  (red with `setupFiles` removed, checked 2026-11-23).
+- Lint, RFC rules 3-4: `eslint.config.mjs`, proven by
+  `test/lint-rules.test.ts` (red with the `test/**` glob or the `cli`
+  pattern broken, checked 2026-11-23). Beyond the RFC's list: `http2`,
+  `dgram`, `dns`, `child_process`, and the global `fetch` in `test/**`.
+- Owner decisions (2026-11-23): `tsconfig` NodeNext + emit (`make build`,
+  `tsconfig.build.json`); CI matrix Node `22.19` + `24`.
+- Outside "Files expected to change": `eslint.config.mjs`, `Makefile`
+  (`build`), `tsconfig.build.json`, `test/setup*.ts`, `test/support/env.ts`,
+  `test/lint-rules.test.ts`, `docs/architecture/overview.md`; in
+  `quality.yml`, plain `npm ci` (RFC "Transitive packages") and an
+  `npm run build` step besides the matrix.
+- CI: see `docs/HANDOFF.md`.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The fallback codes are this task's choice, not the owner's: other 4xx →
+  `validation` (covers 408 and 409), 3xx → `server`. `{errors: []}` passes
+  through as an empty array.
+- `esModuleInterop` left `tsconfig.json`: `NodeNext` implies it.
+- The lint ban has known holes, all parked in `docs/improvements.md`
+  (dynamic `import()`, `createRequire`, aliased `globalThis`, `WebSocket`).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: done.

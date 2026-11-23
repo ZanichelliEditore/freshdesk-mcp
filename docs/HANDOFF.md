@@ -4,62 +4,68 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T09:30:54+01:00`
-- **Describes commit:** `6a6b52f`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45139306251
-  (ran on `6a6b52f`). This file arrives in the commit right after it.
+- **Written:** `2026-11-23T09:58:23+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file
+  arrives in the commit right after it.
 
-- **Current task:** T-002 RFC: adopt the runtime and test stack,
-  `done (2026-11-23)`. RFC
-  `docs/rfc/active/2026-11-23-adopt-runtime-stack.md` (Active): Node ≥
-  22.19; `zod ^4.2`, `undici ^8`, `@modelcontextprotocol/server ^2`,
-  `vitest ^5`, `@types/node ^22`. See `docs/tasks/T-002-rfc-runtime-stack.md`
-  "Done".
+- **Current task:** T-003 TypeScript toolchain + client error model,
+  `done (2026-11-23)`. Code in `68acf47` and `347b52d`; see
+  `docs/tasks/T-003-ts-toolchain-errors.md` "Done".
 
-- **Next action:** `/pickup` takes T-003 (TypeScript toolchain + client
-  error model): `docs/tasks/T-003-ts-toolchain-errors.md`. Its in-scope now
-  carries the RFC's eslint rules (rule 3-4) and the `FRESHDESK_*` env
-  overwrite in the vitest setup file.
+- **Next action:** `/pickup` takes T-004 (config: env + team config, zod):
+  `docs/tasks/T-004-config.md`. It installs `zod ^4.2`: the commit hook
+  will ask for an RFC; the answer is the trailer `RFC-Not-Needed:` naming
+  `docs/rfc/active/2026-11-23-adopt-runtime-stack.md`.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`; the T-003 task file;
-  the RFC's "Rule for `http.ts`" (rules 1-5). Owner decisions still open in
-  T-003: `tsconfig` NodeNext + emit; CI matrix `22.19` + `24` or Node 24
-  only (the old "Node 20 + 24" is void: floor is 22.19).
+- **Read before anything else:** `docs/tasks/PLAN.md`; the T-004 task
+  file; `test/support/env.ts` and `vitest.config.ts` (every `FRESHDESK_*`
+  variable is a dummy inside tests: T-004 tests pass their own env object
+  and load the team config from a fixture path only).
 
-- **Reviews:** `rfc-reviewer` round 1 (8 findings) and round 2 scoped (3,
-  mechanism changes, owner-approved), all recorded in the RFC "Review".
-  `/handoff` full round, R1 = `2fd2230`, range `7ad29f2..2fd2230`, all four
-  quotes matched for all three:
-  code-reviewer: 3 Medium (Agent built in `server.ts` which tests import;
-  backstop overclaimed; 3xx code unnamed), 2 Low (setup file trips own
-  lint; `global.fetch`): all fixed in the RFC. security-reviewer: Medium
-  name-based test lint dodgeable + real key in test env → import-path ban
-  and env overwrite (owner approved applying without another round,
-  2026-11-23); Low 3xx untested, `npm ci` fallback, transitive deps, TLS
-  lint: 3xx acceptance and TLS lint parked in `docs/improvements.md`,
-  transitive deps and `npm ci` stated in the RFC. compliance-reviewer:
-  Wireframes `none`, nothing to check. No scoped round: owner's call.
+- **Reviews:** full round, range `099a960..68acf47`, R1 = `68acf47`; all
+  four quotes matched for all three.
+  code-reviewer: 3 Medium (canary green with the setup file unwired;
+  `networkError` lost undici's `cause` code; nothing proved the lint bans
+  fire), 5 Low: all fixed in `347b52d`, except the note that the fallback
+  is a choice (now an open doubt). It made one no-op Bash call (`true`)
+  against its brief.
+  security-reviewer: no High or Medium; Low: `errors[]` uncapped and the
+  header overclaiming (fixed), ban missing `http2`/`dgram`/`dns`/
+  `child_process`/global `fetch` in tests (fixed), env scrub does not
+  cover config-time code (parked).
+  compliance-reviewer: Wireframes `none`, nothing to check.
+  Scoped round, range `68acf47..347b52d`, quotes matched for all three:
+  code-reviewer and security-reviewer found nothing that falsifies the
+  acceptance or opens a fail-open path; their lists are parked in
+  `docs/improvements.md` (two entries stamped `347b52d`).
+  compliance-reviewer: `none`, nothing to check. No third round.
 
 - **Proposed plan changes:** T-012 still `proposed (2026-11-20)`, owner to
   confirm. None new.
 
 - **Open doubts:**
-  - RFC rule 4 lint is specified, not yet shown to refuse a planted
-    `import 'undici'` in `test/` (first chance: T-003).
+  - Fallback codes are T-003's choice, not yet the owner's: other 4xx →
+    `validation` (covers 408, 409), 3xx → `server`, both not retryable.
+  - The test network ban has known holes (dynamic `import()`,
+    `createRequire`, aliased `globalThis`, `WebSocket`): parked. T-006's
+    global `MockAgent` is the backstop for undici only.
+  - The Claude Code tool shell still runs Node 22.18.0, below the floor;
+    this session prefixed PATH with nvm's `v22.23.5`.
+  - `make quality` does not run `make build`; CI does.
   - CI gitleaks step not shown to fail on a planted secret (from T-001).
   - Hashes quoted in docs up to `59e3395` predate the history rewrite.
   - Pre-scrub backup bundle (T-001) still holds account values; owner
     deletes it.
   - Host override exact hostname in personal env (T-004, T-006).
 
-- **Dead ends:** Node ≥ 20 with `undici@7`/`vitest@4`: works, rejected by
-  owner (RFC Alternatives).
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `2fd2230` (Node 22.23.5): eslint
-  and ruff "All checks passed!"; prettier "All matched files use Prettier
-  code style!"; ruff "6 files already formatted"; tsc "no TypeScript yet";
-  `tools/checks` "Ran 25 tests", OK; both gitleaks scans passed. Local Node
-  default is now 22.23.5 (nvm); open a new shell.
+- **Checkpoint:** `make quality` exit 0 on the tree of the described commit
+  (Node 22.23.5): eslint and ruff "All checks passed!"; prettier "All
+  matched files use Prettier code style!"; ruff "6 files already
+  formatted"; `tsc --noEmit` clean; vitest "Test Files 3 passed (3)",
+  "Tests 70 passed (70)"; `tools/checks` "Ran 25 tests", OK; both gitleaks
+  scans passed.
