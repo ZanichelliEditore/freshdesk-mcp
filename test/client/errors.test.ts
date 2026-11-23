@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { errorFromResponse, networkError } from "../../src/client/errors.js";
+import {
+  errorFromResponse,
+  MAX_FIELD_ERRORS,
+  MAX_FIELD_TEXT,
+  networkError,
+} from "../../src/client/errors.js";
 
 const noHeaders = new Headers();
 
@@ -124,8 +129,49 @@ describe("errorFromResponse: the seven codes", () => {
   });
 });
 
+describe("errors[] passthrough limits", () => {
+  it("an empty errors[] passes through as an empty array", () => {
+    expect(errorFromResponse(400, noHeaders, { errors: [] }).errors).toEqual([]);
+  });
+
+  it(`keeps at most ${MAX_FIELD_ERRORS} items`, () => {
+    const errors = Array.from({ length: MAX_FIELD_ERRORS + 10 }, (_, i) => ({ message: `m${i}` }));
+    const out = errorFromResponse(400, noHeaders, { errors }).errors;
+    expect(out).toHaveLength(MAX_FIELD_ERRORS);
+    expect(out?.at(-1)).toEqual({ message: `m${MAX_FIELD_ERRORS - 1}` });
+  });
+
+  it(`clips field, message and code to ${MAX_FIELD_TEXT} characters`, () => {
+    const long = "x".repeat(MAX_FIELD_TEXT + 1);
+    const [item] =
+      errorFromResponse(400, noHeaders, {
+        errors: [{ field: long, message: long, code: long }],
+      }).errors ?? [];
+    expect(item).toEqual({
+      field: long.slice(0, MAX_FIELD_TEXT),
+      message: long.slice(0, MAX_FIELD_TEXT),
+      code: long.slice(0, MAX_FIELD_TEXT),
+    });
+  });
+});
+
+describe("networkError: undici's fetch error shape", () => {
+  it("reads the code from cause under TypeError('fetch failed')", () => {
+    const cause = Object.assign(new Error("connect ECONNREFUSED 10.0.0.1:443"), {
+      code: "ECONNREFUSED",
+    });
+    const err = networkError(new TypeError("fetch failed", { cause }));
+    expect(err.message).toContain("ECONNREFUSED");
+    expect(err.message).not.toContain("TypeError");
+  });
+
+  it("a bare TypeError gives the untagged message", () => {
+    expect(networkError(new TypeError("fetch failed")).message).toBe("Could not reach Freshdesk.");
+  });
+});
+
 describe("errorFromResponse: documented fallback for unlisted statuses", () => {
-  it.each([405, 409, 415, 418, 422])(
+  it.each([405, 409, 415, 418, 422, 499])(
     "unlisted 4xx %i maps to validation, not retryable",
     (status) => {
       const err = errorFromResponse(status, noHeaders, undefined);
@@ -147,11 +193,14 @@ describe("errorFromResponse: documented fallback for unlisted statuses", () => {
     expect(err.message).not.toContain("evil.example");
   });
 
-  it.each([100, 200, 204])("non-error status %i maps to server, not retryable", (status) => {
-    expect(errorFromResponse(status, noHeaders, undefined)).toMatchObject({
-      code: "server",
-      http_status: status,
-      retryable: false,
-    });
-  });
+  it.each([100, 200, 204, 399, 600])(
+    "non-error status %i maps to server, not retryable",
+    (status) => {
+      expect(errorFromResponse(status, noHeaders, undefined)).toMatchObject({
+        code: "server",
+        http_status: status,
+        retryable: false,
+      });
+    },
+  );
 });

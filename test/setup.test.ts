@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DUMMY_FRESHDESK_VALUE, scrubFreshdeskEnv } from "./setup.js";
+import { DUMMY_FRESHDESK_VALUE, scrubFreshdeskEnv } from "./support/env.js";
 
 describe("scrubFreshdeskEnv", () => {
   it("overwrites every FRESHDESK_* variable and leaves the others", () => {

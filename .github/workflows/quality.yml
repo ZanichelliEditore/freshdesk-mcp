@@ -31,6 +31,7 @@ jobs:
         run: |
           if git ls-files '*.ts' '*.tsx' | grep -q .; then npx tsc --noEmit; else echo "no TypeScript yet"; fi
       - run: npm test --if-present
+      - run: npm run build
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

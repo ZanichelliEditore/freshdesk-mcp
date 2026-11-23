@@ -5,11 +5,14 @@
 //   429 rate_limited (retryable, retry_after_s from an integer Retry-After) ·
 //   5xx server (retryable) · no response at all: network (retryable).
 // Fallback for any other status:
-//   - another 4xx (405, 409, 415, ...) -> validation, not retryable;
+//   - another 4xx (405, 409, 415, ...) -> validation, not retryable:
+//     the request itself was refused, so sending it again changes nothing;
 //   - anything else (3xx, 1xx, 2xx)    -> server, not retryable.
 //   A 3xx is never followed or retried (RFC 2026-11-23, rule 5).
-// Freshdesk's `errors[]` is passed through on every `validation` error.
-// Messages are fixed text: they never quote the response body, a header
+// Freshdesk's `errors[]` is passed through on every `validation` error,
+// capped at MAX_FIELD_ERRORS items of MAX_FIELD_TEXT characters per string.
+// It is response-body text: return it to the caller, never log it.
+// `message` is fixed text: it never quotes the response body, a header
 // value or a cause's free text.
 
 export type ErrorCode =
@@ -31,6 +34,9 @@ export interface FreshdeskError {
   /** Freshdesk's per-field errors, on `validation` only. */
   errors?: FieldError[];
 }
+
+export const MAX_FIELD_ERRORS = 50;
+export const MAX_FIELD_TEXT = 500;
 
 interface HeaderReader {
   get(name: string): string | null;
@@ -121,24 +127,35 @@ function fieldErrors(body: unknown): FieldError[] | undefined {
   if (!isRecord(body) || !Array.isArray(body.errors)) return undefined;
   const out: FieldError[] = [];
   for (const item of body.errors) {
+    if (out.length === MAX_FIELD_ERRORS) break;
     if (!isRecord(item) || typeof item.message !== "string") continue;
     out.push({
-      ...(typeof item.field === "string" ? { field: item.field } : {}),
-      message: item.message,
-      ...(typeof item.code === "string" ? { code: item.code } : {}),
+      ...(typeof item.field === "string" ? { field: clip(item.field) } : {}),
+      message: clip(item.message),
+      ...(typeof item.code === "string" ? { code: clip(item.code) } : {}),
     });
   }
   return out;
 }
 
-/** A Node error code (`ECONNRESET`) or error name (`TimeoutError`), never free text. */
-function errorTag(cause: unknown): string | undefined {
-  if (!isRecord(cause)) return undefined;
-  for (const candidate of [cause.code, cause.name]) {
+function clip(text: string): string {
+  return text.slice(0, MAX_FIELD_TEXT);
+}
+
+/**
+ * A Node error code (`ECONNRESET`) or error name (`TimeoutError`), never free
+ * text. undici's fetch rejects with `TypeError("fetch failed")` and the real
+ * error in `cause`, so the cause is read before the outer error's name.
+ */
+function errorTag(error: unknown): string | undefined {
+  if (!isRecord(error)) return undefined;
+  const inner = isRecord(error.cause) ? error.cause : {};
+  for (const candidate of [error.code, inner.code, inner.name, error.name]) {
     if (
       typeof candidate === "string" &&
       /^[A-Za-z_]{1,40}$/.test(candidate) &&
-      candidate !== "Error"
+      candidate !== "Error" &&
+      candidate !== "TypeError"
     ) {
       return candidate;
     }
