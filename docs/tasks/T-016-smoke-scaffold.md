@@ -24,7 +24,12 @@ the doubt "schemas follow the API v2 docs, not a live account".
   cannot be added to a frozen instance, and a class that only holds a client
   is not assignable to the resources' `HttpClient` parameter (code-reviewer
   B7, range `da373b7..b4a1571`; review rounds on `b330f08..3479402` and
-  `3479402..f61f70b`).
+  `3479402..f61f70b`). Note from T-050's review (2026-11-23, code-reviewer,
+  range `dd191ec..416641e`): a subclass gets no instance fields of its own;
+  the base freezes the instance in its constructor, so a public field
+  throws, and a `#` field relies on engines still allowing a private field
+  on a frozen object (the "nonextensible applies to private" proposal would
+  refuse it).
 - `schema` report: per default field and per custom-field type, the shape of
   `choices` (list, name → id record, id → names record, tree depth) and
   counts; whether the zod schemas of T-008/T-009 accepted the payloads. No

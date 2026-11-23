@@ -111,8 +111,25 @@ describe("eslint: a tool takes the context (src/tools/**)", () => {
     [TOOL, ".././config.js"],
     [TOOL, "../tools/../config.js"],
     [CORE, "../../tools/../config.js"],
+    [TOOL, "..//config.js"],
+    [TOOL, "..\\\\config.js"],
+    [CORE, "../../client//http.js"],
+    [CORE, "../../schema//index.js"],
+    [TOOL, "../%63onfig.js"],
+    [TOOL, "../config.js?x"],
+    [TOOL, "../config.js#x"],
   ])("refuses in %s a value import of %s", async (filePath, name) => {
     expect(await once(`import { x } from "${name}";`, filePath)).toEqual(restricted);
+  });
+
+  it("refuses a type import not in its shortest form", async () => {
+    expect(await once('import type { X } from "./../config.js";', TOOL)).toEqual(restricted);
+  });
+
+  it("refuses a re-export of the client", async () => {
+    expect(await once('export { HttpClient } from "../../client/http.js";', CORE)).toEqual(
+      restricted,
+    );
   });
 
   it("puts no file under src/tools deeper than one subfolder", () => {

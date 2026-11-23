@@ -279,6 +279,19 @@ Built in one session, split point not taken. Starting commit `dd191ec`
 - **Beyond the letter**: the limiter's helpers `expire`, `below` and `left`
   became `#` methods too, so a cast cannot shadow them on the unfrozen
   instance; nothing else.
+- **Full review fixes** (range `dd191ec..416641e`): probes on `416641e`'s
+  config, in memory: `..//config.js`, `..\\config.js` (`src/tools/x.ts`),
+  `../../client//http.js`, `../../schema//index.js` (`src/tools/core/x.ts`)
+  each gave no rule; `import type { X } from "./../config.js"` and
+  `export { HttpClient } from "../../client/http.js"` were already refused
+  (the task file's "applies to type imports too" stands). The regex gained
+  `//|\\|%|\?|#`. Against `416641e`'s config 7 new cases failed: "refuses
+  in %s a value import of %s" for `..//config.js`, `..\\config.js`,
+  `../../client//http.js`, `../../schema//index.js`, `../%63onfig.js`,
+  `../config.js?x`, `../config.js#x`; the type-import and re-export cases
+  pass on both. Against `dd191ec`'s `src/client/rate-limit.ts` the new rows
+  "an assignment to %s through a cast leaves the refusal as it was" for
+  `below`, `expire`, `left` failed, with the nine earlier ones.
 - Wording: `grep -rn "hardening row" src docs/architecture` prints nothing;
   `grep -c "hostile code" docs/architecture/overview.md` prints 2.
 

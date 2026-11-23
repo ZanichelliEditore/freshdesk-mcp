@@ -87,10 +87,11 @@ export default tseslint.config(
             },
             {
               // A specifier not in its shortest form, which the globs above
-              // let through: `./../x`, `a/./x`, `name/../x`.
-              regex: "^\\./\\.\\.(/|$)|/\\./|(^|/)[^/.][^/]*/\\.\\.(/|$)",
+              // let through: `./../x`, `a/./x`, `name/../x`; and any `//`,
+              // `\`, `%`, `?` or `#`, which the globs do not see through.
+              regex: "^\\./\\.\\.(/|$)|/\\./|(^|/)[^/.][^/]*/\\.\\.(/|$)|//|\\\\|%|\\?|#",
               message:
-                "Write the import path in its shortest form, with no `.` or `name/..` segment.",
+                "Write the import path in its shortest form: no `.` or `name/..` segment, no `//`, `\\`, `%`, `?` or `#`.",
             },
           ],
         },

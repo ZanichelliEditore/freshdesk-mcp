@@ -1,7 +1,7 @@
 // App context (SPEC §7.3, §10): the one place a `Config` becomes the objects
 // the tools work with. A tool takes the context, never the config.
 //
-//   - One limiter, shared by the client: built from the team `limits`.
+//   - One limiter, held by the client alone: built from the team `limits`.
 //   - One schema service on that client, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
@@ -11,7 +11,9 @@
 //     schema service are frozen and keep their state in private fields, so a
 //     tool's mistake or a cast cannot re-point the host, swap the limiter or
 //     drop the cache. Not claimed: hostile code in the process, which can
-//     patch a prototype or read `process.env`.
+//     patch a prototype or read `process.env`; nor `.constructor` on the
+//     client or the service, which reaches the class (the lint block for
+//     src/tools/** is what keeps a tool from building its own).
 //   - `ticketOutput` with the team `fields` already given.
 //   - The API key goes to the client, which keeps it in a private field: the
 //     context has no `config`, `domain` or `apiKey`, and the key cannot be

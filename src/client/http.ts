@@ -145,7 +145,10 @@ export class HttpClient {
   // from the client, and no method can be shadowed on it. A tool's mistake
   // or a cast (`as unknown as Record<...>`) gets a TypeError or changes
   // nothing. Not claimed: hostile code in the process, which can patch the
-  // prototype or read `process.env`.
+  // prototype or read `process.env`. A subclass gets no instance fields of
+  // its own: the instance is frozen here, so a public field throws, and a `#`
+  // field relies on engines still allowing a private field on a frozen
+  // object (the "nonextensible applies to private" proposal would refuse it).
   readonly #host: string;
   readonly #authorization: string;
   readonly #dispatcher: Dispatcher;

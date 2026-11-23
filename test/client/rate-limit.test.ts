@@ -581,6 +581,16 @@ describe("private state: a cast loosens nothing (A3)", () => {
     ["exhausted", false, inHold],
     ["windowEnd", 0, inHold],
     ["nextExpensiveAt", 0, pacing],
+    ["below", (): boolean => false, belowReserve],
+    [
+      "expire",
+      function (this: Record<string, unknown>): void {
+        this.exhausted = false;
+        this.windowEnd = undefined;
+      },
+      inHold,
+    ],
+    ["left", (): string => "planted", belowReserve],
   ] as const)(
     "an assignment to %s through a cast leaves the refusal as it was",
     async (name, value, setup) => {
