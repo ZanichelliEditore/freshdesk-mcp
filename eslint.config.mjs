@@ -21,27 +21,41 @@ const noNetworkInTests =
   "Tests must not open real connections (RFC 2026-11-23 rule 4): use test/support/mock-dispatcher.ts.";
 const noGlobalFetch = "Use undici's fetch with the injected dispatcher (RFC 2026-11-23 rule 3).";
 
+const noGlobalFetchRules = {
+  "no-restricted-globals": ["error", { name: "fetch", message: noGlobalFetch }],
+  "no-restricted-properties": [
+    "error",
+    { object: "globalThis", property: "fetch", message: noGlobalFetch },
+    { object: "global", property: "fetch", message: noGlobalFetch },
+  ],
+};
+
 // A tool takes the context (src/tools/context.ts), never the config, the client,
 // the schema service or ticketOutput on its own. In src/tools/** (context.ts
 // exempt) the source of every import and re-export must be exactly one entry
-// of eslint.tool-imports.json for the file's place: `T0` src/tools/*.ts, `T1`
-// src/tools/toolsets/*.ts, `T2` src/tools/toolsets/core/*.ts; a file anywhere
-// else under src/tools/ gets the bare list only (zod,
-// @modelcontextprotocol/server, node:path, node:fs/promises, node:crypto).
-// Everything else is refused, whatever its form: `value` entries in any form,
-// `type` entries (the config, the schema service, ...) as types only. A
-// source with leading or trailing whitespace is refused too (the rule trims
-// it before matching), and so is any dynamic import().
+// of eslint.tool-imports.json for the file's place; that file is the list and
+// names the places. Everything else is refused, whatever its form: `value`
+// entries in any form, `type` entries as types only. A source with whitespace
+// at either end is refused too (the rule trims it before matching), and so is
+// any dynamic import().
 //
 // Adding a module is one line in eslint.tool-imports.json, made by the task
 // that first needs it, in its own diff, and reviewed like any other change.
+//
+// In all of src/tools/** (context.ts included, which needs none of them) the
+// global `process` (so `process.env`, which holds the API key, and
+// `process.getBuiltinModule`, which reaches any built-in with no import),
+// `globalThis.process`, `global.process`, eval, `new Function` and implied
+// eval are refused.
 //
 // Not refused by lint: createRequire from node:module is not listed, so it is
 // refused as an import, but a global `require`, if a build ever exposed one,
 // is not; a re-export through a module outside src/tools/ (a listed module
 // that re-exports the config); a symlink under src/tools/ or under a listed
 // path; `.constructor` on the client or the schema service, which reaches the
-// class. test/lint-rules.test.ts proves the list's behaviour.
+// class, or on any function, which reaches Function; a computed property on
+// globalThis (`globalThis["pro" + "cess"]`). test/lint-rules.test.ts proves
+// the rest.
 const noToolInternals =
   "A tool takes the context (src/tools/context.ts): it may import only the entries of eslint.tool-imports.json for its place.";
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -74,7 +88,31 @@ const moduleSources = [
   "ExportAllDeclaration > Literal.source",
   "TSExternalModuleReference > Literal.expression",
 ];
+const noProcess =
+  "No `process` in src/tools/**: it holds the API key (process.env) and every built-in (process.getBuiltinModule).";
 const toolImportBlocks = [
+  {
+    files: ["src/tools/**"],
+    // no-implied-eval finds these only as declared globals.
+    languageOptions: {
+      globals: { setTimeout: "readonly", setInterval: "readonly", setImmediate: "readonly" },
+    },
+    rules: {
+      // These two replace the src/** options, so they repeat the fetch ban.
+      "no-restricted-globals": [
+        ...noGlobalFetchRules["no-restricted-globals"],
+        { name: "process", message: noProcess },
+      ],
+      "no-restricted-properties": [
+        ...noGlobalFetchRules["no-restricted-properties"],
+        { object: "globalThis", property: "process", message: noProcess },
+        { object: "global", property: "process", message: noProcess },
+      ],
+      "no-eval": "error",
+      "no-new-func": "error",
+      "no-implied-eval": "error",
+    },
+  },
   {
     files: toolImports.bare.files,
     ignores: ["src/tools/context.ts"],
@@ -99,15 +137,6 @@ const toolImportBlocks = [
     rules: allowList(place),
   })),
 ];
-
-const noGlobalFetchRules = {
-  "no-restricted-globals": ["error", { name: "fetch", message: noGlobalFetch }],
-  "no-restricted-properties": [
-    "error",
-    { object: "globalThis", property: "fetch", message: noGlobalFetch },
-    { object: "global", property: "fetch", message: noGlobalFetch },
-  ],
-};
 
 export default tseslint.config(
   ...tseslint.configs.recommended,

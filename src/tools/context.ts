@@ -12,14 +12,17 @@
 //     tool's mistake or a cast cannot re-point the host, swap the limiter or
 //     drop the cache. Not claimed: hostile code in the process, which can
 //     patch a prototype or read `process.env`.
-//   - The lint blocks for src/tools/** (this file exempt) allow, as the
-//     source of an import or re-export, exactly the entries of
-//     eslint.tool-imports.json for the file's place, the config and the
-//     schema service as types only, and refuse everything else and any
-//     dynamic import(). Not refused by lint: `.constructor` on the client or
-//     the service, which reaches the class; a global `require`, if a build
-//     ever exposed one (createRequire from node:module is not listed, so it
-//     is refused as an import); a re-export through a module
+//   - Lint (eslint.config.mjs; the list is eslint.tool-imports.json, not
+//     repeated here): in src/tools/** (this file exempt) an import or
+//     re-export source must be an entry of that list for the file's place,
+//     its `type` entries as types only; any dynamic import() is refused. In
+//     all of src/tools/**, this file included, the global `process` (so
+//     `process.env` and `process.getBuiltinModule`), eval, `new Function`
+//     and implied eval are refused. Not refused by lint: `.constructor` on
+//     the client or the service, which reaches the class, or on any
+//     function; a computed property on globalThis; a global `require`, if a
+//     build ever exposed one (createRequire from node:module is not listed,
+//     so it is refused as an import); a re-export through a module
 //     outside src/tools/; a symlink under src/tools/ or under a listed path.
 //   - `ticketOutput` with the team `fields` already given.
 //   - The API key goes to the client, which keeps it in a private field: the

@@ -17,6 +17,9 @@ const BANS = new Set([
   "no-restricted-properties",
   "@typescript-eslint/no-restricted-imports",
   "no-restricted-syntax",
+  "no-eval",
+  "no-new-func",
+  "no-implied-eval",
 ]);
 
 async function ruleIds(code: string, filePath: string): Promise<string[]> {
@@ -72,13 +75,16 @@ describe("eslint: test/** network import ban (RFC rule 4)", () => {
 });
 
 describe("eslint: global fetch ban (RFC rule 3)", () => {
-  it.each(["src/client/x.ts", "test/client/x.test.ts"])("refuses it in %s", async (filePath) => {
-    expect(await ruleIds(globalFetches.join("\n"), filePath)).toEqual([
-      "no-restricted-globals",
-      "no-restricted-properties",
-      "no-restricted-properties",
-    ]);
-  });
+  it.each(["src/client/x.ts", "src/tools/x.ts", "src/tools/context.ts", "test/client/x.test.ts"])(
+    "refuses it in %s",
+    async (filePath) => {
+      expect(await ruleIds(globalFetches.join("\n"), filePath)).toEqual([
+        "no-restricted-globals",
+        "no-restricted-properties",
+        "no-restricted-properties",
+      ]);
+    },
+  );
 });
 
 describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
@@ -96,9 +102,16 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
   }
   const places: Place[] = Object.values(toolImports.places);
   const bare: string[] = toolImports.bare.value;
+  /**
+   * Whether a file is in a place's glob, as ESLint matches it: ESLint matches
+   * dotfiles (minimatch `dot: true`), node's matchesGlob does not, so a
+   * segment's leading dot is neutralised first.
+   */
+  const inGlob = (filePath: string, glob: string) =>
+    matchesGlob(filePath.replace(/(^|\/)\./g, "$1_"), glob);
   /** The list that applies to a file: its place's, else the bare one. */
   const listFor = (filePath: string): Place =>
-    places.find((p) => p.files.some((glob) => matchesGlob(filePath, glob))) ?? toolImports.bare;
+    places.find((p) => p.files.some((glob) => inGlob(filePath, glob))) ?? toolImports.bare;
 
   /**
    * The bans each message is: "list" for the allow-list's own message for the
@@ -240,6 +253,8 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     [T2, 'import { x } from " ../../format.js";'],
     [T2, 'export * from "../../list.js ";'],
     [T1, 'import { z } from "zod\\n";'],
+    [T2, 'export { x } from " ../../format.js";'],
+    [T0, 'import x = require(" ./format.js");'],
   ])("refuses in %s whitespace the rule would trim: %s", async (filePath, code) => {
     expect(await verdict(code, filePath)).toEqual(["no-restricted-syntax"]);
   });
@@ -303,7 +318,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     expect(await verdict(value(spec), filePath)).toEqual([]);
   });
 
-  it("puts every file under src/tools in context.ts or in T0, T1 or T2", () => {
+  it("puts every file under src/tools in context.ts or in T0, T1 or T2, none ignored", async () => {
     const root = join(import.meta.dirname, "..", "src", "tools");
     const files = readdirSync(root, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())
@@ -315,8 +330,36 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     expect(files.length).toBeGreaterThan(0);
     const placed = (file: string) =>
       file === "src/tools/context.ts" ||
-      places.some((p) => p.files.some((glob) => matchesGlob(file, glob)));
+      places.some((p) => p.files.some((glob) => inGlob(file, glob)));
     expect(files.filter((file) => !placed(file))).toEqual([]);
+    // A globally ignored file (`**/*.gen.*`) would escape every block.
+    const ignored = [];
+    for (const file of files) if (await eslint.isPathIgnored(file)) ignored.push(file);
+    expect(ignored).toEqual([]);
+  });
+
+  it("refuses an off-list import in a dotfile", async () => {
+    expect(await verdict('import "../config.js";', "src/tools/.x.ts")).toEqual(["type-only"]);
+  });
+
+  // No way round the list or the context without an import.
+  it.each(
+    [T0, T2, "src/tools/context.ts"].flatMap((file) =>
+      (
+        [
+          ['process.getBuiltinModule("node:module");', "no-restricted-globals"],
+          ['globalThis.process.getBuiltinModule("node:http");', "no-restricted-properties"],
+          ['global.process.getBuiltinModule("node:http");', "no-restricted-properties"],
+          ["void process.env.FRESHDESK_API_KEY;", "no-restricted-globals"],
+          ["const { env } = process;", "no-restricted-globals"],
+          ['eval("1");', "no-eval"],
+          ['new Function("return 1");', "no-new-func"],
+          ['setTimeout("x()", 1);', "no-implied-eval"],
+        ] as const
+      ).map(([code, rule]) => [file, code, rule] as const),
+    ),
+  )("refuses in %s: %s", async (filePath, code, rule) => {
+    expect(await verdict(code, filePath)).toEqual([rule]);
   });
 
   it("refuses a dynamic import", async () => {
@@ -339,6 +382,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
       'import { HttpClient } from "./client/http.js";',
       'import { SchemaService } from "./schema/index.js";',
       'void import("./config.js");',
+      "void process.env.FRESHDESK_API_KEY;",
     ].join("\n");
     expect(await ruleIds(code, "src/server.ts")).toEqual([]);
   });
