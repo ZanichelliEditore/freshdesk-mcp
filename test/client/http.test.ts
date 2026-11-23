@@ -522,3 +522,106 @@ describe("HttpClient: stderr", () => {
     }
   });
 });
+
+describe("HttpClient: a cast cannot re-point the client (A1, A2)", () => {
+  const SECOND = "https://other.freshdesk.com";
+  const NAMES = [
+    "host",
+    "limiter",
+    "allowed",
+    "build",
+    "request",
+    "requestWithRetry",
+    "paginate",
+  ] as const;
+  const plantedResult: HttpResult = {
+    ok: false,
+    error: { code: "server", http_status: 500, message: "planted", retryable: false },
+  };
+  const planted: Record<(typeof NAMES)[number], unknown> = {
+    host: "other.freshdesk.com",
+    limiter: new RateLimiter(limits),
+    allowed: () => true,
+    build: () => `${SECOND}/api/v2/tickets`,
+    request: () => Promise.resolve(plantedResult),
+    requestWithRetry: () => Promise.resolve(plantedResult),
+    paginate: async function* () {
+      yield plantedResult;
+      return { truncated: false };
+    },
+  };
+
+  it("is frozen once built", () => {
+    expect(Object.isFrozen(client())).toBe(true);
+  });
+
+  it.each(NAMES)("refuses an assignment to %s through a cast with a TypeError", (name) => {
+    const http = client();
+
+    expect(() => {
+      (http as unknown as Record<string, unknown>)[name] = planted[name];
+    }).toThrow(TypeError);
+  });
+
+  it("after those attempts, sends with the key to the configured origin only", async () => {
+    const http = client();
+    for (const name of NAMES) {
+      try {
+        (http as unknown as Record<string, unknown>)[name] = planted[name];
+      } catch {
+        // Refused: what the case before this one asserts.
+      }
+    }
+    reply("GET", "/api/v2/tickets", 200, [{ id: 1 }]);
+    reply("GET", "/api/v2/tickets", 200, [{ id: 2 }]);
+    reply("GET", "/api/v2/tickets", 200, [{ id: 3 }], {
+      ...JSON_TYPE,
+      link: `<${SECOND}/api/v2/tickets?page=2>; rel="next"`,
+    });
+    reply("GET", "/api/v2/tickets", 200, [{ id: 9 }], JSON_TYPE, SECOND);
+    reply("GET", "/api/v2/tickets?page=2", 200, [{ id: 9 }], JSON_TYPE, SECOND);
+
+    expect(await http.request({ path: "/tickets" })).toMatchObject({ ok: true, body: [{ id: 1 }] });
+    expect(await http.requestWithRetry({ path: "/tickets" })).toMatchObject({
+      ok: true,
+      body: [{ id: 2 }],
+    });
+    const pages: HttpResult[] = [];
+    for await (const page of http.paginate({ path: "/tickets" }, { pages: 5 })) pages.push(page);
+    expect(pages).toHaveLength(2);
+    expect(pages[0]).toMatchObject({ ok: true, body: [{ id: 3 }] });
+    expect(failure(pages[1]!)).toMatchObject({ code: "validation", http_status: null });
+    const direct = await http.request({ path: "/tickets", url: `${SECOND}/api/v2/tickets` });
+    expect(failure(direct)).toMatchObject({ code: "validation", http_status: null });
+
+    expect(sent().filter((call) => call.fullUrl.startsWith(SECOND))).toEqual([]);
+    expect(sent().map((call) => call.fullUrl)).toEqual([
+      `${ORIGIN}/api/v2/tickets`,
+      `${ORIGIN}/api/v2/tickets`,
+      `${ORIGIN}/api/v2/tickets`,
+    ]);
+    const basic = `Basic ${Buffer.from(`${API_KEY}:X`).toString("base64")}`;
+    for (const index of [0, 1, 2]) expect(sentHeaders(index).authorization).toBe(basic);
+  });
+
+  it("in a 429 hold, still refuses with no request sent after an attempt to give it a new limiter", async () => {
+    reply("GET", "/api/v2/tickets", 429, "", { "retry-after": "60" });
+    const http = client();
+    await http.request({ path: "/tickets" });
+    expect(failure(await http.request({ path: "/tickets" }))).toMatchObject({
+      code: "rate_limited",
+      http_status: null,
+    });
+
+    try {
+      (http as unknown as Record<string, unknown>).limiter = new RateLimiter(limits);
+    } catch {
+      // Refused: the frozen client.
+    }
+    reply("GET", "/api/v2/tickets", 200, []);
+
+    const after = await http.request({ path: "/tickets" });
+    expect(after).toMatchObject({ ok: false, error: { code: "rate_limited", http_status: null } });
+    expect(sent()).toHaveLength(1);
+  });
+});

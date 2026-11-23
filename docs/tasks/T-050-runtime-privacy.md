@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-23)
 - **Depends on:** T-047
 - **Created:** 2026-11-23
 
@@ -223,6 +223,64 @@ context holds. `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+Built in one session, split point not taken. Starting commit `dd191ec`
+(its `src/` and `eslint.config.mjs` are those of `ff8420a`).
+
+- **Grep before editing** (`test/`, `spyOn(` on an instance; casts or
+  bracket access to `host`, `limiter`, `cached`, `inFlight`, `ttlS`):
+  `test/client/http-retry.test.ts:84,184` (`vi.spyOn(http, "request")`,
+  moved to `HttpClient.prototype.request`, restored by the existing
+  `vi.restoreAllMocks()`); `:296,453,489,502` (`vi.spyOn(limiter,
+  "acquire")`, kept: the limiter is not frozen);
+  `test/tools/context.test.ts:196,228,231,236` (`context.limiter`, rewritten
+  to go through `context.http`). Nothing in `test/client/paginate.test.ts`
+  or `test/client/resources/`.
+- **Red, by hand**: the new cases written first and run against the
+  starting commit's `src/` (`npx vitest run` on the five test files): 29
+  failed, every one a new case. `test/client/http.test.ts`: "is frozen once
+  built"; "refuses an assignment to %s through a cast with a TypeError" for
+  `host`, `limiter`, `allowed`, `build`, `request`, `requestWithRetry`,
+  `paginate`; "after those attempts, sends with the key to the configured
+  origin only" (A1); "in a 429 hold, still refuses with no request sent
+  after an attempt to give it a new limiter" (A2).
+  `test/client/rate-limit.test.ts`: "has no own keys after an acquire and an
+  observe"; "an assignment to %s through a cast leaves the refusal as it
+  was" for `options`, `total`, `remaining`, `exhausted`, `windowEnd`,
+  `nextExpensiveAt`, each field alone (A3). `test/schema/output.test.ts`:
+  "is frozen once built"; "refuses an assignment to %s through a cast with
+  a TypeError" for `cached`, `inFlight`, `ttlS`; "after an attempt at %s, a
+  get() inside the TTL is the cached schema" for `cached = undefined`,
+  `ttlS = 0` (each alone) and both; "after an attempt at ttlS = 1e9, a get()
+  past the TTL loads again"; "a planted inFlight is not served before the
+  first load"; "a planted inFlight is not served past the TTL" (A3).
+  `test/tools/context.test.ts`: "exposes the client, the schema service and
+  the team settings, not the limiter or the key"; "hands out a client and a
+  schema service that are frozen and have no own keys" (A4); and
+  `tsc --noEmit` failed with `TS2578: Unused '@ts-expect-error' directive`
+  at the `expect(context.limiter)` line. The rewritten "builds the limiter
+  from the team limits: the client's requests show it" passes on both: it
+  moves an existing check from `context.limiter` to `context.http`.
+- **Red, lint**: the new cases of `test/lint-rules.test.ts` run against the
+  starting `eslint.config.mjs`: 22 failed, every refusal: "refuses in %s a
+  value import of %s" for the five specifiers each bare, `.js` and `.ts`
+  (15), for `../../../config.js` (`src/tools/a/b/x.ts`),
+  `../../src/config.js`, `./../config.js`, `.././config.js`,
+  `../tools/../config.js` (`src/tools/x.ts`) and `../../tools/../config.js`
+  (`src/tools/core/x.ts`), and "refuses a dynamic import". The allow cases
+  passed on both, as they should.
+- **The lint regex** (unreviewed until now): built as the task file writes
+  it; it behaves. Two mutations, each tried and reverted: the block scoped
+  to `src/**` fails only "does not reach outside src/tools"; the regex
+  replaced by one that never matches fails exactly `./../config.js`,
+  `.././config.js`, `../tools/../config.js` and `../../tools/../config.js`.
+- **Green**: `make quality` exit 0 on the first run and on a second (load
+  average under 2.5): vitest "Tests 603 passed (603)"; the first eslint case
+  of `test/lint-rules.test.ts` kept its 5 s timeout.
+- **Beyond the letter**: the limiter's helpers `expire`, `below` and `left`
+  became `#` methods too, so a cast cannot shadow them on the unfrozen
+  instance; nothing else.
+- Wording: `grep -rn "hardening row" src docs/architecture` prints nothing;
+  `grep -c "hostile code" docs/architecture/overview.md` prints 2.
 
 ## Dead ends
 none

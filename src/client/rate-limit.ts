@@ -64,20 +64,24 @@ export const MIN_HOLD_S = 1;
 export const MAX_HOLD_S = 3600;
 
 export class RateLimiter {
-  private readonly options: RateLimitOptions;
-  private total = DEFAULT_TOTAL;
-  private remaining = DEFAULT_TOTAL;
+  // Real private members: the options and the state are not properties, so a
+  // tool's mistake or a cast cannot loosen a refusal; an assignment through
+  // one adds a property nothing reads. The instance is not frozen (tests spy
+  // on `acquire`). Not claimed: hostile code in the process.
+  readonly #options: RateLimitOptions;
+  #total = DEFAULT_TOTAL;
+  #remaining = DEFAULT_TOTAL;
   /** Epoch ms; `undefined` until the first call or response of a window. */
-  private windowEnd: number | undefined;
+  #windowEnd: number | undefined;
   /** A 429 was seen in this window: nothing goes out until it ends. */
-  private exhausted = false;
-  private nextExpensiveAt = 0;
+  #exhausted = false;
+  #nextExpensiveAt = 0;
 
   constructor(options: RateLimitOptions) {
     if (options.floor_pct > options.reserve_pct) {
       throw new RangeError("floor_pct must not be above reserve_pct");
     }
-    this.options = options;
+    this.#options = options;
   }
 
   /**
@@ -91,37 +95,37 @@ export class RateLimiter {
     const tooFar = (end: number) => end > deadline || end >= start + boundMs;
     for (;;) {
       const now = Date.now();
-      this.expire(now);
-      const windowEnd = (this.windowEnd ??= now + WINDOW_S * 1000);
+      this.#expire(now);
+      const windowEnd = (this.#windowEnd ??= now + WINDOW_S * 1000);
 
-      if (this.exhausted || this.remaining <= 0 || this.below(this.options.floor_pct)) {
+      if (this.#exhausted || this.#remaining <= 0 || this.#below(this.#options.floor_pct)) {
         if (tooFar(windowEnd)) {
-          const why = this.exhausted ? "Freshdesk rate limit reached" : this.left();
+          const why = this.#exhausted ? "Freshdesk rate limit reached" : this.#left();
           return refuse(`${why}: no call goes out until the window resets`, windowEnd - now);
         }
         await sleep(windowEnd - now);
         continue;
       }
       if (cost === "expensive") {
-        if (this.below(this.options.reserve_pct)) {
+        if (this.#below(this.#options.reserve_pct)) {
           return refuse(
-            `${this.left()}: below the reserve, expensive operations are refused`,
+            `${this.#left()}: below the reserve, expensive operations are refused`,
             windowEnd - now,
           );
         }
-        if (now < this.nextExpensiveAt) {
-          if (tooFar(this.nextExpensiveAt)) {
+        if (now < this.#nextExpensiveAt) {
+          if (tooFar(this.#nextExpensiveAt)) {
             return refuse(
               "Too many expensive operations are queued for pacing",
-              this.nextExpensiveAt - now,
+              this.#nextExpensiveAt - now,
             );
           }
-          await sleep(this.nextExpensiveAt - now);
+          await sleep(this.#nextExpensiveAt - now);
           continue;
         }
-        this.nextExpensiveAt = now + 1000 / this.options.pacing_rps;
+        this.#nextExpensiveAt = now + 1000 / this.#options.pacing_rps;
       }
-      this.remaining -= 1;
+      this.#remaining -= 1;
       return { ok: true };
     }
   }
@@ -134,42 +138,42 @@ export class RateLimiter {
    */
   observe(status: number, headers: HeaderReader): number {
     const now = Date.now();
-    this.expire(now);
+    this.#expire(now);
     if (status === 429) {
       const asked = count(headers.get("retry-after")) ?? WINDOW_S;
       const hold = Math.min(Math.max(asked, MIN_HOLD_S), MAX_HOLD_S) * 1000;
       // A second 429 may extend a hold in force, never shorten it.
-      const end = Math.max(now + hold, this.exhausted ? (this.windowEnd ?? 0) : 0);
-      this.exhausted = true;
-      this.windowEnd = end;
+      const end = Math.max(now + hold, this.#exhausted ? (this.#windowEnd ?? 0) : 0);
+      this.#exhausted = true;
+      this.#windowEnd = end;
       return hold;
     }
-    if (this.exhausted) return 0;
+    if (this.#exhausted) return 0;
     const total = count(headers.get("x-ratelimit-total"));
     const remaining = count(headers.get("x-ratelimit-remaining"));
     if (total !== undefined && remaining !== undefined && total > 0 && remaining <= total) {
-      this.total = total;
-      this.remaining = remaining;
-      this.windowEnd = now + WINDOW_S * 1000;
+      this.#total = total;
+      this.#remaining = remaining;
+      this.#windowEnd = now + WINDOW_S * 1000;
     }
     return 0;
   }
 
   /** Past the window's end the state is stale: assume a fresh budget. */
-  private expire(now: number): void {
-    if (this.windowEnd !== undefined && now >= this.windowEnd) {
-      this.remaining = this.total;
-      this.exhausted = false;
-      this.windowEnd = undefined;
+  #expire(now: number): void {
+    if (this.#windowEnd !== undefined && now >= this.#windowEnd) {
+      this.#remaining = this.#total;
+      this.#exhausted = false;
+      this.#windowEnd = undefined;
     }
   }
 
-  private below(pct: number): boolean {
-    return this.remaining < (this.total * pct) / 100;
+  #below(pct: number): boolean {
+    return this.#remaining < (this.#total * pct) / 100;
   }
 
-  private left(): string {
-    return `${this.remaining} of ${this.total} API calls left in this window`;
+  #left(): string {
+    return `${this.#remaining} of ${this.#total} API calls left in this window`;
   }
 }
 

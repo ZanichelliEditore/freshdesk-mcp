@@ -5,8 +5,13 @@
 //   - One schema service on that client, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
-//     later change to the `Config` changes nothing here. The limiter, the
-//     client and the schema service are not frozen (PLAN, the hardening row).
+//     later change to the `Config` changes nothing here.
+//   - The limiter is not on the context: a tool meets it only through
+//     `http`, whose refusals come back as `rate_limited`. The client and the
+//     schema service are frozen and keep their state in private fields, so a
+//     tool's mistake or a cast cannot re-point the host, swap the limiter or
+//     drop the cache. Not claimed: hostile code in the process, which can
+//     patch a prototype or read `process.env`.
 //   - `ticketOutput` with the team `fields` already given.
 //   - The API key goes to the client, which keeps it in a private field: the
 //     context has no `config`, `domain` or `apiKey`, and the key cannot be
@@ -29,7 +34,6 @@ import { ticketOutput } from "../schema/output.js";
 
 export interface AppContext {
   readonly http: HttpClient;
-  readonly limiter: RateLimiter;
   readonly schema: SchemaService;
   readonly team: TeamConfig;
   /** `ticketOutput` (src/schema/output.ts) with the team's `fields`. */
@@ -48,7 +52,6 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
   });
   return Object.freeze({
     http,
-    limiter,
     schema: new SchemaService(http, team.limits.schema_ttl_s),
     team,
     ticketOutput: (schema: Schema, ticket: Record<string, unknown>) =>

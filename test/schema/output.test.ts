@@ -414,6 +414,101 @@ describe("SchemaService: a cold load ends within 30 s", () => {
   });
 });
 
+describe("SchemaService: a cast reaches neither the cache nor the TTL (A3)", () => {
+  const plantedSchema: Schema = {
+    fields: [],
+    agents: { names: new Map(), truncated: false },
+    groups: { names: new Map(), truncated: false },
+  };
+  const planted = (): Promise<SchemaResult> => Promise.resolve({ ok: true, schema: plantedSchema });
+
+  /** Each assignment through a cast, a throw taken as no change. */
+  function attempt(service: SchemaService, values: Record<string, unknown>): void {
+    for (const [name, value] of Object.entries(values)) {
+      try {
+        (service as unknown as Record<string, unknown>)[name] = value;
+      } catch {
+        // Refused: the frozen service.
+      }
+    }
+  }
+
+  it("is frozen once built", () => {
+    expect(Object.isFrozen(new SchemaService(http, TTL_S))).toBe(true);
+  });
+
+  it.each([
+    ["cached", undefined],
+    ["inFlight", planted()],
+    ["ttlS", 0],
+  ])("refuses an assignment to %s through a cast with a TypeError", (name, value) => {
+    const service = new SchemaService(http, TTL_S);
+
+    expect(() => {
+      (service as unknown as Record<string, unknown>)[name] = value;
+    }).toThrow(TypeError);
+  });
+
+  it.each([
+    ["cached = undefined", { cached: undefined }],
+    ["ttlS = 0", { ttlS: 0 }],
+    ["both", { cached: undefined, ttlS: 0 }],
+  ])(
+    "after an attempt at %s, a get() inside the TTL is the cached schema",
+    async (_name, values) => {
+      queueLoad();
+      const service = new SchemaService(http, TTL_S);
+      const first = schemaOf(await service.get());
+
+      attempt(service, values);
+
+      expect(schemaOf(await service.get())).toBe(first);
+      expect(sentPaths()).toEqual(ONE_LOAD);
+    },
+  );
+
+  it("after an attempt at ttlS = 1e9, a get() past the TTL loads again", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const first = schemaOf(await service.get());
+
+    attempt(service, { ttlS: 1e9 });
+    vi.setSystemTime(Date.now() + TTL_S * 1000);
+    queueLoad();
+
+    expect(schemaOf(await service.get())).not.toBe(first);
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
+  });
+
+  it("a planted inFlight is not served before the first load", async () => {
+    const service = new SchemaService(http, TTL_S);
+    attempt(service, { inFlight: planted() });
+    queueLoad();
+
+    const loaded = schemaOf(await service.get());
+
+    expect(loaded).not.toBe(plantedSchema);
+    expect(loaded.agents.names.size).toBe(3);
+    expect(sentPaths()).toEqual(ONE_LOAD);
+  });
+
+  it("a planted inFlight is not served past the TTL", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const first = schemaOf(await service.get());
+    vi.setSystemTime(Date.now() + TTL_S * 1000);
+    attempt(service, { inFlight: planted() });
+    queueLoad();
+
+    const loaded = schemaOf(await service.get());
+
+    expect(loaded).not.toBe(plantedSchema);
+    expect(loaded).not.toBe(first);
+    expect(loaded.agents.names.size).toBe(3);
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
+  });
+});
+
 /** A schema built by hand: the mapping needs no HTTP. */
 function schema(overrides: Partial<Schema> = {}): Schema {
   return {

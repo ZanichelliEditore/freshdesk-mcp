@@ -1,5 +1,5 @@
 // Flat config. The toolchain is pinned in package.json (npm ci installs it).
-// test/lint-rules.test.ts proves the two RFC blocks below fire.
+// test/lint-rules.test.ts proves the two RFC blocks and the src/tools/** block below fire.
 import tseslint from "typescript-eslint";
 
 // RFC 2026-11-23, rule 4: tests reach HTTP only through the mock helper.
@@ -19,6 +19,9 @@ const networkModules = [
 const noNetworkInTests =
   "Tests must not open real connections (RFC 2026-11-23 rule 4): use test/support/mock-dispatcher.ts.";
 const noGlobalFetch = "Use undici's fetch with the injected dispatcher (RFC 2026-11-23 rule 3).";
+
+const noToolInternals =
+  "A tool takes the context (src/tools/context.ts): it may import the config, the client and the schema modules as types only.";
 
 const noGlobalFetchRules = {
   "no-restricted-globals": ["error", { name: "fetch", message: noGlobalFetch }],
@@ -54,6 +57,49 @@ export default tseslint.config(
                 "Tests must not import cli.ts, which builds the real Agent (RFC 2026-11-23 rule 2).",
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // A tool takes the context (src/tools/context.ts), never the config, the
+    // client, the schema service or ticketOutput on its own: types only.
+    files: ["src/tools/**"],
+    ignores: ["src/tools/context.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // `config` anchored with ../ so a tool-local ./config.js passes.
+              group: [
+                "../config",
+                "../../config",
+                "../../../config",
+                "**/src/config",
+                "**/client/http",
+                "**/schema/output",
+                "**/schema/index",
+              ].flatMap((name) => [name, `${name}.js`, `${name}.ts`]),
+              allowTypeImports: true,
+              message: noToolInternals,
+            },
+            {
+              // A specifier not in its shortest form, which the globs above
+              // let through: `./../x`, `a/./x`, `name/../x`.
+              regex: "^\\./\\.\\.(/|$)|/\\./|(^|/)[^/.][^/]*/\\.\\.(/|$)",
+              message:
+                "Write the import path in its shortest form, with no `.` or `name/..` segment.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression",
+          message: `No dynamic import() in a tool. ${noToolInternals}`,
         },
       ],
     },

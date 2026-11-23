@@ -139,13 +139,17 @@ export interface PageCap {
 }
 
 export class HttpClient {
-  private readonly host: string;
-  // Real private fields: the key and the dispatcher are not properties, so
-  // they cannot be read or printed from the client. Nothing more is claimed:
-  // `host` and `limiter` are ordinary properties (PLAN, the hardening row).
+  // Real private members, and the instance frozen at the end of the
+  // constructor: the key, the dispatcher, the host, the limiter and the two
+  // helpers are not properties, so they cannot be read, printed or replaced
+  // from the client, and no method can be shadowed on it. A tool's mistake
+  // or a cast (`as unknown as Record<...>`) gets a TypeError or changes
+  // nothing. Not claimed: hostile code in the process, which can patch the
+  // prototype or read `process.env`.
+  readonly #host: string;
   readonly #authorization: string;
   readonly #dispatcher: Dispatcher;
-  private readonly limiter: RateLimiter;
+  readonly #limiter: RateLimiter;
 
   constructor(options: HttpClientOptions) {
     if (!FRESHDESK_HOST.test(options.domain) && options.domain !== options.hostOverride) {
@@ -153,10 +157,11 @@ export class HttpClient {
         "FRESHDESK_DOMAIN must be a Freshdesk hostname (like acme.freshdesk.com), or equal FRESHDESK_HOST_OVERRIDE.",
       );
     }
-    this.host = options.domain;
+    this.#host = options.domain;
     this.#authorization = `Basic ${Buffer.from(`${options.apiKey}:X`).toString("base64")}`;
     this.#dispatcher = options.dispatcher;
-    this.limiter = options.limiter;
+    this.#limiter = options.limiter;
+    Object.freeze(this);
   }
 
   /**
@@ -176,17 +181,17 @@ export class HttpClient {
       throw new TypeError("The path must be a template like /tickets/{id}.");
     }
     const payload = request.body === undefined ? undefined : JSON.stringify(request.body);
-    const url = request.url ?? this.build(request);
+    const url = request.url ?? this.#build(request);
     if (url === undefined) {
       return notSent("a path parameter is empty or a dot segment");
     }
-    if (!this.allowed(url)) {
+    if (!this.#allowed(url)) {
       return notSent("the URL is not on the configured Freshdesk host");
     }
     // A deadline already reached: the limiter is not asked. Written so that
     // a deadline that is not a number sends nothing either.
     if (!(deadline > Date.now())) return expired(method);
-    const acquired = await this.limiter.acquire(request.cost ?? "cheap", deadline - Date.now());
+    const acquired = await this.#limiter.acquire(request.cost ?? "cheap", deadline - Date.now());
     if (!acquired.ok) return acquired;
     // Read again: `acquire` may have slept. Its token is spent either way.
     const left = deadline - Date.now();
@@ -222,7 +227,7 @@ export class HttpClient {
         signal: timeout.signal,
       });
       ({ status, headers } = response);
-      this.limiter.observe(status, headers);
+      this.#limiter.observe(status, headers);
       text = await response.text();
     } catch (cause) {
       log("network");
@@ -339,7 +344,7 @@ export class HttpClient {
   }
 
   /** `undefined` when a parameter's value would change which resource is addressed. */
-  private build(request: HttpRequest): string | undefined {
+  #build(request: HttpRequest): string | undefined {
     let usable = true;
     const path = request.path.replace(/\{(\w+)\}/g, (_match, name: string) => {
       const value = request.params?.[name];
@@ -354,16 +359,16 @@ export class HttpClient {
     const query = new URLSearchParams(
       Object.entries(request.query ?? {}).map(([name, value]) => [name, String(value)]),
     ).toString();
-    return `https://${this.host}/api/v2${path}${query === "" ? "" : `?${query}`}`;
+    return `https://${this.#host}/api/v2${path}${query === "" ? "" : `?${query}`}`;
   }
 
-  private allowed(candidate: string): boolean {
+  #allowed(candidate: string): boolean {
     if (!URL.canParse(candidate)) return false;
     const url = new URL(candidate);
     return (
       url.protocol === "https:" &&
       url.port === "" &&
-      url.hostname === this.host &&
+      url.hostname === this.#host &&
       url.username === "" &&
       url.password === ""
     );

@@ -104,31 +104,34 @@ export const LOAD_DEADLINE_MS = 30_000;
 export type SchemaResult = { ok: true; schema: Schema } | { ok: false; error: FreshdeskError };
 
 export class SchemaService {
-  private cached?: { schema: Schema; loadedAt: number };
-  private inFlight?: Promise<SchemaResult>;
-
+  // Real private members, and the instance frozen at the end of the
+  // constructor: a tool's mistake or a cast cannot drop the cache, plant a
+  // load or change the TTL (it gets a TypeError). Not claimed: hostile code
+  // in the process.
+  #cached?: { schema: Schema; loadedAt: number };
+  #inFlight?: Promise<SchemaResult>;
+  readonly #ttlS: number;
   readonly #http: HttpClient;
 
-  constructor(
-    http: HttpClient,
-    private readonly ttlS: number,
-  ) {
+  constructor(http: HttpClient, ttlS: number) {
     this.#http = http;
+    this.#ttlS = ttlS;
+    Object.freeze(this);
   }
 
   /** The cached schema while its TTL lasts; otherwise a new load. */
   get(): Promise<SchemaResult> {
-    const age = this.cached ? Date.now() - this.cached.loadedAt : -1;
-    if (this.cached && age >= 0 && age < this.ttlS * 1000) {
-      return Promise.resolve({ ok: true, schema: this.cached.schema });
+    const age = this.#cached ? Date.now() - this.#cached.loadedAt : -1;
+    if (this.#cached && age >= 0 && age < this.#ttlS * 1000) {
+      return Promise.resolve({ ok: true, schema: this.#cached.schema });
     }
-    this.inFlight ??= this.load().finally(() => {
-      this.inFlight = undefined;
+    this.#inFlight ??= this.#load().finally(() => {
+      this.#inFlight = undefined;
     });
-    return this.inFlight;
+    return this.#inFlight;
   }
 
-  private async load(): Promise<SchemaResult> {
+  async #load(): Promise<SchemaResult> {
     const startedAt = Date.now();
     const deadline = startedAt + LOAD_DEADLINE_MS;
     const fields = await listTicketFields(this.#http, deadline);
@@ -149,7 +152,7 @@ export class SchemaService {
         truncated: groups.truncated,
       },
     });
-    this.cached = { schema, loadedAt: startedAt };
+    this.#cached = { schema, loadedAt: startedAt };
     return { ok: true, schema };
   }
 }

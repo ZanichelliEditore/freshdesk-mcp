@@ -538,3 +538,62 @@ describe("a caller's bound", () => {
     expect(refusal(await pending).retry_after_s).toBe(MAX_WAIT_S);
   });
 });
+
+describe("private state: a cast loosens nothing (A3)", () => {
+  interface Setup {
+    limiter: RateLimiter;
+    /** The call the state refuses. */
+    next: () => Promise<Acquired>;
+  }
+
+  /** 10 of 100 left: expensive is refused by the reserve, not by the floor. */
+  async function belowReserve(): Promise<Setup> {
+    const limiter = limiterAt(100, 10);
+    return { limiter, next: () => limiter.acquire("expensive") };
+  }
+
+  /** A 429 with a Retry-After above MAX_WAIT_S: every call is refused. */
+  async function inHold(): Promise<Setup> {
+    const limiter = new RateLimiter(limits);
+    limiter.observe(429, new Headers({ "Retry-After": "60" }));
+    return { limiter, next: () => limiter.acquire("cheap") };
+  }
+
+  /** One expensive call given out; the next, with 100 ms left, is refused by pacing. */
+  async function pacing(): Promise<Setup> {
+    const limiter = new RateLimiter(limits);
+    expect((await limiter.acquire("expensive")).ok).toBe(true);
+    return { limiter, next: () => limiter.acquire("expensive", 100) };
+  }
+
+  it("has no own keys after an acquire and an observe", async () => {
+    const limiter = new RateLimiter(limits);
+    await limiter.acquire("cheap");
+    limiter.observe(200, budget(100, 90));
+
+    expect(Reflect.ownKeys(limiter)).toEqual([]);
+  });
+
+  it.each([
+    ["options", { reserve_pct: 0, floor_pct: 0, pacing_rps: 2 }, belowReserve],
+    ["total", 10, belowReserve],
+    ["remaining", 100, belowReserve],
+    ["exhausted", false, inHold],
+    ["windowEnd", 0, inHold],
+    ["nextExpensiveAt", 0, pacing],
+  ] as const)(
+    "an assignment to %s through a cast leaves the refusal as it was",
+    async (name, value, setup) => {
+      const { limiter, next } = await setup();
+      const before = refusal(await next());
+
+      try {
+        (limiter as unknown as Record<string, unknown>)[name] = value;
+      } catch {
+        // A throw is as good as no change.
+      }
+
+      expect(refusal(await next())).toEqual(before);
+    },
+  );
+});

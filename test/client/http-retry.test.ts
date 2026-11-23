@@ -80,10 +80,13 @@ describe("requestWithRetry: reads", () => {
     on("GET").reply(503, "").times(4);
     const started = Date.now();
     const at: number[] = [];
-    const request = http.request.bind(http);
-    vi.spyOn(http, "request").mockImplementation((options) => {
+    const request = HttpClient.prototype.request;
+    vi.spyOn(HttpClient.prototype, "request").mockImplementation(function (
+      this: HttpClient,
+      ...args
+    ) {
       at.push(Date.now() - started);
-      return request(options);
+      return request.apply(this, args);
     });
 
     await settle(http.requestWithRetry({ path: "/tickets" }));
@@ -181,7 +184,7 @@ describe("requestWithRetry: reads", () => {
   });
 
   it("does not retry a request that was refused before sending", async () => {
-    const attempts = vi.spyOn(http, "request");
+    const attempts = vi.spyOn(HttpClient.prototype, "request");
 
     const { result } = await settle(
       http.requestWithRetry({ path: "/tickets", url: "https://evil.example/api/v2/tickets" }),

@@ -129,18 +129,14 @@ describe("createContext: team fields", () => {
     expect(context.team.limits.schema_ttl_s).toBe(3600);
   });
 
-  it("exposes the client, the limiter, the schema service and the team settings, not the key", async () => {
+  it("exposes the client, the schema service and the team settings, not the limiter or the key", async () => {
     const context = contextFor({});
     queueLoad();
     await schemaOf(context);
 
-    expect(Object.keys(context).sort()).toEqual([
-      "http",
-      "limiter",
-      "schema",
-      "team",
-      "ticketOutput",
-    ]);
+    expect(Object.keys(context).sort()).toEqual(["http", "schema", "team", "ticketOutput"]);
+    // @ts-expect-error -- the context holds no limiter: a tool meets it through `http` (A4).
+    expect(context.limiter).toBeUndefined();
     const key = baseEnv.FRESHDESK_API_KEY;
     const basic = Buffer.from(`${key}:X`).toString("base64");
     for (const text of [
@@ -193,7 +189,12 @@ describe("createContext: team fields", () => {
     const schema = await schemaOf(context);
     expect(context.ticketOutput(schema, rawTicket)).not.toHaveProperty("Hobby");
     expect(context.team.limits.reserve_pct).toBe(20);
-    expect((await context.limiter.acquire("expensive")).ok).toBe(true);
+    mock
+      .get(`https://${DOMAIN}`)
+      .intercept({ path: FIELDS, method: "GET" })
+      .reply(200, [], { headers: { "content-type": "application/json" } });
+    const expensive = await context.http.request({ path: "/ticket_fields", cost: "expensive" });
+    expect(expensive.ok).toBe(true);
     vi.setSystemTime(Date.now() + 1000);
     expect(await schemaOf(context)).toBe(schema);
   });
@@ -219,21 +220,45 @@ describe("createContext: the name maps cannot be changed at runtime", () => {
 });
 
 describe("createContext: client and limiter", () => {
-  it("builds the limiter from the team limits and gives the same one to the client", async () => {
+  it("builds the limiter from the team limits: the client's requests show it", async () => {
     const budget = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "50" };
+    const replyFields = () =>
+      mock
+        .get(`https://${DOMAIN}`)
+        .intercept({ path: FIELDS, method: "GET" })
+        .reply(200, [], { headers: { "content-type": "application/json", ...budget } });
 
     const strict = contextFor({ limits: { reserve_pct: 60 } });
     queueLoad(undefined, budget);
     await schemaOf(strict);
-    const refused = await strict.limiter.acquire("expensive");
-    expect(refused.ok).toBe(false);
-    if (!refused.ok) expect(refused.error.code).toBe("rate_limited");
-    expect((await strict.limiter.acquire("cheap")).ok).toBe(true);
+    expect(await strict.http.request({ path: "/ticket_fields", cost: "expensive" })).toMatchObject({
+      ok: false,
+      error: { code: "rate_limited", http_status: null },
+    });
+    expect(sentPaths()).toEqual(ONE_LOAD);
+    replyFields();
+    expect((await strict.http.request({ path: "/ticket_fields", cost: "cheap" })).ok).toBe(true);
+    expect(sentPaths()).toEqual([...ONE_LOAD, FIELDS]);
 
     const byDefault = contextFor({});
     queueLoad(undefined, budget);
     await schemaOf(byDefault);
-    expect((await byDefault.limiter.acquire("expensive")).ok).toBe(true);
+    replyFields();
+    expect((await byDefault.http.request({ path: "/ticket_fields", cost: "expensive" })).ok).toBe(
+      true,
+    );
+    expect(sentPaths()).toEqual([...ONE_LOAD, FIELDS, ...ONE_LOAD, FIELDS]);
+  });
+
+  it("hands out a client and a schema service that are frozen and have no own keys", () => {
+    const context = contextFor({});
+
+    expect(Reflect.ownKeys(context.http)).toEqual([]);
+    expect(Reflect.ownKeys(context.schema)).toEqual([]);
+    expect("limiter" in context.http).toBe(false);
+    expect("host" in context.http).toBe(false);
+    expect(Object.isFrozen(context.http)).toBe(true);
+    expect(Object.isFrozen(context.schema)).toBe(true);
   });
 
   it("sends through the context's client to the configured domain", async () => {
