@@ -4,54 +4,60 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T09:58:23+01:00`
-- **Describes commit:** `e313e4f`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45143031498
-  (ran on `e313e4f`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file arrives in the commit right after it.
+- **Written:** `2026-11-23T10:12:52+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending stamp>`. This file
+  arrives in the commit right after it.
 
-- **Current task:** T-003 TypeScript toolchain + client error model,
-  `done (2026-11-23)`. Code in `68acf47` and `347b52d`; see
-  `docs/tasks/T-003-ts-toolchain-errors.md` "Done".
+- **Current task:** T-004 Config: env + team config (zod),
+  `done (2026-11-23)`. Code in `3394b0e` and `1e95850`; see
+  `docs/tasks/T-004-config.md` "Done".
 
-- **Next action:** `/pickup` takes T-004 (config: env + team config, zod):
-  `docs/tasks/T-004-config.md`. It installs `zod ^4.2`: the commit hook
-  will ask for an RFC; the answer is the trailer `RFC-Not-Needed:` naming
-  `docs/rfc/active/2026-11-23-adopt-runtime-stack.md`.
+- **Next action:** `/pickup` takes T-005 (rate limiter, standalone):
+  `docs/tasks/T-005-rate-limiter.md`. It takes options, not `Config`; the
+  defaults it must agree with are `limits` in `src/config.ts`.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`; the T-004 task
-  file; `test/support/env.ts` and `vitest.config.ts` (every `FRESHDESK_*`
-  variable is a dummy inside tests: T-004 tests pass their own env object
-  and load the team config from a fixture path only).
+- **Read before anything else:** `docs/tasks/PLAN.md`; the T-005 task
+  file; `src/config.ts` (the `limits` block only: `reserve_pct`,
+  `floor_pct`, `pacing_rps`).
 
-- **Reviews:** full round, range `099a960..68acf47`, R1 = `68acf47`; all
+- **Reviews:** full round, range `019bf4f..3394b0e`, R1 = `3394b0e`; all
   four quotes matched for all three.
-  code-reviewer: 3 Medium (canary green with the setup file unwired;
-  `networkError` lost undici's `cause` code; nothing proved the lint bans
-  fire), 5 Low: all fixed in `347b52d`, except the note that the fallback
-  is a choice (now an open doubt). It made one no-op Bash call (`true`)
-  against its brief.
-  security-reviewer: no High or Medium; Low: `errors[]` uncapped and the
-  header overclaiming (fixed), ban missing `http2`/`dgram`/`dns`/
-  `child_process`/global `fetch` in tests (fixed), env scrub does not
-  cover config-time code (parked).
+  code-reviewer: 2 Medium (the API key could appear in an error through
+  the config path or a key name; the "file holding a string" test hit the
+  bad-JSON branch), 6 Low: fixed in `1e95850` (both Mediums, stale
+  architecture overview, header comment, hex-IPv4 override, read-error
+  code), the rest are open doubts (SPEC out of sync, floor above reserve,
+  per-call budget key).
+  security-reviewer: no High; 1 Medium (the same key-in-path leak, fixed),
+  6 Low: hex-IPv4 fixed; key names uncapped and unescaped, no file-type
+  or size check, unconstrained `export_dir`/`limits`/allow-list values,
+  enumerable `apiKey` parked (`docs/improvements.md`, entry stamped
+  `3394b0e`); "no team file, no hidden fields" is an open doubt.
+  Dismissed: `acme.freshdesk.com` in tests (never contacted).
   compliance-reviewer: Wireframes `none`, nothing to check.
-  Scoped round, range `68acf47..347b52d`, quotes matched for all three:
-  code-reviewer and security-reviewer found nothing that falsifies the
-  acceptance or opens a fail-open path; their lists are parked in
-  `docs/improvements.md` (two entries stamped `347b52d`).
-  compliance-reviewer: `none`, nothing to check. No third round.
+  Scoped round, range `3394b0e..1e95850`, quotes matched for all three:
+  code-reviewer and security-reviewer both report nothing that falsifies
+  the acceptance or opens a fail-open path; their lists are parked in
+  `docs/improvements.md` (entry stamped `1e95850`). compliance-reviewer:
+  `none`, nothing to check. No third round. No reviewer shelled out.
 
 - **Proposed plan changes:** T-012 still `proposed (2026-11-20)`, owner to
   confirm. None new.
 
 - **Open doubts:**
-  - Fallback codes are T-003's choice, not yet the owner's: other 4xx →
-    `validation` (covers 408, 409), 3xx → `server`, both not retryable.
-  - The test network ban has known holes (dynamic `import()`,
-    `createRequire`, aliased `globalThis`, `WebSocket`): parked. T-006's
-    global `MockAgent` is the backstop for undici only.
+  - New, from T-004 (detail in the task file's "Open doubts"): the team
+    config's key names and `FRESHDESK_HOST_OVERRIDE` are the builder's
+    choice, not yet the owner's; SPEC §8.1 (`FRESHDESK_TOOLSETS`), §10 and
+    §7.1 are out of sync with what was built, SPEC not edited; config has
+    a hostname shape check although the task said "types only"; `floor_pct`
+    above `reserve_pct` is accepted (T-005 should refuse it); no key for
+    §7.2's per-call budget; owner to check `Prodotto` (from SPEC §7.3)
+    against the patterns file.
+  - Two `RFC-Not-Needed:` waivers this session: zod (`3394b0e`) and a
+    one-line `docs/architecture/overview.md` listing (`1e95850`).
+  - Fallback error codes are T-003's choice, not yet the owner's.
+  - The test network ban has known holes: parked.
   - The Claude Code tool shell still runs Node 22.18.0, below the floor;
     this session prefixed PATH with nvm's `v22.23.5`.
   - `make quality` does not run `make build`; CI does.
@@ -59,15 +65,17 @@
   - Hashes quoted in docs up to `59e3395` predate the history rewrite.
   - Pre-scrub backup bundle (T-001) still holds account values; owner
     deletes it.
-  - Host override exact hostname in personal env (T-004, T-006).
+  - Two Dependabot branches on the remote (npm, GitHub Actions), not
+    reviewed.
 
-- **Dead ends:** none.
+- **Dead ends:** a high-entropy synthetic key in `test/config.test.ts` was
+  refused by gitleaks at commit; replaced with a repetitive value.
 
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 on the tree of the described commit
   (Node 22.23.5): eslint and ruff "All checks passed!"; prettier "All
   matched files use Prettier code style!"; ruff "6 files already
-  formatted"; `tsc --noEmit` clean; vitest "Test Files 3 passed (3)",
-  "Tests 70 passed (70)"; `tools/checks` "Ran 25 tests", OK; both gitleaks
+  formatted"; `tsc --noEmit` clean; vitest "Test Files 4 passed (4)",
+  "Tests 144 passed (144)"; `tools/checks` "Ran 25 tests", OK; both gitleaks
   scans passed.
