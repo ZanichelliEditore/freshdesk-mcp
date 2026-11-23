@@ -4,45 +4,58 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T15:50:19+01:00`
-- **Describes commit:** `5240238`
-  (`5240238d1b9ffa096f2078f20bb7cb157a1afc65`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45198648998
-  (ran on `5240238`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T16:09:46+01:00`
+- **Describes commit:** STAMP-HASH, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** STAMP-CI. This file's hash and
+  CI line arrive in the commit right after it.
 
-- **Current task:** sizing of T-050 (`/decompose`, scoped to that row; task
-  file `docs/tasks/PLAN.md`), `done (2026-11-23)`. Commits `3479402`
-  (T-050 `todo`, `docs/tasks/T-050-runtime-privacy.md`), `f61f70b`
-  (full-round fixes) and the one this file describes (scoped round's list A
-  as wording, documents). No `src/` or `test/` file changed.
+- **Current task:** T-047, caller deadline through `requestWithRetry`,
+  `paginate`, the resources and the schema load
+  (`docs/tasks/T-047-caller-deadline.md`), `done (2026-11-23)`. Commits
+  `c44a36e` (build), `97c11e8` (full review fixes) and the one this file
+  describes (documents only). Tests: the task file's "Done". Split point
+  not needed.
 
-- **Next action:** `/pickup` takes T-047
-  (`docs/tasks/T-047-caller-deadline.md`). Then T-050; T-016, T-019, T-042
-  and T-043 are not taken before T-050 is `done`.
+- **Next action:** `/pickup` takes T-050
+  (`docs/tasks/T-050-runtime-privacy.md`). T-016, T-019, T-042 and T-043
+  are not taken before T-050 is `done`.
 
-- **Read before anything else:** `docs/tasks/PLAN.md`, rows T-047 and
-  T-050.
+- **Read before anything else:** `docs/tasks/PLAN.md`, row T-050;
+  `docs/improvements.md`, the two entries stamped `c44a36e` and `97c11e8`
+  (the NaN bound of `acquire` is a candidate for T-050).
 
 - **Reviews:**
-  - `planner` review and full round, range `b330f08..3479402`, R1 =
-    `3479402`; the four quotes matched for all three, no Bash calls.
-    security-reviewer: 3 Medium, 4 Low. code-reviewer: 3 Medium, 4 Low.
-    planner: 3 findings. compliance-reviewer: Wireframes `none`. All
-    applied in `f61f70b`.
-  - Scoped round, range `3479402..f61f70b`; quotes matched for all three,
-    no Bash calls; compliance `none`. security-reviewer: list A 2.
-    code-reviewer: list A 1. Applied in the commit this file describes as
-    acceptance wording (task files and PLAN rows of T-050 and T-016),
-    **not reviewed again**. List B parked: `docs/improvements.md`, entry
-    stamped `f61f70b`. No third round.
+  - Full round, range `da02ddf..c44a36e`, R1 = `c44a36e`; the four quotes
+    matched for all three, no Bash calls. security-reviewer: no finding.
+    code-reviewer: 1 Medium, 3 Low, fixed in `97c11e8` (one Low kept as
+    built and parked for T-014). compliance-reviewer: Wireframes `none`.
+    Beyond the review's list, `97c11e8` rewrote the backoff check of
+    `requestWithRetry` for a deadline that is not a number: a mechanism
+    change, reviewed in the scoped round.
+  - Scoped round, range `c44a36e..97c11e8`; quotes matched for all three,
+    no Bash calls; list A empty for all three; compliance `none`. List B
+    parked: `docs/improvements.md`, entry stamped `97c11e8`. No third
+    round.
+  - The tests T-047 added spy on neither the client nor the limiter; two
+    `limiter.acquire` spies of T-013 remain in
+    `test/client/http-retry.test.ts`.
 
-- **Proposed plan changes:** T-041 and T-049 stay `proposed (2026-11-23)`:
-  T-041 waits on the owner's smoke run (OD-4), T-049 on the owner's
-  confirm or drop.
+- **Proposed plan changes:** none new. T-041 and T-049 stay
+  `proposed (2026-11-23)`: T-041 waits on the owner's smoke run (OD-4),
+  T-049 on the owner's confirm or drop.
 
 - **Open doubts (owner):**
+  - T-047, builder's choices accepted by the orchestrator on 2026-11-23,
+    to confirm: the expiry message no longer names 30 s; a deadline
+    already reached (`NaN` included) is refused as `network` without
+    asking the limiter, and a write so refused is `retryable: false`
+    though not sent (T-014 decides);
+    `test/client/resources/ticket-fields.test.ts` changed beyond the task
+    file's list. Details: the task file's "Open doubts".
+  - `test/lint-rules.test.ts:47`, first case (the first eslint run): its
+    5 s timeout failed 2 of 3 `make quality` runs on 2026-11-23 under a
+    load average of 10 to 13; not touched by T-047, parked
+    (`docs/improvements.md`, `97c11e8`). CI may meet it.
   - T-050's lint block gained a second pattern in the scoped round's
     wording pass (a regex refusing `./../config.js` and
     `../tools/../config.js`, which the anchored globs let through). It was
@@ -86,8 +99,9 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (Node 22): eslint clean, ruff "All
-  checks passed!"; prettier "All matched files use Prettier code style!";
-  `tsc --noEmit` clean; vitest "Test Files 14 passed (14)", "Tests 518
-  passed (518)"; `tools/checks` "Ran 54 tests", OK; `npm run build`
-  (`tsc -p tsconfig.build.json`) clean; both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on the first run (Node 22): eslint
+  clean, ruff "All checks passed!"; prettier "All matched files use
+  Prettier code style!"; `tsc --noEmit` clean; vitest "Test Files 14
+  passed (14)", "Tests 540 passed (540)"; `tools/checks` "Ran 54 tests",
+  OK; `npm run build` (`tsc -p tsconfig.build.json`) clean; both gitleaks
+  scans passed.
