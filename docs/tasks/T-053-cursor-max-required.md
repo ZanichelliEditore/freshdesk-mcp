@@ -17,7 +17,10 @@ tool can read a cursor without its own bound. Closes `docs/improvements.md`
 - The header comment and the doc comment at `:83-89` brought to what is
   then true.
 - `test/tools/list.test.ts`: the case that accepts position 101 with no
-  bound is replaced by the acceptance's typecheck and cast cases.
+  bound is replaced by the acceptance's typecheck and cast cases; every
+  other call with no bound gets one (the `refused` helper, the round trip
+  with `Number.MAX_SAFE_INTEGER`), and `fakeTool`, the shape later list
+  tools copy, passes its own bound.
 - `docs/architecture/overview.md`: `readCursor(call, maxPosition)`.
 
 ## Out of scope

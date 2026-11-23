@@ -13,7 +13,7 @@ Canned-response reads for C3 and C10.
 - The list: folders and titles in the envelope, bounded, cost in the
   description. One response: content as text; wrapped in `<ticket_content>`
   (owner, 2026-11-23).
-- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition` (0 if it serves one page only), and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
+- Cursor (`/decompose`, 2026-11-23): before any request the list tool calls `readCursor` with its JSON arguments and its own `maxPosition`, a named constant: 0 if it serves one page only, else its source's last page (e.g. `MAX_PAGES - 1`), never a larger number, and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
 
 ## Out of scope
 - Suggesting or writing canned responses.
@@ -32,7 +32,7 @@ Canned-response reads for C3 and C10.
 ## Acceptance
 `test/tools/core/canned.test.ts`: the list returns the fixture's folders and
 titles in the envelope with `api_calls_used` equal to the MockAgent count
-and `truncated: true` past its cap; a cursor from another call and one past the tool's last position are each `isError` `validation` with the MockAgent count 0; folder and response titles pass through
+and `truncated: true` past its cap; a cursor from another call is `isError` `validation` with the MockAgent count 0; a cursor built over the arguments as sent, at the tool's `maxPosition`, is accepted, and one at `maxPosition` + 1 is `isError` `validation` with the message "points past the last position" and the MockAgent count 0; `grep -nF -e '.default(' -e '.transform('` over the tool's file prints nothing; folder and response titles pass through
 the name helper, one carrying an HTML tag coming back without it (asserted);
 one response returns its text with no HTML tag, inside `<ticket_content>`
 (asserted); an unknown id is `isError` `not_found`; `make quality` green.

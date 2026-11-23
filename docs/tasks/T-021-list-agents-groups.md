@@ -19,7 +19,7 @@ envelope.
 - Names are not wrapped (owner, 2026-11-23): through T-017's name helper,
   HTML stripped and length capped. `truncated` when the 10-page cap cut the
   list.
-- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition` (0 if it serves one page only), and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
+- Cursor (`/decompose`, 2026-11-23): before any request the tool calls `readCursor` with its JSON arguments and its own `maxPosition`, a named constant: 0 if it serves one page only, else its source's last page (e.g. `MAX_PAGES - 1`), never a larger number, and gives `listEnvelope` the same arguments. Its input schema has no zod `default` or `transform`, so the arguments it parses are the ones sent (owner, 2026-11-23).
 
 ## Out of scope
 - Roles, skills, availability.
@@ -43,7 +43,7 @@ envelope with the fixture's ids, names and work emails, and an agent's phone
 and every other key are absent; `list_groups` returns ids and names; no name
 is inside `<ticket_content>`, a name carrying an HTML tag comes back without
 it and one over the cap is cut (asserted); a list cut by the cap says
-`truncated: true`; a client error comes back as `isError` with its code; a cursor from another call and one past the tool's last position are each `isError` `validation` with the MockAgent count 0;
+`truncated: true`; a client error comes back as `isError` with its code; a cursor from another call is `isError` `validation` with the MockAgent count 0; a cursor built over the arguments as sent, at the tool's `maxPosition`, is accepted, and one at `maxPosition` + 1 is `isError` `validation` with the message "points past the last position" and the MockAgent count 0; `grep -nF -e '.default(' -e '.transform('` over the tool's file prints nothing;
 `api_calls_used` matches the MockAgent count; `make quality` green.
 
 ---
