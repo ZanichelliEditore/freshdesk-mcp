@@ -1,13 +1,13 @@
-# T-044 — Examine the two Dependabot branches and report
+# T-044 — Examine the Dependabot branches and report
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-23)
 - **Depends on:** none
 - **Created:** 2026-11-23
 
 ## Goal
-A report on the two Dependabot branches on the remote, so the owner can
+A report on the Dependabot branches on the remote, so the owner can
 decide. Nothing is merged, pushed or deleted without the owner's go (owner,
 2026-11-23).
 
@@ -50,7 +50,8 @@ origin/main` and the remote's branch list are unchanged by the session;
 Read on 2026-11-23 from each pull request's own CI (`gh pr checks`,
 `gh api …/jobs/<id>/logs`) and from `git diff origin/main...<branch>`;
 nothing installed locally, nothing merged, pushed, closed or deleted.
-`git branch -r` (three Dependabot branches, not two):
+`git branch -r` at the start of the session (three Dependabot branches,
+not two):
 
 ```
   origin/HEAD -> origin/main
@@ -84,7 +85,11 @@ range in any active RFC. GitHub Actions are not packages; no RFC covers them.
      export (no publish step yet); setup-python v7 removes the
      `pip-install` input (unused). No breaking note touches this workflow.
    - **Recommendation: merge, after a rebase** (`@dependabot rebase` on
-     PR #1) and a green CI on the rebased head.
+     PR #1) and a green CI on the rebased head. Before merging,
+     `git diff origin/main...<rebased head> -- .github/` must show only the
+     three `@v6` → `@v7` lines: no new `with:` inputs, no `permissions:`
+     change; and check checkout v7's `persist-credentials` default in its
+     release notes.
 2. **`dependabot/npm_and_yarn/dependencies-a3ce446e39`**, PR #3, open,
    head `da6f69a`, based on `f733ac1`; merges cleanly into `main`.
    - Bumps (devDependencies): `typescript` `^6.0.3` → `^7.0.2`,
@@ -97,31 +102,59 @@ range in any active RFC. GitHub Actions are not packages; no RFC covers them.
      `ERESOLVE`: `peer typescript@">=4.8.4 <6.1.0" from
      typescript-eslint@8.73.0`; `quality (24)` cancelled. Neither
      `make quality` nor `make build` was reached.
-   - **Recommendation: close.** TypeScript 7 waits for a
-     `typescript-eslint` release that accepts it; `@types/node 26`
-     contradicts the RFC and would need `/rfc` (not wanted while the floor
-     is 22.19).
+   - **Recommendation: close, and add `ignore` rules.** TypeScript 7
+     waits for a `typescript-eslint` release that accepts it;
+     `@types/node 26` contradicts the RFC and would need `/rfc` (not
+     wanted while the floor is 22.19). Closing alone does not stop
+     Dependabot reopening the group (`.github/dependabot.yml:10-16` groups
+     `*`, weekly, no `ignore`): PLAN row T-052, `proposed (2026-11-23)`,
+     ignores `@types/node` majors above 22 and `typescript` majors from 7.
+     Not done in this spike.
 3. **`dependabot/npm_and_yarn/dependencies-b7ceb5d816`**, PR #2,
    **already closed** by Dependabot on 2026-11-23 ("typescript is
-   updatable in another way", superseded by PR #3); head `68d0b13`; the
-   branch is still on the remote.
+   updatable in another way", superseded by PR #3); head `68d0b13`. The
+   branch was deleted from the remote during the session, not by it
+   (`git fetch --prune`: `[deleted] … dependencies-b7ceb5d816`).
    - Bumps: `typescript` `^6.0.3` → `^7.0.2`.
    - RFC: as for PR #3, no range for `typescript`; a major.
    - CI: run https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/44733275547,
      failure: `npm ci` `ERESOLVE`, same `typescript-eslint` peer range.
-   - **Recommendation: close (already closed); the owner may delete the
-     leftover branch.**
+   - **Recommendation: close (already closed, branch gone).**
 
 `make quality` on `main` (`e9df10e`), 2026-11-23: exit 0; vitest 15
 files, 668 tests passed; `tools/checks` 54 tests OK; `npm run build`
-clean; both gitleaks scans passed.
+clean; both gitleaks scans passed. Again at `079e776` plus the review
+wording fixes (2026-11-23T17:42+01:00): exit 0, the same counts
+(15 files, 668 tests; 54 tests OK; both gitleaks scans passed).
+
+Remote unchanged by the session except its own push:
+`git rev-parse origin/main` was `e9df10e` at the start and still
+`e9df10e` before the handoff push; the handoff push (T-044 commits, then
+the stamp) is the session's only change to the remote. Branch list after
+`git fetch --prune` before the push: the same as above minus
+`dependabot/npm_and_yarn/dependencies-b7ceb5d816`, deleted outside the
+session:
+
+```
+  origin/HEAD -> origin/main
+  origin/dependabot/github_actions/dependencies-4561e6c454
+  origin/dependabot/npm_and_yarn/dependencies-a3ce446e39
+  origin/main
+```
+
+Commits: `079e776` (report), the handoff commit (review wording fixes).
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Owner actions: merge PR #1 after `@dependabot rebase`, a green CI and
+  the `.github/` diff check; close PR #3; confirm or drop T-052.
+- checkout v7's `persist-credentials` default not confirmed from its
+  release notes (they do not mention it).
 
 ## Context pressure
+low
 
 ## Next action
+none (done).
