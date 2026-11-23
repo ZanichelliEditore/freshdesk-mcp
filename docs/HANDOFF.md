@@ -5,9 +5,10 @@
 "none".*
 
 - **Written:** `2026-11-23T09:30:54+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file arrives
-  in the commit right after it.
+- **Describes commit:** `6a6b52f`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45139306251
+  (ran on `6a6b52f`). This file arrives in the commit right after it.
 
 - **Current task:** T-002 RFC: adopt the runtime and test stack,
   `done (2026-11-23)`. RFC
