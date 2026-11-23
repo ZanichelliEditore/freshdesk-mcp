@@ -3,7 +3,8 @@
 - **Type:** build
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-015, T-050
+- **Depends on:** T-015, T-050 (its first half, if T-050's split point is
+  taken)
 - **Created:** 2026-11-23
 
 ## Goal
@@ -14,11 +15,13 @@ the doubt "schemas follow the API v2 docs, not a live account".
 
 ## In scope
 - A wrapper around `HttpClient` that refuses any method but GET before
-  anything is sent. It wraps the client (held in a `#` field) or subclasses
-  it without adding instance fields; it is never a `Proxy` of it. After
-  T-050 the client is frozen and its internals are `#` members, which a
-  `Proxy` receiver does not have (code-reviewer B7, range
-  `da373b7..b4a1571`).
+  anything is sent. It is a subclass of `HttpClient` that adds no instance
+  field, never a `Proxy` of one and never a separate wrapper class. After
+  T-050 the client is frozen and its internals are `#` members: a `Proxy`
+  receiver does not have them, a subclass field cannot be added to a frozen
+  instance, and a wrapper is not assignable to the resources' `HttpClient`
+  parameter (code-reviewer B7, range `da373b7..b4a1571`; full round on
+  `b330f08..3479402`).
 - `schema` report: per default field and per custom-field type, the shape of
   `choices` (list, name → id record, id → names record, tree depth) and
   counts; whether the zod schemas of T-008/T-009 accepted the payloads. No
@@ -53,7 +56,10 @@ the doubt "schemas follow the API v2 docs, not a live account".
 
 ## Acceptance
 `test/smoke.test.ts` (MockAgent): a POST, PUT and DELETE through the smoke
-client are each refused with no request sent; on a fixture whose
+client are each refused with no request sent; the smoke client is an
+`instanceof HttpClient`, `util.types.isProxy` of it is false,
+`Reflect.ownKeys` of it is empty, and `listTicketFields` takes it with no
+cast (`make typecheck`); on a fixture whose
 `default_agent`, `default_group` and `default_product` carry a name → id
 `choices` record the report says so, and on the current fixture it says they
 carry none; no label, name, id or choice value of the fixture, and neither
