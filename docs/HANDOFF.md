@@ -5,9 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-23T10:12:52+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending stamp>`. This file
-  arrives in the commit right after it.
+- **Describes commit:** `29d77f6`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45145117506
+  (ran on `29d77f6`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file arrives in the commit right after it.
 
 - **Current task:** T-004 Config: env + team config (zod),
   `done (2026-11-23)`. Code in `3394b0e` and `1e95850`; see
