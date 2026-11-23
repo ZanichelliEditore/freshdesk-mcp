@@ -4,21 +4,22 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-23T17:16:19+01:00`
-- **Describes commit:** `002f91a`
-  (`002f91a0017530c3ea8525644199959a95530cea`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45214702698
-  (ran on `002f91a`: `quality (22.19)`, `quality (24)`, `checks`). This
-  file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-23T17:18:59+01:00`
+- **Describes commit:** pending: this file's hash and CI line arrive in
+  the commit right after it.
 
 - **Current task:** plan session, `/decompose` scoped to T-051, the task
   file `docs/tasks/PLAN.md`. Commits `b3fdd32` (sized), `83acc09` (full
-  review fixes) and the one this file describes (rewrite to an exact
-  allow-list, the owner's option A). T-051 is `todo (2026-11-23)`,
+  review fixes), `002f91a` (rewrite to an exact allow-list, the owner's
+  option A) and the one this file describes (review items parked). T-051 is `todo (2026-11-23)`,
   `docs/tasks/T-051-lint-import-allow-list.md`, right before T-019. T-019,
   T-042 and T-043 depend on it (rows and task files). T-016 does not, and
   it stays next.
+  Decided (orchestrator, 2026-11-23): the tool folder is
+  `src/tools/toolsets/core/`, as the M1 task files put it; T-051 moves
+  T-050's lint cases there and replaces the depth test. The scoped round's
+  list B is parked in `docs/improvements.md`, entry `83acc09` (B4, B5 and
+  security B2 live; the rest moot).
 
 - **Next action:** `/pickup` takes T-016 (`docs/tasks/T-016-*.md`).
 
@@ -53,15 +54,6 @@
   confirm or drop.
 
 - **Open doubts (owner):**
-  - **Parking not done.** The orchestrator asked to park code B1–B5 and
-    security B1–B3 from the scoped round in `docs/improvements.md`. Their
-    text did not reach this session, so they are not parked yet. The
-    orchestrator holds them.
-  - **T-051's places.** The M1 task files put the tools in
-    `src/tools/toolsets/core/`. T-050's lint tests and its depth test
-    assumed `src/tools/core/`, at most one subfolder deep. T-051 follows
-    the task files, moves those cases and replaces the depth test. To
-    confirm.
   - **T-051's list** is drawn from the M1 task files: modules, eight
     resources, `node:path`, `node:fs/promises`, `node:crypto`, and the root
     entry of `@modelcontextprotocol/server`. A task that needs another
