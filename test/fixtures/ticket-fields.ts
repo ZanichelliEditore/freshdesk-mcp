@@ -70,3 +70,39 @@ export const ticketFieldsPayload = [
     ],
   },
 ];
+
+/**
+ * The payload with an agent, a group and a product field whose `choices` are
+ * a name → id record: the shape OD-4 asks about. Every name and id is
+ * invented.
+ */
+export const ticketFieldsWithEntityChoices = [
+  ...ticketFieldsPayload,
+  {
+    id: 1006,
+    name: "responder_id",
+    label: "Agent",
+    position: 6,
+    type: "default_agent",
+    default: true,
+    choices: { "Quill Pemberton": 70411, "Oriel Vantasse": 70412 },
+  },
+  {
+    id: 1007,
+    name: "group_id",
+    label: "Group",
+    position: 7,
+    type: "default_group",
+    default: true,
+    choices: { "Harbour desk": 70421, "Lantern desk": 70422, "Meadow desk": 70423 },
+  },
+  {
+    id: 1008,
+    name: "product",
+    label: "Product line",
+    position: 8,
+    type: "default_product",
+    default: true,
+    choices: { "Zephyr kit": 70431 },
+  },
+];

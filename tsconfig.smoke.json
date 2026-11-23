@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": ".",
+    "outDir": "node_modules/.cache/freshdesk-mcp-smoke"
+  },
+  "include": ["scripts/smoke/cli.ts"]
+}

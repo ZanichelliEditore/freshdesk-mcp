@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -32,6 +32,11 @@ build: ## compile src/ to dist/ (tsconfig.build.json)
 	npm run build
 
 quality: lint format-check typecheck test build ## full local gate
+
+# Compiled out of the tree (tsconfig.smoke.json), then run. Never in `quality` or CI.
+smoke: ## GET-only check of the real account (owner runs it; same env as the server): prints shapes, never values
+	npx tsc -p tsconfig.smoke.json
+	node node_modules/.cache/freshdesk-mcp-smoke/scripts/smoke/cli.js
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py
