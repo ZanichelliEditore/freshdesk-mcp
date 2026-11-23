@@ -333,3 +333,127 @@ describe("paginate: whether a cap cut the list", () => {
     expect(truncated).toBe(false);
   });
 });
+
+describe("paginate: one deadline for all its pages", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Queue one page that answers after `delay` ms. */
+  function slowPage(path: string, body: unknown[], delay: number, link?: string): void {
+    mock
+      .get(ORIGIN)
+      .intercept({ path, method: "GET" })
+      .reply(200, body, {
+        headers: {
+          "content-type": "application/json",
+          ...(link === undefined ? {} : { link }),
+        },
+      })
+      .delay(delay);
+  }
+
+  /** Every page and the return value, the fake clock run forward as needed. */
+  async function run(
+    deadline?: number,
+  ): Promise<{ pages: HttpResult[]; truncated: boolean; ms: number }> {
+    const started = Date.now();
+    const iterator = http.paginate(
+      { path: "/tickets", query: { per_page: 2 } },
+      { pages: 10 },
+      deadline,
+    );
+    const pages: HttpResult[] = [];
+    let truncated: boolean | undefined;
+    void (async () => {
+      for (;;) {
+        const step = await iterator.next();
+        if (step.done) {
+          truncated = step.value.truncated;
+          return;
+        }
+        pages.push(step.value);
+      }
+    })();
+    while (truncated === undefined) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (truncated === undefined) await vi.advanceTimersByTimeAsync(100);
+    }
+    return { pages, truncated, ms: Date.now() - started };
+  }
+
+  const PAGE_2 = `${ORIGIN}/api/v2/tickets?per_page=2&page=2`;
+  const PAGE_3 = `${ORIGIN}/api/v2/tickets?per_page=2&page=3`;
+
+  it("cuts the page in flight at the deadline and ends with the error, not a short list", async () => {
+    // Each page takes 3 s: with 5 s for each of them, all three would come.
+    slowPage("/api/v2/tickets?per_page=2", [{ id: 1 }], 3000, next(PAGE_2));
+    slowPage("/api/v2/tickets?per_page=2&page=2", [{ id: 2 }], 3000, next(PAGE_3));
+    slowPage("/api/v2/tickets?per_page=2&page=3", [{ id: 3 }], 3000);
+
+    const { pages, truncated, ms } = await run(Date.now() + 5000);
+
+    expect(bodies(pages)).toEqual([[{ id: 1 }], "network"]);
+    expect(pages[1]).toMatchObject({
+      ok: false,
+      error: { code: "network", http_status: null, retryable: true },
+    });
+    expect(truncated).toBe(false);
+    expect(ms).toBe(5000);
+    expect(sentUrls()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(sentUrls()).toHaveLength(2);
+  });
+
+  it("asks for no page once the deadline has passed between two pages", async () => {
+    threePages();
+    const iterator = http.paginate(
+      { path: "/tickets", query: { per_page: 2 } },
+      { pages: 10 },
+      Date.now() + 5000,
+    );
+
+    const first = await iterator.next();
+    vi.setSystemTime(Date.now() + 5000);
+    const second = await iterator.next();
+    const end = await iterator.next();
+
+    expect(first.value).toMatchObject({ ok: true, body: [{ id: 1 }, { id: 2 }] });
+    expect(second.value).toMatchObject({
+      ok: false,
+      error: { code: "network", http_status: null, retryable: true },
+    });
+    expect(end).toEqual({ done: true, value: { truncated: false } });
+    expect(sentUrls()).toHaveLength(1);
+  });
+
+  it("sends nothing when the deadline has already passed", async () => {
+    threePages();
+
+    const { pages, truncated } = await run(Date.now() - 1);
+
+    expect(bodies(pages)).toEqual(["network"]);
+    expect(truncated).toBe(false);
+    expect(sentUrls()).toHaveLength(0);
+  });
+
+  it("with none, each page keeps its own 30 s", async () => {
+    // 12 s a page, each as a timeout of 10 s and a retry that answers in 1.5 s.
+    slowPage("/api/v2/tickets?per_page=2", [], 60_000);
+    slowPage("/api/v2/tickets?per_page=2", [{ id: 1 }], 1500, next(PAGE_2));
+    slowPage("/api/v2/tickets?per_page=2&page=2", [], 60_000);
+    slowPage("/api/v2/tickets?per_page=2&page=2", [{ id: 2 }], 1500, next(PAGE_3));
+    slowPage("/api/v2/tickets?per_page=2&page=3", [], 60_000);
+    slowPage("/api/v2/tickets?per_page=2&page=3", [{ id: 3 }], 1500);
+
+    const { pages, truncated, ms } = await run();
+
+    expect(bodies(pages)).toEqual([[{ id: 1 }], [{ id: 2 }], [{ id: 3 }]]);
+    expect(truncated).toBe(false);
+    expect(ms).toBe(36_000);
+  });
+});

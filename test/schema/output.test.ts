@@ -250,6 +250,164 @@ describe("SchemaService: load and TTL cache", () => {
   });
 });
 
+describe("SchemaService: a cold load ends within 30 s", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  });
+
+  /** Queue one answer that comes after `delay` ms. */
+  function slow(path: string, body: unknown, delay: number, link?: string, status = 200) {
+    mock
+      .get(ORIGIN)
+      .intercept({ path, method: "GET" })
+      .reply(status, body as object, {
+        headers: { ...JSON_TYPE, ...(link ? { link: `<${ORIGIN}${link}>; rel="next"` } : {}) },
+      })
+      .delay(delay);
+  }
+
+  /** Runs the fake clock forward until the load settles; returns the fake ms it took. */
+  async function settle(
+    call: Promise<SchemaResult>,
+  ): Promise<{ result: SchemaResult; ms: number }> {
+    const started = Date.now();
+    let result: SchemaResult | undefined;
+    void call.then((value) => {
+      result = value;
+    });
+    while (result === undefined) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
+    }
+    return { result, ms: Date.now() - started };
+  }
+
+  it("gives up at 30 s with a retryable network error, sends nothing after, and loads again on the next get", async () => {
+    // Each answer takes 9 s, under the 10 s of one attempt: the fourth would
+    // come at 36 s. With 30 s for each request the load would go on.
+    slow(FIELDS, schemaFieldsPayload, 9000);
+    slow(AGENTS, agentPages[0], 9000, `${AGENTS}&page=2`);
+    slow(`${AGENTS}&page=2`, agentPages[1], 9000);
+    slow(GROUPS, groupPages[0], 9000, `${GROUPS}&page=2`);
+    slow(`${GROUPS}&page=2`, groupPages[1], 9000);
+    const service = new SchemaService(http, TTL_S);
+
+    const { result, ms } = await settle(service.get());
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "network", http_status: null, retryable: true },
+    });
+    expect(ms).toBe(30_000);
+    const cut = [FIELDS, AGENTS, `${AGENTS}&page=2`, GROUPS];
+    expect(sentPaths()).toEqual(cut);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(sentPaths()).toEqual(cut);
+
+    // The interceptor left over from the cut load answers the last page.
+    reply(FIELDS, schemaFieldsPayload);
+    reply(AGENTS, agentPages[0], `${AGENTS}&page=2`);
+    reply(`${AGENTS}&page=2`, agentPages[1]);
+    reply(GROUPS, groupPages[0], `${GROUPS}&page=2`);
+    const again = await settle(service.get());
+    expect(schemaOf(again.result).groups.names.size).toBe(3);
+    expect(sentPaths()).toEqual([...cut, ...ONE_LOAD]);
+  });
+
+  it("asks for no list once the 30 s have passed between two of them", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const request = http.requestWithRetry.bind(http);
+    vi.spyOn(http, "requestWithRetry").mockImplementation(async (options, deadline) => {
+      const result = await request(options, deadline);
+      // The fields come back, and the clock is at the deadline when they do.
+      vi.setSystemTime(Date.now() + 30_000);
+      return result;
+    });
+
+    const { result } = await settle(service.get());
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "network", http_status: null, retryable: true },
+    });
+    expect(sentPaths()).toEqual([FIELDS]);
+  });
+
+  it("returns a limiter wait that would reach the deadline as rate_limited, and does not cache it", async () => {
+    // The hold starts at 18 s and ends at 30 s: within the limiter's own
+    // bound of 15 s, so only the load's deadline refuses it.
+    slow(FIELDS, schemaFieldsPayload, 9000);
+    slow(AGENTS, agentPages[0], 9000, `${AGENTS}&page=2`);
+    mock
+      .get(ORIGIN)
+      .intercept({ path: `${AGENTS}&page=2`, method: "GET" })
+      .reply(429, "", { headers: { "retry-after": "12" } });
+    const service = new SchemaService(http, TTL_S);
+
+    const { result, ms } = await settle(service.get());
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "rate_limited", http_status: null, retryable: true, retry_after_s: 12 },
+    });
+    expect(ms).toBe(18_000);
+    const cut = [FIELDS, AGENTS, `${AGENTS}&page=2`];
+    expect(sentPaths()).toEqual(cut);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(sentPaths()).toEqual(cut);
+
+    queueLoad();
+    schemaOf((await settle(service.get())).result);
+    expect(sentPaths()).toEqual([...cut, ...ONE_LOAD]);
+  });
+
+  it("serves a limiter wait that ends one millisecond before the deadline", async () => {
+    slow(FIELDS, schemaFieldsPayload, 9000);
+    slow(AGENTS, agentPages[0], 8999, `${AGENTS}&page=2`);
+    mock
+      .get(ORIGIN)
+      .intercept({ path: `${AGENTS}&page=2`, method: "GET" })
+      .reply(429, "", { headers: { "retry-after": "12" } });
+    reply(`${AGENTS}&page=2`, agentPages[1]);
+    reply(GROUPS, groupPages[0], `${GROUPS}&page=2`);
+    reply(`${GROUPS}&page=2`, groupPages[1]);
+    const service = new SchemaService(http, TTL_S);
+
+    const started = Date.now();
+    let ended: number | undefined;
+    const load = service.get().then((result) => {
+      ended = Date.now() - started;
+      return result;
+    });
+
+    const { result } = await settle(load);
+
+    expect(schemaOf(result).groups.names.size).toBe(3);
+    expect(ended).toBe(29_999);
+  });
+
+  it("leaves a load that ends sooner as it was", async () => {
+    // 29 s in all.
+    slow(FIELDS, schemaFieldsPayload, 9000);
+    slow(AGENTS, agentPages[0], 9000, `${AGENTS}&page=2`);
+    slow(`${AGENTS}&page=2`, agentPages[1], 9000);
+    slow(GROUPS, groupPages[0], 1000, `${GROUPS}&page=2`);
+    slow(`${GROUPS}&page=2`, groupPages[1], 1000);
+    const service = new SchemaService(http, TTL_S);
+
+    const { result, ms } = await settle(service.get());
+
+    const loaded = schemaOf(result);
+    expect(ms).toBe(29_000);
+    expect(loaded.agents.names.size).toBe(3);
+    expect(loaded.groups.names.size).toBe(3);
+    expect(sentPaths()).toEqual(ONE_LOAD);
+    expect(schemaOf(await service.get())).toBe(loaded);
+    expect(sentPaths()).toEqual(ONE_LOAD);
+  });
+});
+
 /** A schema built by hand: the mapping needs no HTTP. */
 function schema(overrides: Partial<Schema> = {}): Schema {
   return {

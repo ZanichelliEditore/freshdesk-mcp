@@ -18,6 +18,6 @@ export type Agent = z.infer<typeof agent>;
 
 export type AgentsResult = ListResult<Agent>;
 
-export function listAgents(http: HttpClient): Promise<AgentsResult> {
-  return listAll(http, "/agents", agent, "agents");
+export function listAgents(http: HttpClient, deadline?: number): Promise<AgentsResult> {
+  return listAll(http, "/agents", agent, "agents", deadline);
 }

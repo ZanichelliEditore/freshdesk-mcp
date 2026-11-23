@@ -12,6 +12,11 @@
 //   - A failed load is not cached: its error is returned unchanged and the
 //     next call loads again. The lists are read one after the other and the
 //     first failure stops the load.
+//   - A load ends within LOAD_DEADLINE_MS, its three lists together: every
+//     request carries the one deadline (see `requestWithRetry`), so at it the
+//     request in flight is cut and no other is started. The error is the
+//     client's: `network`, retryable, or `rate_limited` for a limiter wait
+//     that would reach it. Like any failed load, it is not cached.
 //   - Of an agent only the id and the name are kept: the contact's personal
 //     data (email, phone) is dropped here.
 //   - `truncated` is carried from the list: an id missing from a truncated
@@ -93,6 +98,9 @@ export function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** Longest one load may take, ticket fields, agents and groups together. */
+export const LOAD_DEADLINE_MS = 30_000;
+
 export type SchemaResult = { ok: true; schema: Schema } | { ok: false; error: FreshdeskError };
 
 export class SchemaService {
@@ -122,11 +130,12 @@ export class SchemaService {
 
   private async load(): Promise<SchemaResult> {
     const startedAt = Date.now();
-    const fields = await listTicketFields(this.#http);
+    const deadline = startedAt + LOAD_DEADLINE_MS;
+    const fields = await listTicketFields(this.#http, deadline);
     if (!fields.ok) return fields;
-    const agents = await listAgents(this.#http);
+    const agents = await listAgents(this.#http, deadline);
     if (!agents.ok) return agents;
-    const groups = await listGroups(this.#http);
+    const groups = await listGroups(this.#http, deadline);
     if (!groups.ok) return groups;
 
     const schema: Schema = deepFreeze({

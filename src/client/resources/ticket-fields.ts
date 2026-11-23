@@ -49,8 +49,12 @@ export type TicketField = z.infer<typeof ticketField>;
 export type TicketFieldsResult =
   { ok: true; fields: TicketField[] } | { ok: false; error: FreshdeskError };
 
-export async function listTicketFields(http: HttpClient): Promise<TicketFieldsResult> {
-  const result = await http.requestWithRetry({ path: "/ticket_fields" });
+/** `deadline` (epoch ms) is the caller's: see `requestWithRetry`. */
+export async function listTicketFields(
+  http: HttpClient,
+  deadline?: number,
+): Promise<TicketFieldsResult> {
+  const result = await http.requestWithRetry({ path: "/ticket_fields" }, deadline);
   if (!result.ok) return result;
   const parsed = ticketFields.safeParse(result.body);
   if (!parsed.success) {

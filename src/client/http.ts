@@ -37,7 +37,11 @@
 //     deadline is aborted and comes back as the expiry error: `network`,
 //     retryable for a GET only. A backoff that would end at or after the
 //     deadline is not started: the last answer is returned as it is.
-//     `paginate` has no budget of its own: each page gets the full deadline.
+//   - A caller's deadline (epoch ms, optional) can only shorten that one: the
+//     call ends at the earlier of the two, by the same rules, and one already
+//     reached sends nothing and does not ask the limiter. `paginate` hands
+//     its own to every page, so the pages share it; with none, each page
+//     gets the full TOTAL_DEADLINE_MS.
 //   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
 //     through `request` and so through the host check, up to the caller's cap.
 //     Its return value says whether a cap cut the list (`truncated`).
@@ -79,7 +83,7 @@ function expired(method: string): HttpResult {
     error: {
       code: "network",
       http_status: null,
-      message: `No answer from Freshdesk within ${TOTAL_DEADLINE_MS / 1000} s: the call was given up.`,
+      message: "No answer from Freshdesk before the call's deadline: the call was given up.",
       retryable: method === "GET",
     },
   };
@@ -251,10 +255,18 @@ export class HttpClient {
    * `request`, attempted again where that cannot apply a write twice. A write
    * that failed on a 5xx, a network error or a timeout may have been applied:
    * it comes back `retryable: false`, so no caller sends it again either.
+   *
+   * `callerDeadline` (epoch ms) is the caller's own, for an operation of
+   * several calls. It only shortens: the call still ends within
+   * TOTAL_DEADLINE_MS.
    */
-  async requestWithRetry(request: HttpRequest): Promise<HttpResult> {
-    const read = (request.method ?? "GET") === "GET";
-    const deadline = Date.now() + TOTAL_DEADLINE_MS;
+  async requestWithRetry(request: HttpRequest, callerDeadline = Infinity): Promise<HttpResult> {
+    const method = request.method ?? "GET";
+    const read = method === "GET";
+    const deadline = Math.min(Date.now() + TOTAL_DEADLINE_MS, callerDeadline);
+    // Before the limiter is asked. Written so that a deadline that is not a
+    // number sends nothing either.
+    if (!(deadline > Date.now())) return expired(method);
     for (let attempt = 0; ; attempt += 1) {
       const result = await this.request(request, deadline);
       if (result.ok) return result;
@@ -280,10 +292,15 @@ export class HttpClient {
    * Returns `truncated`: true when a cap ended the list with more of it left,
    * a `Link` not followed or a page cut; false when the list ended, or a
    * failed page did (the failure is the answer).
+   *
+   * `deadline` (epoch ms) is one for all the pages: each page's
+   * `requestWithRetry` gets it, so a page it cuts, or one not asked for
+   * because it has passed, is a failed page, never a short list.
    */
   async *paginate(
     request: PageRequest,
     cap: PageCap,
+    deadline?: number,
   ): AsyncGenerator<HttpResult, { truncated: boolean }, void> {
     if (!isCount(cap.pages) || (cap.items !== undefined && !isCount(cap.items))) {
       throw new TypeError("A page cap and an item cap are whole numbers, zero or more.");
@@ -298,7 +315,7 @@ export class HttpClient {
     let next: HttpRequest | undefined = first;
     let room = cap.items ?? Infinity;
     for (let page = 0; page < cap.pages && room > 0 && next !== undefined; page += 1) {
-      const result = await this.requestWithRetry(next);
+      const result = await this.requestWithRetry(next, deadline);
       if (!result.ok) {
         yield result;
         return { truncated: false };

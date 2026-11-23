@@ -18,6 +18,6 @@ export type Group = z.infer<typeof group>;
 
 export type GroupsResult = ListResult<Group>;
 
-export function listGroups(http: HttpClient): Promise<GroupsResult> {
-  return listAll(http, "/groups", group, "groups");
+export function listGroups(http: HttpClient, deadline?: number): Promise<GroupsResult> {
+  return listAll(http, "/groups", group, "groups", deadline);
 }

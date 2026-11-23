@@ -317,3 +317,24 @@ describe("listTicketFields: an HTTP failure", () => {
     });
   });
 });
+
+describe("listTicketFields: a caller's deadline", () => {
+  it("is passed on: one already passed sends nothing and comes back as network", async () => {
+    reply(200, ticketFieldsPayload);
+
+    expect(failure(await listTicketFields(http, Date.now() - 1))).toMatchObject({
+      code: "network",
+      http_status: null,
+      retryable: true,
+    });
+    expect(mock.getCallHistory()?.calls() ?? []).toHaveLength(0);
+  });
+
+  it("one still ahead leaves the list as it was", async () => {
+    reply(200, ticketFieldsPayload);
+
+    expect(fields(await listTicketFields(http, Date.now() + 5000))).toHaveLength(
+      ticketFieldsPayload.length,
+    );
+  });
+});

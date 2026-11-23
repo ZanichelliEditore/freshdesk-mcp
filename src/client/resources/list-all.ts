@@ -8,6 +8,9 @@
 // A page in any other shape is `server` with that page's real status, not
 // retryable, and no further page is asked for. Its message is fixed text: it
 // quotes nothing from the body. An HTTP failure is returned unchanged.
+//
+// `deadline` (epoch ms, optional) is the caller's, for all the pages: see
+// `paginate`.
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -25,9 +28,14 @@ export async function listAll<T>(
   path: string,
   item: z.ZodType<T>,
   noun: string,
+  deadline?: number,
 ): Promise<ListResult<T>> {
   const items: T[] = [];
-  const pages = http.paginate({ path, query: { per_page: PER_PAGE } }, { pages: MAX_PAGES });
+  const pages = http.paginate(
+    { path, query: { per_page: PER_PAGE } },
+    { pages: MAX_PAGES },
+    deadline,
+  );
   for (;;) {
     // By hand, not `for await`: the return value is where `truncated` is.
     const step = await pages.next();
