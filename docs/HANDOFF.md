@@ -5,8 +5,13 @@
 "none".*
 
 - **Written:** `2026-11-23T19:03:51+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `20f4b2f`
+  (`20f4b2fa2c9ede61d17f764eb77a579ad2912b54`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45234511244
+  (workflow `quality`, ran on `20f4b2f`; observed through the public API, `gh`
+  not installed on the new machine). This file's hash and CI line arrive in
+  the commit right after it.
 
 - **Current task:** scoped `/decompose` of HANDOFF `d20c83b`'s proposed
   plan changes, `done (2026-11-23)`. Commits `d0f5281` (plan), `e637848`
