@@ -5,14 +5,17 @@
 "none".*
 
 - **Written:** `2026-11-23T13:50:43+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's hash and
-  CI line arrive in the commit right after it.
+- **Describes commit:** `41fc2d9`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45179540597
+  (ran on `41fc2d9`: `quality (22.19)`, `quality (24)`, `checks`). This
+  file's hash and CI line arrive in the commit right after it. **M0
+  done:** this run is its acceptance.
 
 - **Current task:** T-011 (schema service: input mapping + nested-choice
   validation), `done (2026-11-23)`. Build `73099a8`, review fixes
   `92e6b40`. The build commit did not set the row to `doing` (rule 7
-  miss); set in `92e6b40`. **M0 done** once the CI run above is green.
+  miss); set in `92e6b40`. **M0 done** (CI above).
 
 - **Next action:** `/decompose M1`. Before M1's first write caller the
   owner decides: (1) hidden fields output-only, or also refused on input;
