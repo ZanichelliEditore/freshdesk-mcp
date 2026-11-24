@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T14:24:41+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `cae6a52`
+  (`cae6a52551c0a221a6519ddbdde1fa5717eb3c29`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45403297316
+  (workflow `quality`, ran on `cae6a52`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-030 `done (2026-11-24)`,
   `docs/tasks/T-030-find-similar-tickets.md` ("Done"). Commits `6cc1f82`
