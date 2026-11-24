@@ -113,9 +113,11 @@ clause is then met by the plain rule; `make quality` green.
   3 … when the ticket-field schema is not cached" states the requests, not
   the gap); `settle` moved to module scope in `test/schema/output.test.ts`.
 - Full review round on `29a34ff..2a56dc9`: no blocking finding
-  (compliance: Wireframes `none`; security 1 Low, 1 info; code 4 Low); no
-  scoped round (orchestrator). `make quality` exit 0 on the close commit's
-  tree.
+  (compliance: Wireframes `none`; security 1 Low, 1 info; code 4 Low).
+  Scoped round on `2a56dc9..e09fd24` (the freeze of the results changed a
+  mechanism): list A empty for all three; lists B parked in
+  `docs/improvements.md`, entry `e09fd24`. `make quality` exit 0 on the
+  close commit's tree.
 
 ## Dead ends
 none
