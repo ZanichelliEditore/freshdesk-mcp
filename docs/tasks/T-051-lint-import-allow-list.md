@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-23)
+- **Status:** done (2026-11-24)
 - **Depends on:** T-050
 - **Created:** 2026-11-23
 
@@ -238,18 +238,146 @@ another, in the same session.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- **Commits:** `0f42776` (status `doing`), `cd5672c` (the list, the rule,
+  the tests, the comments), `1677572` (full review fixes).
+- **The list:** `eslint.tool-imports.json`, imported by `eslint.config.mjs`
+  and by `test/lint-rules.test.ts` (`with { type: "json" }`; a JSON file
+  needs no declaration file, where an `.mjs` would). It holds each place's
+  glob and its `value` and `type` entries, one entry per line, and the bare
+  list with glob `src/tools/**`.
+- **The rule:** per place, `@typescript-eslint/no-restricted-imports` with
+  two `regex` patterns, both `caseSensitive: true`: `^(?!(?:<bare|value|type
+  entries, escaped>)$)` refuses any source not exactly on the list (the
+  list's message, naming the place's glob and saying an entry is one
+  reviewed line); `^(?:<type entries>)$` with `allowTypeImports: true`
+  refuses a `type` entry imported as a value (the type-only message). The
+  place blocks (`T0`, `T1`, `T2`) come after the `src/tools/**` block (bare
+  list) and replace its options; `context.ts` is ignored by all of them. A
+  `no-restricted-syntax` selector refuses an import, re-export or
+  `import = require` source with whitespace at either end, which the rule
+  trims before matching. The dynamic `import()` ban stays.
+- **T-050's patterns:** the deny regex and the `group` pattern were both
+  removed. Every case of the Acceptance passes without them: the allow-list
+  refuses whatever is not exactly an entry, so each form they caught (a
+  value import of the config, client or schema modules, `./`, `name/..`,
+  `//`, `\`, `%`, `?`, `#`) is off the list.
+- **Tests,** `test/lint-rules.test.ts`, describe "eslint: a tool imports
+  only its allow-list (src/tools/**)":
+  - generated from the list: "allows in %s the entry %s as a %s import"
+    (76), "refuses in %s %j as a %s import" (extra `./` as prefix and
+    before the last segment, doubled `/`, trailing `/`, case change);
+    "generates at least four refused spellings per entry" asserts
+    generated ≥ entries × 4;
+  - the explicit set: "refuses in %s a value import of %j", "refuses a
+    file: URL with a leading space, and its whitespace", "refuses in %s a
+    value import of the type entry %s";
+  - the other forms: "refuses in %s: %s" (`import type`, `export … from`,
+    `export *`), "allows in %s: %s" (`export … from`, `export *`, inline
+    `type`);
+  - T-050's cases at the new places: "refuses in %s a value import of %s"
+    (two blocks), "refuses a type import of a path that is not an entry",
+    "refuses a re-export of the client", "allows in %s a type import of
+    %s", "allows in %s a value import of %s". The tool-local `./config.js`
+    allow case is dropped (task file); the type imports of
+    `../../../client/http.js` and `../../../schema/output.js`, allowed by
+    T-050, are off the list and now refused ("refuses in
+    src/tools/toolsets/core/x.ts even a type import of %s, not on the
+    list");
+  - "puts every file under src/tools in context.ts or in T0, T1 or T2,
+    none ignored" replaces the depth test; "refuses a dynamic import",
+    "exempts src/tools/context.ts", "does not reach outside src/tools"
+    kept.
+  - Two changes, each tried and reverted: `caseSensitive: false` fails 75
+    cases (the case changes); the whitespace selector removed fails the 4
+    whitespace cases then present.
+- **Red first:** starting hash `2d5e281` (HANDOFF's "Describes commit"
+  `20f4b2f` plus its stamp commit; the build started from `2d5e281`).
+  Method: `git show 2d5e281:eslint.config.mjs` restored in the working
+  tree, the new test file run, the new config put back (checked with
+  `cmp`), no commit. `git diff --quiet 2d5e281 -- eslint.config.mjs`
+  succeeded after the restore and before putting it back. vitest: 503
+  cases, **392 failed, 111 passed.**
+  - Failed, 187 with nothing reported (lint let them through): most
+    generated variants (extra `./` prefix, trailing `/`, case change, the
+    bare entries' variants), and of the explicit set "refuses in
+    src/tools/x.ts a value import of" `"../.x/../config.js"`,
+    `"../..x/../config.js"`, `"../.../../config.js"`, `"../con\tfig.js"`,
+    `"../../dist/config.js"`; in src/tools/toolsets/core/x.ts
+    `"../../../../dist/config.js"`; in src/tools/core/x.ts
+    `"../../dist/config.js"`, `"../../../dist/config.js"`,
+    `"../context.js"`; "refuses in src/tools/x.ts: import type { X } from
+    "../.x/../config.js";"; the three whitespace cases; the type imports of
+    `../../../client/http.js` and `../../../schema/output.js`.
+  - Failed, 205 refused by the old lint with its own message, not the
+    list's: generated variants with `./` inside or `//`, `..//config.js`,
+    `..\config.js`, `../%63onfig.js`, `?x`, `#x`, `./../config.js`,
+    `../tools/../config.js`, `/src/config.js`, `file:///src/config.js`,
+    the leading-space `file:` case, `ms/../../src/./config.js`,
+    `ms/../../%64ist/config.js`, `../client/http.js`,
+    `../schema/output.js` (T0 and T2), the type entries as values, the
+    `export` forms at T0, and T-050's cases at their new places.
+  - Passed, 111: the 23 cases of the RFC network and fetch blocks, and 88
+    of the allow-list block: every allow case, the depth replacement,
+    "refuses a dynamic import" (kept from T-050), the `context.ts`
+    exemption and "does not reach outside src/tools". No new refuse case
+    passed at the start.
+- **Comments:** `eslint.config.mjs`, `src/tools/context.ts` and
+  `docs/architecture/overview.md` state the exact allow-list by pointing to
+  `eslint.tool-imports.json`, with no copy of its entries, so the three
+  cannot drift from it (the orchestrator accepted this reading of "states
+  the exact allow-list", 2026-11-24). Each names the gaps. `grep -n "still
+  reaches"` over the three prints nothing; `createRequire`, `symlink`,
+  `constructor` and `outside src/tools` each count ≥ 1 in each.
+- **Full review fixes** (`1677572`):
+  - S1/S2: the global `process` (so `process.env` and
+    `process.getBuiltinModule`), `globalThis.process` and `global.process`
+    refused in all of `src/tools/**`, `context.ts` included (it uses none);
+    that block repeats the `src/**` fetch ban, since it replaces the
+    rule's options;
+  - S3: `no-eval`, `no-new-func`, `no-implied-eval` (with `setTimeout`,
+    `setInterval`, `setImmediate` declared as globals, which
+    `no-implied-eval` needs to see them);
+  - S4: the placement test asserts no file under `src/tools/` is ignored;
+  - S5: "refuses an off-list import in a dotfile" (`src/tools/.x.ts`);
+  - C2: whitespace cases for `export { x } from " ../../format.js"` and
+    `import x = require(" ./format.js")`; the `import = require` selector
+    entry kept, since typescript-eslint's rule handles that form;
+  - C3/C4: the three comments point to the JSON only;
+  - C5: no ExperimentalWarning from `path.matchesGlob` on Node 22.23.5;
+    kept, with a leading dot in each segment neutralised in the test, since
+    node's `matchesGlob` skips dotfiles and ESLint matches them.
+  - Second red check, against `cd5672c:eslint.config.mjs` (same method,
+    `git diff --quiet cd5672c -- eslint.config.mjs` succeeded): 532 cases,
+    **24 failed, 508 passed.** Failed: "refuses in %s: %s" for
+    `process.getBuiltinModule("node:module")`,
+    `globalThis.process.getBuiltinModule("node:http")`,
+    `global.process.getBuiltinModule("node:http")`,
+    `void process.env.FRESHDESK_API_KEY;`, `const { env } = process;`,
+    `eval("1")`, `new Function("return 1")`, `setTimeout("x()", 1)`, each
+    at src/tools/x.ts, src/tools/toolsets/core/x.ts and
+    src/tools/context.ts. S4, S5 and both C2 cases already passed there.
+- **Reviews:** full round, then a scoped round with list A empty for all
+  three; list B parked in `docs/improvements.md`.
+- `make quality` green: vitest 17 files, 1311 tests; `tools/checks` 54 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- `import { type X } from "../config.js"` passes (every name a type); it is
+  safe only while `verbatimModuleSyntax` is off, which makes TypeScript
+  drop the import (checked with a scratch compile, 2026-11-23).
+- The ban on the global `process` goes beyond the review's ask (two
+  properties); it also closes `const p = process; p.env`.
+- Not refused by lint, as the three comments say: a global `require`, if a
+  build ever exposed one; a re-export through a module outside
+  `src/tools/`; a symlink under `src/tools/` or a listed path;
+  `.constructor` on the client, the schema service or any function; a
+  computed property on `globalThis`. The alias, chain and reflection forms
+  that reach `process` are parked (scoped review list B).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: done.
