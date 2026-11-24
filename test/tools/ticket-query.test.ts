@@ -9,6 +9,7 @@ import {
   buildTicketQuery,
   fieldKey,
   isUncategorized,
+  matchesLocal,
   type QueryContext,
   resolveFilter,
   type TicketFilters,
@@ -181,12 +182,34 @@ describe("buildTicketQuery: the nine filters", () => {
     [{ agent: 502 }, "agent_id:502"],
     [{ type: "incident" }, "type:'Incident'"],
     [{ tag: "billing" }, "tag:'billing'"],
-    [
-      { created_between: { from: "2026-01-01", to: "2026-01-31" } },
-      "created_at:>'2026-01-01' AND created_at:<'2026-01-31'",
-    ],
   ] as [TicketFilters, string][])("%j gives the search query %j", (filters, query) => {
     expect(build(filters)).toEqual({ ok: true, endpoint: "search", query });
+  });
+
+  it("created_between is a search widened by a day each side, with the exact days checked locally", () => {
+    expect(build({ created_between: { from: "2026-01-01", to: "2026-01-31" } })).toEqual({
+      ok: true,
+      endpoint: "search",
+      query: "created_at:>'2025-12-31' AND created_at:<'2026-02-01'",
+      created_between: { from: "2026-01-01", to: "2026-01-31" },
+    });
+  });
+
+  it("created_between of one day is accepted, and the local check keeps that day only", () => {
+    const result = build({ created_between: { from: "2026-03-01", to: "2026-03-01" } });
+    expect(result).toMatchObject({
+      ok: true,
+      query: "created_at:>'2026-02-28' AND created_at:<'2026-03-02'",
+    });
+    if (!result.ok) throw new Error("expected ok");
+    const at = (created_at: unknown) => ticket({}, { created_at });
+    expect(matchesLocal(result, at("2026-03-01T00:00:00Z"))).toBe(true);
+    expect(matchesLocal(result, at("2026-03-01T23:59:59Z"))).toBe(true);
+    expect(matchesLocal(result, at("2026-03-02T00:30:00+01:00"))).toBe(true);
+    expect(matchesLocal(result, at("2026-02-28T23:59:59Z"))).toBe(false);
+    expect(matchesLocal(result, at("2026-03-02T00:00:00Z"))).toBe(false);
+    expect(matchesLocal(result, at(undefined))).toBe(false);
+    expect(matchesLocal(result, at("soon"))).toBe(false);
   });
 
   it("updated_since alone is the list endpoint's parameter, as a UTC instant", () => {
@@ -224,9 +247,41 @@ describe("buildTicketQuery: the nine filters", () => {
     ).toEqual({
       ok: true,
       endpoint: "search",
-      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-03'",
+      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-02'",
       uncategorized: [{ field: "cf_kit", key: "cf_model", custom: true }],
+      updated_since: "2026-01-03T01:30:00Z",
     });
+  });
+
+  it("with a search filter, updated_since is a day earlier in the query and the instant checked locally", () => {
+    const result = build({ status: "Open", updated_since: "2026-01-01T10:00:00Z" });
+    expect(result).toEqual({
+      ok: true,
+      endpoint: "search",
+      query: "status:2 AND updated_at:>'2025-12-31'",
+      updated_since: "2026-01-01T10:00:00Z",
+    });
+    if (!result.ok) throw new Error("expected ok");
+    const at = (updated_at: unknown) => ticket({}, { updated_at });
+    expect(matchesLocal(result, at("2026-01-01T10:00:00Z"))).toBe(true);
+    expect(matchesLocal(result, at("2026-01-01T11:00:00+01:00"))).toBe(true);
+    expect(matchesLocal(result, at("2026-01-01T09:59:59Z"))).toBe(false);
+    expect(matchesLocal(result, at(undefined))).toBe(false);
+  });
+
+  it("matchesLocal with no local check keeps every ticket, and applies uncategorized", () => {
+    const plain = build({ status: "Open" });
+    if (!plain.ok) throw new Error("expected ok");
+    expect(matchesLocal(plain, ticket({ cf_model: null }))).toBe(true);
+    const checked = build({ status: "Open", uncategorized: true });
+    if (!checked.ok) throw new Error("expected ok");
+    expect(matchesLocal(checked, ticket({ cf_model: null }))).toBe(true);
+    expect(matchesLocal(checked, ticket({}))).toBe(false);
+  });
+
+  it.each([1, "yes", null])("refuses a non-boolean uncategorized %j", (value) => {
+    const text = errorText(build({ uncategorized: value as unknown as boolean }));
+    expect(text).toMatch(/uncategorized/);
   });
 
   it("uncategorized with updated_since only stays on the list endpoint", () => {
@@ -247,17 +302,22 @@ describe("buildTicketQuery: values cannot add a clause", () => {
     });
   });
 
-  it.each(["x' OR tag:'y", 'x" OR tag:"y', "x\\' OR status:2"])(
-    "refuses the tag %j, which cannot be quoted safely, with no query",
-    (tag) => {
-      const result = build({ status: "Open", tag });
-      expect(result).not.toHaveProperty("query");
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe("validation");
-      expect(result.error.errors?.[0]?.field).toBe("tag");
-    },
-  );
+  it.each([
+    "x' OR tag:'y",
+    'x" OR tag:"y',
+    "x\\' OR status:2",
+    "a\\b",
+    "a\nOR b",
+    "a\u0000b",
+    "a\u200Bb",
+  ])("refuses the tag %j, which cannot be quoted safely, with no query", (tag) => {
+    const result = build({ status: "Open", tag });
+    expect(result).not.toHaveProperty("query");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("validation");
+    expect(result.error.errors?.[0]?.field).toBe("tag");
+  });
 
   it("refuses a blank tag", () => {
     expect(build({ tag: "  " }).ok).toBe(false);
@@ -269,6 +329,33 @@ describe("buildTicketQuery: values cannot add a clause", () => {
     );
     const text = errorText(build({ type: "Rock'n'roll" }, ctxWith(), schemaWith({ fields })));
     expect(text).toMatch(/quote/);
+  });
+
+  it("refuses a ticket type whose own name holds a control character", () => {
+    const fields = FIELDS.map((field) =>
+      field.type === "default_ticket_type" ? { ...field, choices: ["Line\nbreak"] } : field,
+    );
+    expect(build({ type: "Line\nbreak" }, ctxWith(), schemaWith({ fields })).ok).toBe(false);
+  });
+
+  it("names the choices of an ambiguous type through plainName", () => {
+    const fields = FIELDS.map((field) =>
+      field.type === "default_ticket_type"
+        ? { ...field, choices: ["<b>Incident</b>", "<B>incident</B>"] }
+        : field,
+    );
+    const text = errorText(resolveFilter(schemaWith({ fields }), "type", "<b>incident</b>"));
+    expect(text).not.toContain("<b>Incident</b>");
+    expect(text).toMatch(/several/);
+  });
+
+  it("accepts a query of exactly Freshdesk's length, quotes included", () => {
+    // "tag:'…'" is the tag plus 8 characters.
+    const tag = "t".repeat(MAX_QUERY_LENGTH - 8);
+    const result = build({ tag });
+    expect(result).toEqual({ ok: true, endpoint: "search", query: `tag:'${tag}'` });
+    expect(`"tag:'${tag}'"`).toHaveLength(MAX_QUERY_LENGTH);
+    expect(build({ tag: `${tag}t` }).ok).toBe(false);
   });
 
   it("refuses filters whose query would pass Freshdesk's length", () => {
@@ -284,6 +371,9 @@ describe("buildTicketQuery: dates", () => {
     "2026-02-30T00:00:00Z",
     "2026-01-02",
     "yesterday",
+    "2026-01-02T25:00:00Z",
+    "2026-01-02T12:60:00Z",
+    "2026-01-02T12:00:00+24:00",
   ])("refuses updated_since %j", (value) => {
     expect(errorText(build({ updated_since: value }))).toMatch(/updated_since|ISO/);
   });

@@ -91,12 +91,13 @@ The two endpoints, in short:
 | tag | search `tag:'<tag>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | `uncategorized` | local check of `custom_fields`: on the list pages alone, on the search results with other filters (see [below](#uncategorized)) | 30,000 / 300 | 1 per 100 scanned / 4 per 100 scanned | measured 2026-11-24 (a nested field is not searchable; both carry `custom_fields`) |
 | `updated_since` | list `updated_since=<ISO instant>` | 30,000 | 1 | documented, [List All Tickets](https://developers.freshdesk.com/api/#list_all_tickets); measured 2026-11-24 (lifts the 30-day window) |
-| `created_between` | search `created_at:>'<from>' AND created_at:<'<to>'` (days, UTC) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); boundary semantics open |
+| `created_between` | search `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'` (days, UTC), then `created_at`'s UTC day checked locally within from–to (T-043) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); the local check makes the open boundary moot |
 
 Several filters at once: one search query, the conditions joined by `AND`
 (spaces sent as `+`, measured 2026-11-24). `updated_since` with any search
-filter becomes `updated_at:>'<day>'` in the query (day granularity); alone,
-it is the list endpoint. `GET /tickets` refuses a `status` parameter
+filter becomes `updated_at:>'<its UTC day − 1>'` in the query (day
+granularity, widened a day) and `updated_at` ≥ the instant checked locally
+on the results (T-043); alone, it is the list endpoint, exact. `GET /tickets` refuses a `status` parameter
 (measured 2026-11-24) and documents none for priority, group, agent, type
 or tag: a field filter is search, or local.
 
@@ -297,12 +298,13 @@ with `AND` (measured 2026-11-24). A nested field cannot be queried
 containing `"` or `\` before sending (`validation`, nothing sent; T-024),
 so T-043 must quote values with single quotes and refuse or drop `"` and
 `\` in values itself. T-043 refuses (2026-11-24): a tag or ticket type
-containing `'`, `"` or `\` is a `validation` error and no query is built.
-Freshdesk documents no escape inside single quotes, so a quote could end the
-value and add a clause; ` OR ` inside the quotes stays one value.
-`updated_since` with a search filter is the instant's UTC day
-(`updated_at:>'<day>'`); whether `>` keeps that day is the open boundary
-question below.
+containing `'`, `"`, `\` or a control or format character (`\p{Cc}`,
+`\p{Cf}`) is a `validation` error and no query is built. Freshdesk
+documents no escape inside single quotes, so a quote could end the value
+and add a clause; ` OR ` inside the quotes stays one value. The two date
+filters of a search are widened by a day and checked locally (`matchesLocal`
+in `src/tools/ticket-query.ts`), so the open boundary question below does
+not change their rows.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s two stats signals.
@@ -315,6 +317,6 @@ bears on:
 | Question | Why open | Bears on |
 |---|---|---|
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-027, T-036, T-037 |
-| `created_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-043, T-036, T-037 |
+| `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037; moot for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally |
 | Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three | T-029 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |

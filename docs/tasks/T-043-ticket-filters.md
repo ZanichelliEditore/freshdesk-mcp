@@ -46,8 +46,7 @@ given by name each resolve to the fixture's id, and by id to itself; a name
 two agents share and one two groups share are each a `validation` error
 listing the ids; an unknown name lists the valid ones; a name absent from a
 truncated list says the list is incomplete; each of the nine filters gives
-the asserted list parameters or search query; a tag containing a quote and `
-OR ` stays one quoted value; `uncategorized` follows `uncategorised_fields`
+the asserted list parameters or search query; a tag containing ` OR ` stays one quoted value, and a tag or type containing `'`, `"`, `\` or a control character is refused as `validation` with no request (Freshdesk documents no escape inside a quoted value; orchestrator, 2026-11-24); `uncategorized` follows `uncategorised_fields`
 when set and the default rule when not; `make quality` green.
 
 ---

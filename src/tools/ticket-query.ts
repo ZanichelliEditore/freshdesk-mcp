@@ -17,15 +17,20 @@
 //   - `buildTicketQuery`: status, priority, group, agent, type, tag and
 //     `created_between` are search conditions, joined by ` AND ` in that
 //     order (`status:2`, `group_id:<id>`, `type:'<name>'`, `tag:'<tag>'`,
-//     `created_at:>'<from>' AND created_at:<'<to>'`); `updated_since` joins
-//     them as `updated_at:>'<UTC day>'`. With no search condition the list
-//     endpoint serves the call, `updated_since` as its parameter (a UTC
-//     instant to the second). No filter: the list with no parameter.
+//     `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'`);
+//     `updated_since` joins them as `updated_at:>'<its UTC day − 1>'`. Both
+//     dates are widened and returned as local checks (`created_between`,
+//     `updated_since` on the result, applied by `matchesLocal`): whether
+//     Freshdesk's `>` and `<` keep the boundary day, the rows are exact.
+//     With no search condition the list endpoint serves the call,
+//     `updated_since` as its parameter (a UTC instant to the second), no
+//     local date check. No filter: the list with no parameter.
 //   - A quoted value (type, tag) goes in single quotes. Freshdesk documents
-//     no escape inside them, so a value containing `'`, `"` or `\` is
-//     refused, not escaped: a quote would end the value and add a clause,
-//     and `searchTickets` refuses `"` and `\` anyway. ` OR ` inside the
-//     quotes stays part of the one value.
+//     no escape inside them, so a value containing `'`, `"`, `\` or a
+//     control or format character (`\p{Cc}`, `\p{Cf}`) is refused, not
+//     escaped: a quote would end the value and add a clause, and
+//     `searchTickets` refuses `"` and `\` anyway. ` OR ` inside the quotes
+//     stays part of the one value.
 //   - Dates: `updated_since` an ISO 8601 date-time with a zone of `Z` or
 //     `±HH:MM`, `created_between` `{from, to}` as `YYYY-MM-DD`, from ≤ to;
 //     a calendar-impossible day (2026-02-30) is refused, not rolled over.
@@ -37,7 +42,12 @@
 //     nested level's name selects its nested field), else the first nested
 //     field. A nested field is checked at its last level, any other where
 //     the ticket holds it; `null`, absent or `""` is empty, and a ticket is
-//     uncategorised when any checked field is. `false` is no filter.
+//     uncategorised when any checked field is. `false` is no filter; any
+//     other non-boolean value is refused.
+//   - `matchesLocal(query, ticket)`: every local check of a built query
+//     (uncategorized, `updated_at` ≥ the instant, `created_at`'s UTC day
+//     within the range); a ticket whose date is absent or unreadable does
+//     not match a date check.
 //   - Every problem is reported, one `validation` error with one entry per
 //     filter, `http_status: null`: nothing was sent. A query longer than
 //     `searchTickets` takes is refused here, with the reason.
@@ -80,14 +90,18 @@ export type QueryContext = Pick<AppContext, "team">;
 export type ResolveResult =
   { ok: true; value: number | string } | { ok: false; error: FreshdeskError };
 
+/** What the request cannot ask Freshdesk exactly: checked on each ticket it returns. */
+export interface LocalChecks {
+  uncategorized?: CategoryCheck[];
+  /** UTC instant: `updated_at` at or after it. */
+  updated_since?: string;
+  /** Days, inclusive, of `created_at` in UTC. */
+  created_between?: { from: string; to: string };
+}
+
 export type TicketQuery =
-  | {
-      ok: true;
-      endpoint: "list";
-      list: { updated_since?: string };
-      uncategorized?: CategoryCheck[];
-    }
-  | { ok: true; endpoint: "search"; query: string; uncategorized?: CategoryCheck[] }
+  | ({ ok: true; endpoint: "list"; list: { updated_since?: string } } & LocalChecks)
+  | ({ ok: true; endpoint: "search"; query: string } & LocalChecks)
   | { ok: false; error: FreshdeskError };
 
 /** Characters of an echoed value, and of a list of valid names, in a message. */
@@ -236,10 +250,14 @@ function resolveOne(schema: Schema, kind: FilterKind, value: unknown): number | 
   ];
   if (ids.length === 1) return ids[0]!;
   if (ids.length > 1) {
-    return new Refusal(
-      "ambiguous_name",
-      `${quote(value)} names several ${kind}s (ids ${ids.join(", ")}): give the id.`,
-    );
+    const which =
+      kind === "type"
+        ? `choices ${listed(
+            options.filter((option) => fold(option.name) === fold(value)),
+            false,
+          )}: give one exactly as listed by get_ticket_schema`
+        : `ids ${ids.join(", ")}: give the id`;
+    return new Refusal("ambiguous_name", `${quote(value)} names several ${kind}s (${which}).`);
   }
   if (truncated) {
     return new Refusal(
@@ -276,10 +294,10 @@ export function resolveFilter(schema: Schema, kind: FilterKind, value: unknown):
 
 /** A value in single quotes, or a refusal when it could end them. */
 function quoted(what: string, value: string): string | Refusal {
-  if (/['"\\]/.test(value)) {
+  if (/['"\\\p{Cc}\p{Cf}]/u.test(value)) {
     return new Refusal(
       "unquotable_value",
-      `The ${what} ${quote(value)} contains a quote or a backslash, which a search query cannot quote safely.`,
+      `The ${what} ${quote(value)} contains a quote, a backslash or a control character, which a search query cannot quote safely.`,
     );
   }
   return `'${value}'`;
@@ -294,6 +312,13 @@ function utcDay(year: number, month: number, day: number): number | undefined {
     date.getUTCDate() === day
     ? date.getTime()
     : undefined;
+}
+
+const DAY_MS = 86_400_000;
+
+/** The UTC day `days` after the day (or instant) `value`, as YYYY-MM-DD. */
+function shiftDay(value: string, days: number): string {
+  return new Date(Date.parse(value.slice(0, 10)) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
 function isDay(value: unknown): value is string {
@@ -346,6 +371,31 @@ function categoryChecks(ctx: QueryContext, schema: Schema): CategoryCheck[] | Re
   }));
 }
 
+/** Epoch ms of a ticket's date key, or `undefined` when absent or unreadable. */
+function ticketTime(ticket: Ticket, key: string): number | undefined {
+  const value: unknown = Object.hasOwn(ticket, key) ? ticket[key] : undefined;
+  const time = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(time) ? undefined : time;
+}
+
+/** Whether the ticket passes every local check of a built query. */
+export function matchesLocal(checks: LocalChecks, ticket: Ticket): boolean {
+  if (checks.uncategorized !== undefined && !isUncategorized(checks.uncategorized, ticket)) {
+    return false;
+  }
+  if (checks.updated_since !== undefined) {
+    const updated = ticketTime(ticket, "updated_at");
+    if (updated === undefined || updated < Date.parse(checks.updated_since)) return false;
+  }
+  if (checks.created_between !== undefined) {
+    const created = ticketTime(ticket, "created_at");
+    if (created === undefined) return false;
+    const day = new Date(created).toISOString().slice(0, 10);
+    if (day < checks.created_between.from || day > checks.created_between.to) return false;
+  }
+  return true;
+}
+
 /** Whether any checked field is empty (`null`, absent or `""`) on the ticket. */
 export function isUncategorized(checks: readonly CategoryCheck[], ticket: Ticket): boolean {
   return checks.some(({ key, custom }) => {
@@ -384,12 +434,14 @@ export function buildTicketQuery(
     if (value instanceof Refusal) problems.push(problem("tag", value));
     else conditions.push(`tag:${value}`);
   }
+  let createdBetween: { from: string; to: string } | undefined;
   if (filters.created_between !== undefined) {
     const range = filters.created_between as unknown;
     const from = isRecord(range) ? range.from : undefined;
     const to = isRecord(range) ? range.to : undefined;
     if (isDay(from) && isDay(to) && from <= to) {
-      conditions.push(`created_at:>'${from}' AND created_at:<'${to}'`);
+      conditions.push(`created_at:>'${shiftDay(from, -1)}' AND created_at:<'${shiftDay(to, 1)}'`);
+      createdBetween = { from, to };
     } else {
       problems.push(
         problem(
@@ -409,14 +461,20 @@ export function buildTicketQuery(
     else updatedSince = value;
   }
   let checks: CategoryCheck[] | undefined;
-  if (filters.uncategorized === true) {
+  const uncategorized = filters.uncategorized as unknown;
+  if (uncategorized === true) {
     const value = categoryChecks(ctx, schema);
     if (value instanceof Refusal) problems.push(problem("uncategorized", value));
     else checks = value;
+  } else if (uncategorized !== undefined && uncategorized !== false) {
+    problems.push(
+      problem("uncategorized", new Refusal("invalid_value", "uncategorized takes true or false.")),
+    );
   }
 
-  if (conditions.length > 0 && updatedSince !== undefined) {
-    conditions.push(`updated_at:>'${updatedSince.slice(0, 10)}'`);
+  const searched = conditions.length > 0;
+  if (searched && updatedSince !== undefined) {
+    conditions.push(`updated_at:>'${shiftDay(updatedSince, -1)}'`);
   }
   const query = conditions.join(" AND ");
   if (problems.length === 0 && `"${query}"`.length > MAX_QUERY_LENGTH) {
@@ -432,8 +490,12 @@ export function buildTicketQuery(
   }
   if (problems.length > 0) return validation(problems);
 
-  const local = checks === undefined ? {} : { uncategorized: checks };
-  if (conditions.length > 0) return { ok: true, endpoint: "search", query, ...local };
+  const local: LocalChecks = checks === undefined ? {} : { uncategorized: checks };
+  if (searched) {
+    if (updatedSince !== undefined) local.updated_since = updatedSince;
+    if (createdBetween !== undefined) local.created_between = createdBetween;
+    return { ok: true, endpoint: "search", query, ...local };
+  }
   return {
     ok: true,
     endpoint: "list",
