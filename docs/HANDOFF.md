@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T15:17:43+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `3539bef`
+  (`3539bef1b7a330c363836b3a5ba2d46c158948b7`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45412604650
+  (workflow `quality`, ran on `3539bef`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-034 `done (2026-11-24)`,
   `docs/tasks/T-034-canned-tools.md` ("Done"). Commits `ff8489a`
