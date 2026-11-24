@@ -160,6 +160,10 @@ describe("the listing", () => {
       expect(tool?.description).toContain(
         "Only an article with customer_safe: true may be quoted to a customer as published guidance",
       );
+      expect(tool?.description).toContain(
+        "customer_safe does not check which portals show the article's category",
+      );
+      expect(tool?.description).toMatch(/\(draft, published, or null\).*customer_safe/s);
       expect(tool?.description.includes(DATA_NOT_INSTRUCTIONS)).toBe(
         name === "get_solution_article",
       );
@@ -449,6 +453,21 @@ describe("get_solution_article", () => {
     expect(response.content[0].text).not.toMatch(/<\/?(b|i)>/);
   });
 
+  it.each([
+    // Not tag-shaped: kept, `<` neutralised by untrusted as in any block.
+    ["Torque < 5 Nm, then > 3 turns", "Torque ‹ 5 Nm, then > 3 turns"],
+    ["Use <b>oil</b> sparingly.", "Use oil sparingly."],
+    // Entities are not decoded: `&lt;` is neutralised by untrusted, no tag forms.
+    ["Write &lt;b&gt;bold&lt;/b&gt; here.", "Write ‹b&gt;bold‹/b&gt; here."],
+  ])("the plain text %j comes back as %j inside the block", async (text, want) => {
+    reply(ARTICLE, { ...articleView, description_text: text });
+    reply(FOLDER, folderPages[0][0]);
+    const result = ok(
+      await callTool(await session(), "get_solution_article", { article_id: 3301 }),
+    );
+    expect(result.text).toBe(wrapped(want));
+  });
+
   it(`a text over ${ARTICLE_CAP} characters is cut, the marker after the block`, async () => {
     reply(ARTICLE, { ...articleView, description_text: "x".repeat(ARTICLE_CAP + 7) });
     reply(FOLDER, folderPages[0][0]);
@@ -665,6 +684,27 @@ describe("list_solution_tree", () => {
     );
     expect(error.code).toBe("rate_limited");
     expect(sent()).toBe(1);
+  });
+
+  it("the folders list is expensive: below the reserve the articles list is refused", async () => {
+    reply(CATEGORIES, [categoryPages[0][0]]);
+    reply(foldersOf(3101), folderPages[0], 200, LOW);
+    const error = refusal(
+      await paced(async () => callTool(await session(), "list_solution_tree", {})),
+    );
+    expect(error.code).toBe("rate_limited");
+    expect(sent()).toBe(2);
+  });
+
+  it("the articles list is expensive: below the reserve the next one is refused", async () => {
+    reply(CATEGORIES, [categoryPages[0][0]]);
+    reply(foldersOf(3101), folderPages[0]);
+    reply(articlesOf(3201), articlePages[0], 200, LOW);
+    const error = refusal(
+      await paced(async () => callTool(await session(), "list_solution_tree", {})),
+    );
+    expect(error.code).toBe("rate_limited");
+    expect(sent()).toBe(3);
   });
 
   it("a client error is isError with its code", async () => {

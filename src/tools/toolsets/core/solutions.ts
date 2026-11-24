@@ -3,11 +3,15 @@
 //
 //   - Titles and names (article, folder, category) are admin-set: through
 //     `plainName` (tags stripped, capped at NAME_CAP), never wrapped (owner,
-//     2026-11-23, OD-7). An article's text (Freshdesk's plain text) goes
-//     through `htmlToText` first, so a tag an author left in it is gone, then
-//     is wrapped in `<ticket_content>` and cut at ARTICLE_CAP with format.ts's
-//     marker, after the block; there is no way to fetch the rest, so the
-//     marker names none.
+//     2026-11-23, OD-7). An article's text (Freshdesk's plain text) loses
+//     its tag-shaped runs (TAG: `<`, an optional `/`, a letter, then up to
+//     `>` with no `<` or `>` between) and nothing else: no entity is decoded
+//     and a lone `<` or `>` stays, so "Torque < 5 Nm, then > 3 turns" is
+//     kept. Then it is wrapped in `<ticket_content>` (which neutralises
+//     every `<`) and cut at ARTICLE_CAP with format.ts's marker, after the
+//     block; there is no way to fetch the rest, so the marker names none.
+//     (`htmlToText` is not used here: on plain text it deleted a `<`…`>`
+//     span of prose and decoded `&lt;b&gt;` into a tag.)
 //   - Drafts and non-public content are labelled, not dropped: an article
 //     or hit carries `status` by name (`draft` for 1, `published` for 2,
 //     else `null`), a folder or hit `visibility` by name (Freshdesk's
@@ -16,7 +20,8 @@
 //     article's. Every article, hit and tree article carries `customer_safe`:
 //     true only when `status` is `published` and `visibility` is `all users`;
 //     every description says only those may be quoted to a customer as
-//     published guidance.
+//     published guidance, and that `customer_safe` does not check the
+//     category's portal visibility (solutions.ts drops `visible_in_portals`).
 //   - `get_solution_article` reads the article, then its folder (`getFolder`,
 //     2 requests) for `visibility`. A folder answered `not_found`, or an
 //     article with no readable `folder_id` (no folder request), gives
@@ -54,7 +59,7 @@ import {
   MAX_TERM_LENGTH,
   searchArticles,
 } from "../../../client/resources/solutions.js";
-import { htmlToText, NAME_CAP, plainName, untrusted } from "../../format.js";
+import { NAME_CAP, plainName, untrusted } from "../../format.js";
 import { listEnvelope, readCursor } from "../../list.js";
 import { isoUpdated } from "../../rows.js";
 import type { Tool } from "../index.js";
@@ -64,6 +69,8 @@ const CALL_DEADLINE_MS = 30_000;
 
 /** Code points of an article's text returned; the rest is cut with the marker. */
 export const ARTICLE_CAP = 10_000;
+/** A tag-shaped run in an article's plain text: removed, nothing else. */
+const TAG = /<\/?[A-Za-z][^<>]*>/g;
 /** Search hits returned a call. */
 export const PAGE_SIZE = 10;
 /** Search hits kept; past them the list is cut (`truncated: true`). */
@@ -97,7 +104,7 @@ function customerSafe(status: string | null, visibility: string | null): boolean
 }
 
 const FOR_THE_AGENT =
-  "A draft (status: draft), or content not visible to all users (visibility other than all users; null is unknown, so treat it as not public), is for the agent. Only an article with customer_safe: true may be quoted to a customer as published guidance.";
+  "A draft (status: draft), or content not visible to all users (visibility other than all users; null is unknown, so treat it as not public), is for the agent. Only an article with customer_safe: true may be quoted to a customer as published guidance. customer_safe does not check which portals show the article's category.";
 const NAMES = `Titles and names are shown without HTML and cut at ${NAME_CAP} characters (ending with …).`;
 const ANNOTATIONS = {
   readOnlyHint: true,
@@ -111,7 +118,7 @@ const searchInput = z.object({ term: z.string(), cursor: z.string().optional() }
 export const searchSolutionsTool: Tool<typeof searchInput> = {
   name: "search_solutions",
   description: [
-    "Knowledge-base articles matching a term (for example squeak), drafts included: each one's id, title, status (draft, published, or null), visibility (its folder's: all users, logged-in users, agents only, selected companies, or null) and last update. get_solution_article gives an article's text.",
+    "Knowledge-base articles matching a term (for example squeak), drafts included: each one's id, title, status (draft, published, or null), visibility (its folder's: all users, logged-in users, agents only, selected companies, or null), customer_safe and last update. get_solution_article gives an article's text.",
     `term is at most ${MAX_TERM_LENGTH} characters and not blank; otherwise it is refused and nothing is sent.`,
     `Results come ${PAGE_SIZE} a call, from the first ${HIT_CAP} hits only: past them the list is cut and says truncated: true. While has_more is true, call again with the same arguments and next_cursor; every call runs the search again.`,
     FOR_THE_AGENT,
@@ -193,7 +200,9 @@ export const getSolutionArticleTool: Tool<typeof articleInput> = {
         customer_safe: customerSafe(status, visibility),
         updated_at: isoUpdated(article.updated_at),
         text:
-          article.text === null ? null : untrusted(htmlToText(article.text), { cap: ARTICLE_CAP }),
+          article.text === null
+            ? null
+            : untrusted(article.text.replace(TAG, ""), { cap: ARTICLE_CAP }),
         api_calls_used: calls,
       },
     };
@@ -226,7 +235,7 @@ const treeInput = z.object({});
 export const listSolutionTreeTool: Tool<typeof treeInput> = {
   name: "list_solution_tree",
   description: [
-    "The knowledge base's outline: categories, each with its folders (name and visibility: all users, logged-in users, agents only, selected companies, or null), each with its articles' ids, titles, status (draft, published, or null) and last update. No article text: get_solution_article gives it.",
+    "The knowledge base's outline: categories, each with its folders (name and visibility: all users, logged-in users, agents only, selected companies, or null), each with its articles' ids, titles, status (draft, published, or null), customer_safe and last update. No article text: get_solution_article gives it.",
     `It reads at most ${MAX_LISTS} lists a call (the categories, one per category for its folders, one per folder for its articles), categories and folders first: a category or folder past that has folders: null or articles: null, and truncated is true. truncated is true too when a list was longer than 1,000 entries and cut. Subfolders are not shown: an article in a subfolder is found only through search_solutions. Every list is sent as an expensive operation: paced (2 requests a second by default), so a full walk of single-page lists takes about 10 s, and refused with rate_limited when the account's API budget is low (the call then fails). A walk that cannot finish within 30 s fails as network.`,
     FOR_THE_AGENT,
     NAMES,
