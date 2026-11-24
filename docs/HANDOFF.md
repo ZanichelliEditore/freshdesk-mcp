@@ -4,80 +4,75 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T11:16:15+01:00`
-- **Describes commit:** `46c8af8`
-  (`46c8af823daf35bd6b4a93fe2929831359e19e2e`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45373290175
-  (workflow `quality`, ran on `46c8af8`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T11:39:41+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-043 `done (2026-11-24)`,
-  `docs/tasks/T-043-ticket-filters.md` ("Done"). Commits `a8a0384`
-  (status), `e3af096` (build), `d3091cb` (full-round fixes), `e80ad04`
-  (task file, T-055 proposed, parked items). `src/tools/ticket-query.ts`:
-  `buildTicketQuery` (names → ids, list parameters or search query) and
-  `matchesLocal` (the local checks: `uncategorized`, `updated_since`,
-  `created_between`). Built by a builder agent under the orchestrator
+- **Current task:** T-026 `done (2026-11-24)`,
+  `docs/tasks/T-026-get-ticket.md` ("Done"). Commits `12eae27` (status),
+  `1bd817b` (build), `ee2bde9` (full-round fixes), `5173676` (scoped
+  list A fix, done). `get_ticket`: labelled fields through `ticketDetail`,
+  thread in pages of 10 (body cap 4,000), requester and company, recent
+  tickets on request. Built by a builder agent under the orchestrator
   (owner's instruction of 2026-11-23).
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-026**
-  (`get_ticket`).
-  - **The owner:** local `node` is v26.13.1 since the Homebrew relink of
-    2026-11-24 (HANDOFF at `c7e4b3c`); CI (22.19, 24) is the reference.
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-056** (schema
+  service reports its load's requests), added 2026-11-24 right after
+  T-026; T-027 now depends on it.
+  - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`).
   - **The owner**, Dependabot PRs (unchanged; T-044 "Done").
 
-- **Read before anything else:** PLAN row T-026 and its task file (its
-  acceptance was amended on 2026-11-23: field values through
-  `fieldValue`, duplicate labels, cursor clause); T-025's open doubt
-  (names come back raw; skip `getCompany` on a null `company_id`).
+- **Read before anything else:** PLAN's M1 re-plan notes of 2026-11-24
+  (T-026's acceptance amended, T-056 added) and T-056's task file.
 
 - **Reviews:**
-  - **Full round** on `901cb00..e3af096`, R1 = `e3af096`. The four quotes
-    matched for all three; no Bash calls. compliance: Wireframes `none`.
-    security: 3 Low (control characters in a tag; type names unstripped
-    in one message; non-boolean `uncategorized` ignored). code-reviewer:
-    2 Medium (the quote clause of the acceptance not met as written;
-    `updated_since` with search resting on the open boundary question),
-    Lows. **Orchestrator's decisions** (owner's delegation): the
-    acceptance now reads "refused, not escaped" (PLAN and task file);
-    date filters on search are widened by a day with a local check. Fixed
-    in `d3091cb`.
-  - **Scoped round** on `e3af096..d3091cb`. The four quotes matched for all
-    three; no Bash calls. List A empty for all three; compliance `none`.
-    Lists B parked, entry `d3091cb`; both reviewers' B on the widening
-    became the `proposed` row T-055.
+  - **Full round** on `d14f36f..1bd817b`, R1 = `1bd817b`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security:
+    2 Medium (a hidden requester leaking through `user_id` and recent
+    tickets; the email unwrapped with no shape check), 2 Low, 1 cost
+    note. code-reviewer: 1 High gate (`api_calls_used` on a cold schema
+    falsifies the acceptance), 2 Medium (part errors read as an unknown
+    ticket; page size and body cap), Lows; one read-only `grep`, said so.
+    **Orchestrator's decision** (owner's delegation): T-026's acceptance
+    records the cold-schema gap as a limitation until T-056 (`todo`).
+    The rest fixed in `ee2bde9`.
+  - **Scoped round** on `1bd817b..ee2bde9`. The four quotes matched for all
+    three; no Bash calls. compliance `none`; code list A none.
+    **security list A, one item:** a hidden requester's id on a
+    conversation not marked `incoming`. Fixed in `5173676` by removing
+    the condition (`user_id` is `null` on every conversation when the
+    requester is hidden): a narrowing, **not reviewed again**, no third
+    round (rule 9); the orchestrator re-ran `make quality` on `5173676`
+    (exit 0). Lists B parked, entry `ee2bde9`.
 
-- **Proposed plan changes:**
-  - **T-055** `proposed (2026-11-24)`: measure whether search's
-    `created_at`/`updated_at` `>`/`<` keep the boundary day and whose
-    time-zone day they use; a one-day widening can undercount for an
-    account not on UTC. To size before T-036 (`count_tickets`).
-  - T-027 and T-036 acceptance should gain "a ticket on the widened
-    boundary day is absent from the output" (they must call
-    `matchesLocal`); T-036/T-037 cost argument (HANDOFF at `8c90427`).
-  - T-041 can be sized (OD-4 answered). Carried: T-052, T-049
-    `proposed (2026-11-23)`.
+- **Proposed plan changes:** none new beyond T-056 (`todo`) and T-027's
+  added dependency on it. T-055 `proposed (2026-11-24)` (search date
+  boundary; size before T-036). T-027/T-036 boundary-day acceptance line
+  and the T-036/T-037 cost argument: see HANDOFF at `46c8af8`, `8c90427`.
+  T-041 can be sized. Carried: T-052, T-049 `proposed (2026-11-23)`.
 
 - **Open doubts (owner):**
-  - **T-043:** the acceptance amendment was the orchestrator's; a tag or
-    type with `'`, `"`, `\` or a control/format character can never be
-    filtered; the T-055 question. See the task file.
-  - **Earlier tasks:** see HANDOFF at `c7e4b3c`, `26e6101`, `8c90427`,
-    `fe4c24c` (T-022 confirms), `c79a23b`, `ae9da29`, `fcca38f`,
-    `65be293`, `f286c82`, `470124f`, `876ec68`, `20f4b2f`, `d20c83b`.
+  - **T-026:** the acceptance amendment and the unreviewed list A fix
+    were the orchestrator's; a conversation body over 4,000 code points
+    cannot be read in full by any call (SPEC §7.4 asks for a way to fetch
+    the rest; parked); a hidden requester can still appear in a body, a
+    subject or an attachment name. See the task file.
+  - **Earlier tasks:** see HANDOFF at `46c8af8`, `c7e4b3c`, `26e6101`,
+    `8c90427`, `fe4c24c` (T-022 confirms), `c79a23b`, `ae9da29`,
+    `fcca38f`, `65be293`, `f286c82`, `470124f`, `876ec68`, `20f4b2f`,
+    `d20c83b`.
 
 - **Dead ends:** none this task. From before: see HANDOFF at `fe4c24c`,
   `ae9da29`, `876ec68`.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), from the
-  builder's run before `e80ad04`:
+- **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
+  orchestrator on `5173676`:
   - eslint clean, ruff "All checks passed!";
   - prettier "All matched files use Prettier code style!";
   - `tsc --noEmit` clean;
-  - vitest "Test Files 25 passed (25)", "Tests 1688 passed (1688)";
+  - vitest "Test Files 26 passed (26)", "Tests 1765 passed (1765)";
   - `tools/checks` "Ran 54 tests", OK;
   - `npm run build` clean;
   - both gitleaks scans passed.
