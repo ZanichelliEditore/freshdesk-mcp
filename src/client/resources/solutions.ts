@@ -7,6 +7,8 @@
 //     `listArticles`: of `GET /solutions/folders/{id}/articles`. All three
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated` past
 //     the cap; a malformed page and an HTTP failure as `listAll` returns them.
+//     Subfolders (`GET /solutions/folders/{id}/subfolders`) are not read:
+//     an article in a subfolder is reached only through search.
 //   - `getArticle`: `GET /solutions/articles/{id}`.
 //   - `searchArticles`: `GET /search/solutions?term=`, one request; the body
 //     is a list of articles. `HttpClient` percent-encodes the term with
@@ -15,11 +17,18 @@
 //
 // Shapes are Freshdesk's API v2 documentation, not measured on an account.
 // What is returned is a fixed allow-list built field by field, not a
-// pass-through: a category or a folder is `{id, name}`, an article in a list
-// or a search hit `{id, title, status}`, a viewed article `{id, title, text,
-// status}` with `text` Freshdesk's plain-text `description_text` (the HTML
-// `description` is dropped). Each needs a whole-number `id` and `status`, a
-// string `name`, `title` and `description_text`. A body in any other shape is
+// pass-through: a category is `{id, name}`, a folder `{id, name, visibility}`,
+// an article in a list `{id, title, status, updated_at}`, a search hit the
+// same plus `folder_visibility`, a viewed article `{id, title, text, status,
+// updated_at}` with `text` Freshdesk's plain-text `description_text` (the
+// HTML `description` is dropped; `null` stays `null`, an empty article). A
+// category's `visible_in_portals` is dropped: portal ids, which no tool can
+// label. Each needs a whole-number `id` and `status`, a string `name` and
+// `title`, and a `description_text` string or null. `visibility` and
+// `folder_visibility` are whole numbers, or `null` when missing or
+// unreadable, so a caller can treat an unknown one as not public;
+// `updated_at` an ISO 8601 date-time with a zone, or `null` likewise. A body
+// in any other shape is
 // `server` with the response's real status, not retryable, and a fixed
 // message that quotes nothing from it. An HTTP failure (a 404 is
 // `not_found`) is returned unchanged.
@@ -48,26 +57,44 @@ import { listAll, type ListResult } from "./list-all.js";
 export const MAX_TERM_LENGTH = 512;
 
 // `z.object` strips unknown keys; the results are still built field by field.
+const wholeOrNull = z.number().int().nullable().catch(null);
 const named = z.object({ id: z.number().int(), name: z.string() });
-const listed = z.object({ id: z.number().int(), title: z.string(), status: z.number().int() });
-const viewed = listed.extend({ description_text: z.string() });
+const folder = named.extend({ visibility: wholeOrNull });
+const listed = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  status: z.number().int(),
+  updated_at: z.iso.datetime({ offset: true }).nullable().catch(null),
+});
+const hit = listed.extend({ folder_visibility: wholeOrNull });
+const viewed = listed.extend({ description_text: z.string().nullable() });
 
 export interface SolutionCategory {
   id: number;
   name: string;
 }
 
-export type SolutionFolder = SolutionCategory;
+export interface SolutionFolder extends SolutionCategory {
+  /** Freshdesk's folder visibility; `null` when missing or unreadable. */
+  visibility: number | null;
+}
 
 export interface ArticleSummary {
   id: number;
   title: string;
   status: number;
+  /** ISO 8601 with a zone; `null` when missing or unreadable. */
+  updated_at: string | null;
+}
+
+export interface ArticleHit extends ArticleSummary {
+  /** The visibility of the article's folder; `null` when missing or unreadable. */
+  folder_visibility: number | null;
 }
 
 export interface Article extends ArticleSummary {
-  /** Plain text: Freshdesk's `description_text`. */
-  text: string;
+  /** Plain text: Freshdesk's `description_text`; `null` for an empty article. */
+  text: string | null;
 }
 
 export type ArticleResult =
@@ -75,7 +102,7 @@ export type ArticleResult =
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export type ArticleSearchResult =
-  | { ok: true; results: ArticleSummary[]; attempts: number }
+  | { ok: true; results: ArticleHit[]; attempts: number }
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export async function listCategories(
@@ -101,12 +128,12 @@ export async function listFolders(
   const result = await listAll(
     http,
     "/solutions/categories/{id}/folders",
-    named,
+    folder,
     "solution folders",
     deadline,
     { id: categoryId },
   );
-  return result.ok ? { ...result, items: result.items.map(toNamed) } : result;
+  return result.ok ? { ...result, items: result.items.map(toFolder) } : result;
 }
 
 export async function listArticles(
@@ -141,10 +168,10 @@ export async function getArticle(
   if (!parsed.success) {
     return { ...malformed("a solution article", result.status), attempts: result.attempts };
   }
-  const { title, status, description_text } = parsed.data;
+  const { title, status, updated_at, description_text } = parsed.data;
   return {
     ok: true,
-    article: { id: parsed.data.id, title, text: description_text, status },
+    article: { id: parsed.data.id, title, text: description_text, status, updated_at },
     attempts: result.attempts,
   };
 }
@@ -162,19 +189,27 @@ export async function searchArticles(
     deadline,
   );
   if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
-  const parsed = listed.array().safeParse(result.body);
+  const parsed = hit.array().safeParse(result.body);
   if (!parsed.success) {
     return { ...malformed("solution search results", result.status), attempts: result.attempts };
   }
-  return { ok: true, results: parsed.data.map(toSummary), attempts: result.attempts };
+  const results = parsed.data.map((item) => ({
+    ...toSummary(item),
+    folder_visibility: item.folder_visibility,
+  }));
+  return { ok: true, results, attempts: result.attempts };
 }
 
 function toNamed(item: z.infer<typeof named>): SolutionCategory {
   return { id: item.id, name: item.name };
 }
 
+function toFolder(item: z.infer<typeof folder>): SolutionFolder {
+  return { id: item.id, name: item.name, visibility: item.visibility };
+}
+
 function toSummary(item: z.infer<typeof listed>): ArticleSummary {
-  return { id: item.id, title: item.title, status: item.status };
+  return { id: item.id, title: item.title, status: item.status, updated_at: item.updated_at };
 }
 
 function malformed(noun: string, status: number): { ok: false; error: FreshdeskError } {

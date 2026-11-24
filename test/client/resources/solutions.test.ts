@@ -116,6 +116,7 @@ describe("listCategories", () => {
       { id: 3102, name: "Sprocket Care" },
       { id: 3103, name: "Spanner Lore" },
     ]);
+    expect(JSON.stringify(result)).not.toContain("visible_in_portals");
     expect(result).toMatchObject({ truncated: false, attempts: 2 });
     expect(urls().map((url) => url.href)).toEqual([
       `${ORIGIN}${CATEGORIES}?per_page=100`,
@@ -132,6 +133,8 @@ describe("listCategories", () => {
 
     expect(result.items).toHaveLength(10);
     expect(result).toMatchObject({ truncated: true, attempts: 10 });
+    expect(urls()).toHaveLength(10);
+    expect(urls().map((url) => url.href)).not.toContain(pageUrl(CATEGORIES, 11));
   });
 
   it("passes the deadline on: one already passed sends nothing and is network", async () => {
@@ -146,19 +149,35 @@ describe("listCategories", () => {
 });
 
 describe("listFolders", () => {
-  it("follows two pages of a category's folders: ids and names, nothing else", async () => {
+  it("follows two pages of a category's folders: ids, names and visibility, nothing else", async () => {
     reply(FOLDERS, 200, folderPages[0], pageUrl(FOLDERS, 2));
     reply(FOLDERS, 200, folderPages[1]);
 
     const result = ok(await listFolders(http, 3101));
 
     expect(result.items).toEqual([
-      { id: 3201, name: "Getting Started" },
-      { id: 3202, name: "Squeaks and Rattles" },
-      { id: 3203, name: "Oiling Schedules" },
+      { id: 3201, name: "Getting Started", visibility: 1 },
+      { id: 3202, name: "Squeaks and Rattles", visibility: 3 },
+      { id: 3203, name: "Oiling Schedules", visibility: 1 },
     ]);
     expect(result).toMatchObject({ truncated: false, attempts: 2 });
     expect(urls().map((url) => url.pathname)).toEqual([FOLDERS, FOLDERS]);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["not a number", CANARY],
+    ["not whole", 1.5],
+    ["null", null],
+  ])("gives visibility: null when it is %s", async (_label, visibility) => {
+    const page = structuredClone(folderPages[1]) as Record<string, unknown>[];
+    page[0]!.visibility = visibility;
+    reply(FOLDERS, 200, page);
+
+    const result = ok(await listFolders(http, 3101));
+
+    expect(result.items).toEqual([{ id: 3203, name: "Oiling Schedules", visibility: null }]);
+    expect(JSON.stringify(result)).not.toContain(CANARY);
   });
 
   it.each(BAD_IDS)("refuses the category id %s with nothing sent", async (id) => {
@@ -173,19 +192,37 @@ describe("listFolders", () => {
 });
 
 describe("listArticles", () => {
-  it("follows two pages of a folder's articles: ids, titles and status, nothing else", async () => {
+  it("follows two pages of a folder's articles: ids, titles, status and updated_at, nothing else", async () => {
     reply(ARTICLES, 200, articlePages[0], pageUrl(ARTICLES, 2));
     reply(ARTICLES, 200, articlePages[1]);
 
     const result = ok(await listArticles(http, 3201));
 
     expect(result.items).toEqual([
-      { id: 3301, title: "Fitting a new sprocket", status: 2 },
-      { id: 3302, title: "Quieting a squeak", status: 1 },
-      { id: 3303, title: "Storing spanners", status: 2 },
+      { id: 3301, title: "Fitting a new sprocket", status: 2, updated_at: "2026-01-03T10:00:00Z" },
+      { id: 3302, title: "Quieting a squeak", status: 1, updated_at: "2026-01-03T10:00:00Z" },
+      { id: 3303, title: "Storing spanners", status: 2, updated_at: "2026-01-03T10:00:00Z" },
     ]);
     expect(result).toMatchObject({ truncated: false, attempts: 2 });
     expect(urls().map((url) => url.pathname)).toEqual([ARTICLES, ARTICLES]);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["not a date-time", CANARY],
+    ["a date-time with no zone", "2026-01-03T10:00:00"],
+    ["null", null],
+  ])("gives updated_at: null when it is %s", async (_label, updated) => {
+    const page = structuredClone(articlePages[1]) as Record<string, unknown>[];
+    page[0]!.updated_at = updated;
+    reply(ARTICLES, 200, page);
+
+    const result = ok(await listArticles(http, 3201));
+
+    expect(result.items).toEqual([
+      { id: 3303, title: "Storing spanners", status: 2, updated_at: null },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(CANARY);
   });
 
   it.each(BAD_IDS)("refuses the folder id %s with nothing sent", async (id) => {
@@ -251,7 +288,7 @@ describe("the lists: a malformed item on page 2", () => {
 });
 
 describe("getArticle", () => {
-  it("returns id, title, the plain text and status, nothing else", async () => {
+  it("returns id, title, the plain text, status and updated_at, nothing else", async () => {
     reply(ARTICLE, 200, articleView);
 
     const result = ok(await getArticle(http, 3301));
@@ -261,6 +298,7 @@ describe("getArticle", () => {
       title: "Fitting a new sprocket",
       text: "Line the teeth up first, then turn gently.",
       status: 2,
+      updated_at: "2026-01-03T10:00:00Z",
     });
     expect(JSON.stringify(result)).not.toContain("<p>");
     expect(result.attempts).toBe(1);
@@ -268,6 +306,21 @@ describe("getArticle", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.pathname).toBe(ARTICLE);
     expect(sent[0]!.search).toBe("");
+  });
+
+  it("gives text: null for an empty article (description_text null)", async () => {
+    reply(ARTICLE, 200, { ...articleView, description: "", description_text: null });
+
+    expect(ok(await getArticle(http, 3301)).article.text).toBeNull();
+  });
+
+  it("gives updated_at: null when it is not a date-time", async () => {
+    reply(ARTICLE, 200, { ...articleView, updated_at: CANARY });
+
+    const result = ok(await getArticle(http, 3301));
+
+    expect(result.article.updated_at).toBeNull();
+    expect(JSON.stringify(result)).not.toContain(CANARY);
   });
 
   it.each(BAD_IDS)("refuses the id %s with nothing sent", async (id) => {
@@ -310,14 +363,26 @@ describe("getArticle", () => {
 });
 
 describe("searchArticles", () => {
-  it("sends the term percent-encoded, a space as +, and returns the hits' ids, titles and status", async () => {
+  it("sends the term percent-encoded, a space as +, and returns the hits' ids, titles, status, updated_at and folder visibility", async () => {
     reply(SEARCH, 200, searchHits);
 
     const result = ok(await searchArticles(http, "oil & squeak?"));
 
     expect(result.results).toEqual([
-      { id: 3302, title: "Quieting a squeak", status: 2 },
-      { id: 3304, title: "Squeak after oiling", status: 2 },
+      {
+        id: 3302,
+        title: "Quieting a squeak",
+        status: 2,
+        updated_at: "2026-01-03T10:00:00Z",
+        folder_visibility: 1,
+      },
+      {
+        id: 3304,
+        title: "Squeak after oiling",
+        status: 2,
+        updated_at: "2026-01-03T10:00:00Z",
+        folder_visibility: 3,
+      },
     ]);
     expect(result.attempts).toBe(1);
     const sent = urls();
@@ -333,6 +398,31 @@ describe("searchArticles", () => {
     ok(await searchArticles(http, "ruota dentata è"));
 
     expect(urls()[0]!.search).toBe("?term=ruota+dentata+%C3%A8");
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["not a number", CANARY],
+    ["null", null],
+  ])("gives folder_visibility: null when it is %s", async (_label, visibility) => {
+    const hits = structuredClone(searchHits) as Record<string, unknown>[];
+    hits[0]!.folder_visibility = visibility;
+    reply(SEARCH, 200, hits);
+
+    const result = ok(await searchArticles(http, "squeak"));
+
+    expect(result.results.map((hit) => hit.folder_visibility)).toEqual([null, 3]);
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
+  it("returns a 404 as not_found, with its attempts", async () => {
+    reply(SEARCH, 404, { message: CANARY });
+
+    const result = await searchArticles(http, "squeak");
+
+    expect(failure(result).code).toBe("not_found");
+    expect(result).toMatchObject({ ok: false, attempts: 1 });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
   });
 
   it("returns no hits as an empty list", async () => {

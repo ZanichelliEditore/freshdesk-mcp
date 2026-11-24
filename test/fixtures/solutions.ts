@@ -15,12 +15,12 @@ function category(id: number, name: string) {
   };
 }
 
-function folder(id: number, name: string) {
+function folder(id: number, name: string, visibility = 1) {
   return {
     id,
     name,
     description: `${name} notes.`,
-    visibility: 1,
+    visibility,
     parent_folder_id: null,
     sub_folders_count: 0,
     articles_count: 2,
@@ -56,7 +56,7 @@ export const categoryPages = [
 ];
 
 export const folderPages = [
-  [folder(3201, "Getting Started"), folder(3202, "Squeaks and Rattles")],
+  [folder(3201, "Getting Started"), folder(3202, "Squeaks and Rattles", 3)],
   [folder(3203, "Oiling Schedules")],
 ];
 
@@ -88,7 +88,7 @@ export const searchHits = [
     ...article(3304, "Squeak after oiling", "Wipe off the extra oil."),
     category_name: "Widget Basics",
     folder_name: "Squeaks and Rattles",
-    folder_visibility: 1,
+    folder_visibility: 3,
     language_id: 6,
     path: "3304-squeak-after-oiling",
   },
