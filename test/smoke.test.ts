@@ -5,13 +5,20 @@ import { RateLimiter } from "../src/client/rate-limit.js";
 import { listTicketFields } from "../src/client/resources/ticket-fields.js";
 import {
   choicesShape,
+  DATE_SCAN_PAGES,
+  type DateReading,
   elapsedBand,
   main,
+  probeDays,
+  resolveZone,
+  runDateProbes,
   runProbes,
   runSmoke,
   smoke,
   SmokeClient,
   totalBand,
+  utcOffset,
+  zoneDay,
 } from "../scripts/smoke/smoke.js";
 import { agentPages, groupPages } from "./fixtures/agents-groups.js";
 import { ticketFieldsPayload, ticketFieldsWithEntityChoices } from "./fixtures/ticket-fields.js";
@@ -835,3 +842,366 @@ describe("runProbes: control probes (review of 2026-11-24)", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// T-055's date probes. NOW is Tuesday 2026-11-24: the probed days are
+// 2026-11-19, 18 and 17, the scan window 2026-11-15 to 2026-11-22 (UTC).
+// Ticket ids, subjects and the account's name and zone are invented and must
+// not appear in the output.
+
+const HOUR_MS = 3_600_000;
+
+/** Newest first, as the list sends them with `order_type=desc`. */
+const dated = [
+  { id: 91001, subject: "Ledgerline crank", created_at: "2026-11-23T10:00:00Z" }, // after the window
+  { id: 91002, subject: "Ledgerline crank", created_at: "2026-11-21T10:00:00Z" },
+  { id: 91003, subject: "Ledgerline crank", created_at: "2026-11-20T09:00:00Z" },
+  { id: 91004, subject: "Ledgerline crank", created_at: "2026-11-19T10:00:00Z" },
+  { id: 91005, subject: "Ledgerline crank", created_at: "2026-11-18T23:30:00Z" }, // 19 in Rome
+  { id: 91006, subject: "Ledgerline crank", created_at: "2026-11-18T08:00:00Z" },
+  { id: 91007, subject: "Ledgerline crank", created_at: "2026-11-17T12:00:00Z" },
+  { id: 91008, subject: "Ledgerline crank", created_at: "2026-11-16T23:10:00Z" }, // 17 in Rome
+  { id: 91009, subject: "Ledgerline crank", created_at: "2026-11-10T10:00:00Z" }, // before it
+];
+
+/** A day, UTC or Rome's (UTC+1 in November), computed apart from the code under test. */
+function dayIn(created: string, rome: boolean): string {
+  return new Date(Date.parse(created) + (rome ? HOUR_MS : 0)).toISOString().slice(0, 10);
+}
+
+/** A search that counts `dated` under `reading`, Rome being the account's zone. */
+function searchUnder(reading: DateReading, path: string): Route {
+  const text = decodeURIComponent(path.replace(/\+/g, " "));
+  const eq = /created_at:'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const gt = /created_at:>'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const lt = /created_at:<'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const total = dated.filter(({ created_at }) => {
+    const d = dayIn(created_at, reading.day === "zone");
+    if (eq !== undefined) return d === eq;
+    const afterOk = reading.gt === "exclusive" ? d > gt! : d >= gt!;
+    const beforeOk = reading.lt === "exclusive" ? d < lt! : d <= lt!;
+    return afterOk && beforeOk;
+  }).length;
+  return {
+    status: 200,
+    body: { total, results: [] },
+    headers: { "x-ratelimit-used-currentrequest": "1" },
+  };
+}
+
+const ACCOUNT = {
+  account_name: "Ledgerline Widgets",
+  account_domain: DOMAIN,
+  timezone: "Rome",
+  contact_person: { name: "Orla Vantree", email: "orla@ledgerline.example" },
+};
+
+function dateAccount(
+  reading: DateReading = { gt: "exclusive", lt: "exclusive", day: "zone" },
+  overrides: { account?: Route; tickets?: Route } = {},
+) {
+  return (path: string): Route => {
+    if (path.startsWith("/api/v2/account"))
+      return overrides.account ?? { status: 200, body: ACCOUNT };
+    if (path.startsWith("/api/v2/tickets"))
+      return overrides.tickets ?? { status: 200, body: dated };
+    if (path.startsWith("/api/v2/search/tickets")) return searchUnder(reading, path);
+    return { status: 404, body: { message: CANARY } };
+  };
+}
+
+async function dateProbes(route: (path: string) => Route = dateAccount()) {
+  serve(route);
+  const lines: string[] = [];
+  const code = await runDateProbes(client(), (line) => lines.push(line), NOW);
+  return { code, lines, out: lines.join("\n") };
+}
+
+describe("probeDays", () => {
+  it.each([
+    ["2026-11-24T12:00:00Z", ["2026-11-19", "2026-11-18", "2026-11-17"]], // Tuesday
+    ["2026-11-26T00:00:00Z", ["2026-11-19", "2026-11-18", "2026-11-17"]], // Thursday
+    ["2026-11-28T23:59:59Z", ["2026-11-25", "2026-11-24", "2026-11-19"]], // Saturday
+  ])(
+    "from %s: the latest Tuesdays to Thursdays whose next day ended two days before",
+    (now, days) => {
+      expect(probeDays(Date.parse(now))).toEqual(days);
+    },
+  );
+
+  it("takes as many days as asked", () => {
+    expect(probeDays(NOW, 1)).toEqual(["2026-11-19"]);
+  });
+});
+
+describe("the date probes' zone helpers", () => {
+  it.each([
+    ["Rome", "Europe/Rome"],
+    ["Europe/Rome", "Europe/Rome"],
+    ["UTC", "UTC"],
+    ["New York", "America/New_York"],
+    ["Kolkata", "Asia/Kolkata"],
+  ])("resolves %s to %s", (name, zone) => {
+    expect(resolveZone(name)).toBe(zone);
+  });
+
+  it.each([
+    ["Eastern Time (US & Canada)"],
+    ["Nowhere Town"],
+    ["../etc/passwd"],
+    [""],
+    [42],
+    [null],
+  ])("does not resolve %j", (name) => {
+    expect(resolveZone(name)).toBeUndefined();
+  });
+
+  it.each([
+    ["2026-11-19T12:00:00Z", "Europe/Rome", "UTC+1"],
+    ["2026-07-01T12:00:00Z", "Europe/Rome", "UTC+2"],
+    ["2026-11-19T12:00:00Z", "America/New_York", "UTC-5"],
+    ["2026-11-19T12:00:00Z", "Asia/Kolkata", "UTC+5.5"],
+    ["2026-11-19T12:00:00Z", "UTC", "UTC+0"],
+  ])("the offset at %s in %s is %s", (at, zone, offset) => {
+    expect(utcOffset(Date.parse(at), zone)).toBe(offset);
+  });
+
+  it("takes a ticket's day in the zone, across midnight both ways", () => {
+    expect(zoneDay(Date.parse("2026-11-18T23:30:00Z"), "Europe/Rome")).toBe("2026-11-19");
+    expect(zoneDay(Date.parse("2026-11-18T22:59:59Z"), "Europe/Rome")).toBe("2026-11-18");
+    expect(zoneDay(Date.parse("2026-11-19T03:00:00Z"), "America/New_York")).toBe("2026-11-18");
+  });
+});
+
+describe("runDateProbes", () => {
+  it("prints the zone, the scan, the local counts, the totals and the verdict, exit 0", async () => {
+    const { code, lines } = await dateProbes();
+    expect(code).toBe(0);
+    expect(lines[0]).toMatch(/^date probes: GET only;/);
+    expect(lines).toContain(
+      "date probes: D = 2026-11-19, 2026-11-18, 2026-11-17 (Tuesdays to Thursdays, UTC; D+1 over two days before today)",
+    );
+    expect(lines).toContain(
+      "probe date_zone: account time zone readable yes, resolved yes, UTC+1 on the probed days",
+    );
+    expect(lines).toContain(
+      `probe date_scan: list pages 1 (cap ${DATE_SCAN_PAGES}), window covered yes, tickets created in the window 7, unreadable created_at 0, on a different day in UTC and in the zone 2`,
+    );
+    expect(lines).toContain(
+      "probe date_local 2026-11-19: created per UTC day D-1 2, D 1, D+1 1; per zone day D-1 1, D 2, D+1 1",
+    );
+    expect(lines).toContain("probe date_search 2026-11-19 created_at:'D': total 2, credits 1");
+    expect(lines).toContain(
+      "probe date_search 2026-11-19 created_at:>'D-1' AND created_at:<'D+1': total 2, credits 1",
+    );
+    expect(lines).toContain(
+      "probe date_search 2026-11-19 created_at:>'D' AND created_at:<'D': total 0, credits 1",
+    );
+    expect(lines.filter((line) => line.startsWith("probe date_search "))).toHaveLength(15);
+    expect(lines).toContain(
+      "probe date_verdict: 1 of 8 readings predict all 15 totals: > exclusive, < exclusive, zone day",
+    );
+    expect(lines.at(-1)).toBe("date probes: done");
+  });
+
+  it.each<DateReading>([
+    { gt: "exclusive", lt: "exclusive", day: "UTC" },
+    { gt: "inclusive", lt: "exclusive", day: "zone" },
+    { gt: "exclusive", lt: "inclusive", day: "UTC" },
+    { gt: "inclusive", lt: "inclusive", day: "zone" },
+  ])("names the one reading a search under %j agrees with", async (reading) => {
+    const { lines } = await dateProbes(dateAccount(reading));
+    const day = `${reading.day} day`;
+    expect(lines).toContain(
+      `probe date_verdict: 1 of 8 readings predict all 15 totals: > ${reading.gt}, < ${reading.lt}, ${day}`,
+    );
+  });
+
+  it("lists every reading the totals cannot tell apart", async () => {
+    // No ticket near midnight: UTC and zone days agree everywhere.
+    const noon = dated.filter((t) => t.id !== 91005 && t.id !== 91008);
+    const { lines } = await dateProbes((path) =>
+      path.startsWith("/api/v2/search")
+        ? searchUnderTickets(noon, path)
+        : dateAccount(undefined, { tickets: { status: 200, body: noon } })(path),
+    );
+    expect(lines).toContain(
+      "probe date_verdict: 2 of 8 readings predict all 15 totals: > exclusive, < exclusive, UTC day; > exclusive, < exclusive, zone day",
+    );
+    expect(lines.some((line) => line.endsWith("on a different day in UTC and in the zone 0"))).toBe(
+      true,
+    );
+  });
+
+  it("says none when no reading predicts the totals", async () => {
+    const { lines } = await dateProbes((path) =>
+      path.startsWith("/api/v2/search")
+        ? { status: 200, body: { total: 99, results: [] } }
+        : dateAccount()(path),
+    );
+    expect(lines).toContain("probe date_verdict: 0 of 8 readings predict all 15 totals");
+  });
+
+  it("asks the account, the list window newest first, and each day query", async () => {
+    await dateProbes();
+    const sentPaths = paths();
+    expect(new Set(sent().map((call) => call.method))).toEqual(new Set(["GET"]));
+    expect(sentPaths).toContain("/api/v2/account");
+    expect(sentPaths).toContain(
+      "/api/v2/tickets?per_page=100&updated_since=2026-11-15T00%3A00%3A00Z&order_by=created_at&order_type=desc",
+    );
+    const asked = (query: string) =>
+      sentPaths.includes(
+        `/api/v2/search/tickets?query=${encodeURIComponent(`"${query}"`).replace(/%20/g, "+").replace(/'/g, "%27")}`,
+      );
+    expect(asked("created_at:'2026-11-17'")).toBe(true);
+    expect(asked("created_at:>'2026-11-18' AND created_at:<'2026-11-20'")).toBe(true);
+    expect(asked("created_at:>'2026-11-18' AND created_at:<'2026-11-19'")).toBe(true);
+    expect(asked("created_at:>'2026-11-19' AND created_at:<'2026-11-20'")).toBe(true);
+    expect(asked("created_at:>'2026-11-19' AND created_at:<'2026-11-19'")).toBe(true);
+    expect(sentPaths.filter((path) => path.startsWith("/api/v2/search"))).toHaveLength(15);
+  });
+
+  it("prints no id, subject, account name, zone name, domain or key", async () => {
+    const account = { ...ACCOUNT, timezone: "Tokyo" };
+    serve(dateAccount(undefined, { account: { status: 200, body: account } }));
+    const lines: string[] = [];
+    const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY };
+    expect(await main(env, mock, (line) => lines.push(line), "dates")).toBe(0);
+    const out = [...lines, ...stderr].join("\n");
+    expect(lines).toContain(
+      "probe date_zone: account time zone readable yes, resolved yes, UTC+9 on the probed days",
+    );
+    for (const value of [
+      ...dated.map((t) => String(t.id)),
+      "Ledgerline",
+      "Orla",
+      "orla@",
+      "Tokyo",
+      "Asia/",
+      "quillmoor",
+      API_KEY,
+    ]) {
+      expect(out.toLowerCase()).not.toContain(value.toLowerCase());
+    }
+  });
+
+  it.each([
+    [
+      "a refused account read",
+      { status: 403, body: { message: CANARY } },
+      "readable no (fail forbidden), assumed Europe/Rome",
+    ],
+    [
+      "a body with no timezone",
+      { status: 200, body: { account_name: CANARY } },
+      "readable no (no timezone in the body), assumed Europe/Rome",
+    ],
+    [
+      "a zone name that does not resolve",
+      { status: 200, body: { timezone: "Eastern Time (US & Canada)" } },
+      "readable yes, resolved no, assumed Europe/Rome",
+    ],
+  ])("%s: says so and assumes Europe/Rome", async (_, account, text) => {
+    const { lines, out } = await dateProbes(dateAccount(undefined, { account }));
+    expect(lines).toContain(`probe date_zone: account time zone ${text}, UTC+1 on the probed days`);
+    expect(out).not.toContain(CANARY);
+    expect(out).not.toContain("Eastern");
+    // Rome is what the fake search uses: the verdict still finds it.
+    expect(lines.some((line) => line.endsWith("> exclusive, < exclusive, zone day"))).toBe(true);
+  });
+
+  it("a scan cut at the page cap is not judged", async () => {
+    const inside = dated.slice(1, 8);
+    const { lines } = await dateProbes(
+      dateAccount(undefined, {
+        tickets: {
+          status: 200,
+          body: inside,
+          headers: { link: `<${ORIGIN}/api/v2/tickets?per_page=100&page=2>; rel="next"` },
+        },
+      }),
+    );
+    expect(lines).toContain(
+      `probe date_scan: list pages ${DATE_SCAN_PAGES} (cap ${DATE_SCAN_PAGES}), window covered no, tickets created in the window ${inside.length * DATE_SCAN_PAGES}, unreadable created_at 0, on a different day in UTC and in the zone ${2 * DATE_SCAN_PAGES}`,
+    );
+    expect(lines).toContain("probe date_verdict: not judged (the scan did not cover the window)");
+    expect(paths().filter((path) => path.startsWith("/api/v2/tickets"))).toHaveLength(
+      DATE_SCAN_PAGES,
+    );
+  });
+
+  it("a scan that ends with no next page covers the window", async () => {
+    const inside = dated.slice(1, 8);
+    const { lines } = await dateProbes(
+      dateAccount(undefined, { tickets: { status: 200, body: inside } }),
+    );
+    expect(lines.some((line) => line.includes("list pages 1 (cap 30), window covered yes"))).toBe(
+      true,
+    );
+  });
+
+  it("a failed scan prints its code and is not judged", async () => {
+    const { lines, out } = await dateProbes(
+      dateAccount(undefined, { tickets: { status: 500, body: { message: CANARY } } }),
+    );
+    expect(lines.some((line) => /^probe date_scan: fail server, list pages 1 /.test(line))).toBe(
+      true,
+    );
+    expect(lines).toContain("probe date_verdict: not judged (the scan did not cover the window)");
+    expect(out).not.toContain(CANARY);
+  });
+
+  it("counts unreadable created_at apart", async () => {
+    const odd = [...dated.slice(0, 3), { id: 91010, created_at: "yesterday" }, ...dated.slice(3)];
+    const { lines } = await dateProbes(
+      dateAccount(undefined, { tickets: { status: 200, body: odd } }),
+    );
+    expect(lines.some((line) => line.includes("unreadable created_at 1,"))).toBe(true);
+  });
+
+  it("a list body that is not a list fails the scan", async () => {
+    const notList = await dateProbes(
+      dateAccount(undefined, { tickets: { status: 200, body: { note: CANARY } } }),
+    );
+    expect(notList.lines.some((line) => line.startsWith("probe date_scan: not a list,"))).toBe(
+      true,
+    );
+  });
+
+  it("a refused search prints its code; the verdict uses the other totals", async () => {
+    const { lines, out } = await dateProbes((path) =>
+      path.startsWith("/api/v2/search") && !path.includes("%3E")
+        ? { status: 400, body: { description: CANARY } }
+        : dateAccount()(path),
+    );
+    expect(lines).toContain("probe date_search 2026-11-19 created_at:'D': fail validation");
+    expect(lines).toContain(
+      "probe date_verdict: 1 of 8 readings predict all 12 totals: > exclusive, < exclusive, zone day",
+    );
+    expect(out).not.toContain(CANARY);
+  });
+
+  it("no search total at all is not judged", async () => {
+    const { lines } = await dateProbes((path) =>
+      path.startsWith("/api/v2/search")
+        ? { status: 200, body: { results: [] } }
+        : dateAccount()(path),
+    );
+    expect(lines).toContain("probe date_search 2026-11-19 created_at:'D': total ?, credits ?");
+    expect(lines).toContain("probe date_verdict: not judged (no search total)");
+  });
+});
+
+/** `searchUnder`'s exclusive zone reading over other tickets. */
+function searchUnderTickets(list: typeof dated, path: string): Route {
+  const text = decodeURIComponent(path.replace(/\+/g, " "));
+  const eq = /created_at:'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const gt = /created_at:>'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const lt = /created_at:<'(\d{4}-\d\d-\d\d)'/.exec(text)?.[1];
+  const total = list.filter(({ created_at }) => {
+    const d = dayIn(created_at, true);
+    return eq !== undefined ? d === eq : d > gt! && d < lt!;
+  }).length;
+  return { status: 200, body: { total, results: [] } };
+}

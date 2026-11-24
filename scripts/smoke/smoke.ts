@@ -30,6 +30,10 @@
 // only, no value read from the account printed, a failure as its code).
 // A search total and a duration are printed as bands, not figures.
 // Exit code 0 when the run finished: a refused probe is a measurement.
+//
+// `runDateProbes` (`make smoke-date-probes`, T-055) is the third: search's
+// day operators against local counts, under the same rules; it prints the
+// probed dates and exact counts (counts, not values), never the zone's name.
 
 import type { Dispatcher } from "undici";
 import {
@@ -643,11 +647,314 @@ export async function runProbes(
   return 0;
 }
 
-export type Mode = "report" | "probes";
+// ---------------------------------------------------------------------------
+// T-055's date probes (`make smoke-date-probes`): whether search's
+// `created_at:>'D'` and `<'D'` keep the boundary day, and whose day they use.
+// For a few recent days D, the exact search totals of five day queries are
+// set beside local counts of the same tickets read from the list endpoint
+// (`updated_since` two days before the oldest D, newest first, until the
+// window is passed or the page cap is hit), each ticket's day taken in UTC
+// and in the account's time zone. A verdict line names which of eight
+// readings (`>` and `<` each exclusive or inclusive, the day UTC's or the
+// zone's) predict every total. Printed: the probed dates, counts, the zone's
+// UTC offset and yes/no; never the zone's name, an id or a ticket value.
+
+type Bound = "exclusive" | "inclusive";
+type DayOf = "UTC" | "zone";
+
+/** One reading of search's day operators. */
+export interface DateReading {
+  gt: Bound;
+  lt: Bound;
+  day: DayOf;
+}
+
+const READINGS: readonly DateReading[] = (["exclusive", "inclusive"] as const).flatMap((gt) =>
+  (["exclusive", "inclusive"] as const).flatMap((lt) =>
+    (["UTC", "zone"] as const).map((day) => ({ gt, lt, day })),
+  ),
+);
+
+/** The day after (or before) `value` by `days`, as YYYY-MM-DD. */
+function shift(value: string, days: number): string {
+  return day(Date.parse(value) + days * DAY_MS);
+}
+
+/** Whether `ticketDay` passes `>'bound'` (exclusive: after it; inclusive: on or after it). */
+function after(ticketDay: string, bound: string, how: Bound): boolean {
+  return how === "exclusive" ? ticketDay > bound : ticketDay >= bound;
+}
+
+/** Whether `ticketDay` passes `<'bound'` (exclusive: before it; inclusive: on or before it). */
+function before(ticketDay: string, bound: string, how: Bound): boolean {
+  return how === "exclusive" ? ticketDay < bound : ticketDay <= bound;
+}
+
+/** A day query of the probes: its text with D written as `D`, and the days it keeps. */
+interface DayQuery {
+  label: string;
+  query: (d: string) => string;
+  keeps: (ticketDay: string, d: string, reading: DateReading) => boolean;
+}
+
+/** `>'lo' AND <'hi'` around D, lo and hi as offsets from D in days. */
+function between(lo: number, hi: number): DayQuery {
+  const name = (offset: number) => (offset === 0 ? "D" : `D${offset > 0 ? "+" : ""}${offset}`);
+  return {
+    label: `created_at:>'${name(lo)}' AND created_at:<'${name(hi)}'`,
+    query: (d) => `created_at:>'${shift(d, lo)}' AND created_at:<'${shift(d, hi)}'`,
+    keeps: (ticketDay, d, reading) =>
+      after(ticketDay, shift(d, lo), reading.gt) && before(ticketDay, shift(d, hi), reading.lt),
+  };
+}
+
+const DAY_QUERIES: readonly DayQuery[] = [
+  {
+    label: "created_at:'D'",
+    query: (d) => `created_at:'${d}'`,
+    keeps: (ticketDay, d) => ticketDay === d,
+  },
+  between(-1, 1),
+  between(-1, 0),
+  between(0, 1),
+  between(0, 0),
+];
+
+/** Pages of 100 the local scan reads at most. */
+export const DATE_SCAN_PAGES = 30;
+
+/** The zone assumed when the account's cannot be read or resolved. */
+const ASSUMED_ZONE = "Europe/Rome";
+
+/**
+ * The probed days: the `count` most recent Tuesdays to Thursdays (UTC) whose
+ * next day ended at least two days before `now`'s UTC day, newest first, so
+ * D−1, D and D+1 are weekdays and over in every zone.
+ */
+export function probeDays(now: number, count = 3): string[] {
+  const days: string[] = [];
+  for (let t = Date.parse(day(now)) - 3 * DAY_MS; days.length < count; t -= DAY_MS) {
+    const weekday = new Date(t).getUTCDay();
+    if (weekday >= 2 && weekday <= 4) days.push(day(t));
+  }
+  return days;
+}
+
+function isZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An IANA zone for the account's `timezone`: the value itself when it is one,
+ * else a Rails-style city name (`Rome`) under a continent prefix; `undefined`
+ * when neither resolves.
+ */
+export function resolveZone(name: unknown): string | undefined {
+  if (typeof name !== "string" || !/^[A-Za-z][A-Za-z0-9 _/+-]{0,63}$/.test(name)) return undefined;
+  if (isZone(name)) return name;
+  const city = name.replace(/ /g, "_");
+  return ["Europe", "America", "Asia", "Africa", "Australia", "Pacific", "Atlantic", "Indian"]
+    .map((continent) => `${continent}/${city}`)
+    .find(isZone);
+}
+
+/** The wall-clock parts of `ms` in `zone`. */
+function wallClock(ms: number, zone: string): Record<string, number> {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(ms);
+  return Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]),
+  );
+}
+
+/** The day `ms` falls on in `zone`, as YYYY-MM-DD. */
+export function zoneDay(ms: number, zone: string): string {
+  const { year, month, day: date } = wallClock(ms, zone);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
+}
+
+/** `zone`'s offset from UTC at `ms`, as `UTC+1`, `UTC-5`, `UTC+5.5`. */
+export function utcOffset(ms: number, zone: string): string {
+  const w = wallClock(ms, zone);
+  const local = Date.UTC(w.year!, w.month! - 1, w.day!, w.hour!, w.minute!, w.second!);
+  const hours = Math.round((local - Math.floor(ms / 1000) * 1000) / 60_000) / 60;
+  return `UTC${hours < 0 ? "-" : "+"}${Math.abs(hours)}`;
+}
+
+/** The account's zone, or the assumed one; prints `probe date_zone`. */
+async function accountZone(http: SmokeClient, days: string[], out: Out): Promise<string> {
+  const result = await http.requestWithRetry({ path: "/account" });
+  const name = result.ok && isRecord(result.body) ? result.body.timezone : undefined;
+  const resolved = resolveZone(name);
+  const zone = resolved ?? ASSUMED_ZONE;
+  const offsets = [...new Set(days.map((d) => utcOffset(Date.parse(d) + DAY_MS / 2, zone)))];
+  const read = !result.ok
+    ? `readable no (${failure(result.error)})`
+    : typeof name !== "string"
+      ? "readable no (no timezone in the body)"
+      : `readable yes, resolved ${yes(resolved !== undefined)}`;
+  const assumed = resolved === undefined ? `, assumed ${ASSUMED_ZONE}` : "";
+  out(
+    `probe date_zone: account time zone ${read}${assumed}, ${offsets.join("/")} on the probed days`,
+  );
+  return zone;
+}
+
+/** The local scan: `created_at` of every ticket in [start, end), and whether it covered them. */
+async function scanCreated(
+  http: SmokeClient,
+  start: number,
+  end: number,
+): Promise<{
+  created: number[];
+  covered: boolean;
+  pages: number;
+  unreadable: number;
+  failed?: string;
+}> {
+  const pages = http.paginate(
+    {
+      path: "/tickets",
+      query: {
+        per_page: 100,
+        updated_since: instant(start),
+        order_by: "created_at",
+        order_type: "desc",
+      },
+    },
+    { pages: DATE_SCAN_PAGES },
+  );
+  const created: number[] = [];
+  let read = 0;
+  let unreadable = 0;
+  for (;;) {
+    const step = await pages.next();
+    if (step.done) return { created, covered: !step.value.truncated, pages: read, unreadable };
+    read += 1;
+    const result = step.value;
+    if (!result.ok) {
+      return { created, covered: false, pages: read, unreadable, failed: failure(result.error) };
+    }
+    if (!Array.isArray(result.body)) {
+      return { created, covered: false, pages: read, unreadable, failed: "not a list" };
+    }
+    let passed = false;
+    for (const item of result.body) {
+      const time = isRecord(item) ? Date.parse(String(item.created_at)) : Number.NaN;
+      if (Number.isNaN(time)) unreadable += 1;
+      else if (time < start) passed = true;
+      else if (time < end) created.push(time);
+    }
+    // Newest first: a ticket created before the window means the rest are too.
+    if (passed) return { created, covered: true, pages: read, unreadable };
+  }
+}
+
+/** One day query's exact search total; prints `probe date_search`. */
+async function dayTotal(
+  http: SmokeClient,
+  d: string,
+  q: DayQuery,
+  out: Out,
+): Promise<number | undefined> {
+  const name = `probe date_search ${d} ${q.label}`;
+  const result = await http.requestWithRetry({ ...search(q.query(d)), method: "GET" });
+  if (!result.ok) {
+    out(`${name}: ${failure(result.error)}`);
+    return undefined;
+  }
+  const total =
+    isRecord(result.body) &&
+    typeof result.body.total === "number" &&
+    Number.isSafeInteger(result.body.total) &&
+    result.body.total >= 0
+      ? result.body.total
+      : undefined;
+  out(`${name}: total ${total ?? "?"}, credits ${credits(result.headers)}`);
+  return total;
+}
+
+function readingText(reading: DateReading): string {
+  return `> ${reading.gt}, < ${reading.lt}, ${reading.day} day`;
+}
+
+/** The date probes, one line each to `out`. Returns 0 when the run finished. */
+export async function runDateProbes(
+  http: SmokeClient,
+  out: Out,
+  now = Date.now(),
+): Promise<number> {
+  out(
+    "date probes: GET only; probed dates, counts, the zone's UTC offset and yes/no, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only these lines into tracked files.",
+  );
+  const days = probeDays(now);
+  out(
+    `date probes: D = ${days.join(", ")} (Tuesdays to Thursdays, UTC; D+1 over two days before today)`,
+  );
+  const zone = await accountZone(http, days, out);
+
+  // Two days of margin on each side: the zone's days are inside the window for any offset.
+  const start = Date.parse(shift(days.at(-1)!, -2));
+  const end = Date.parse(shift(days[0]!, 3));
+  const scan = await scanCreated(http, start, end);
+  const probed = new Set(days.flatMap((d) => [shift(d, -1), d, shift(d, 1)]));
+  const tickets = scan.created.map((time) => ({ UTC: day(time), zone: zoneDay(time, zone) }));
+  const split = tickets.filter(
+    (t) => (probed.has(t.UTC) || probed.has(t.zone)) && t.UTC !== t.zone,
+  ).length;
+  out(
+    `probe date_scan: ${scan.failed === undefined ? "" : `${scan.failed}, `}list pages ${scan.pages} (cap ${DATE_SCAN_PAGES}), window covered ${yes(scan.covered)}, tickets created in the window ${tickets.length}, unreadable created_at ${scan.unreadable}, on a different day in UTC and in the zone ${split}`,
+  );
+
+  const count = (dayOf: DayOf, target: string) => tickets.filter((t) => t[dayOf] === target).length;
+  const totals: { d: string; q: DayQuery; total: number }[] = [];
+  for (const d of days) {
+    const per = (dayOf: DayOf) =>
+      `D-1 ${count(dayOf, shift(d, -1))}, D ${count(dayOf, d)}, D+1 ${count(dayOf, shift(d, 1))}`;
+    out(`probe date_local ${d}: created per UTC day ${per("UTC")}; per zone day ${per("zone")}`);
+    for (const q of DAY_QUERIES) {
+      const total = await dayTotal(http, d, q, out);
+      if (total !== undefined) totals.push({ d, q, total });
+    }
+  }
+
+  if (!scan.covered || totals.length === 0) {
+    out(
+      `probe date_verdict: not judged (${scan.covered ? "no search total" : "the scan did not cover the window"})`,
+    );
+  } else {
+    const predicts = (reading: DateReading) =>
+      totals.every(
+        ({ d, q, total }) =>
+          tickets.filter((t) => q.keeps(t[reading.day], d, reading)).length === total,
+      );
+    const matching = READINGS.filter(predicts);
+    out(
+      `probe date_verdict: ${matching.length} of ${READINGS.length} readings predict all ${totals.length} totals${matching.length === 0 ? "" : `: ${matching.map(readingText).join("; ")}`}`,
+    );
+  }
+  out("date probes: done");
+  return 0;
+}
+
+export type Mode = "report" | "probes" | "dates";
 
 /**
  * Loads the configuration from `env` as the server does and runs the report
- * (or, in `probes` mode, T-022's probes).
+ * (or, in `probes` mode, T-022's probes; in `dates` mode, T-055's).
  * A configuration that cannot be loaded prints one fixed line: its message
  * may quote the team file's path. Any other error is thrown.
  */
@@ -677,6 +984,7 @@ export async function smoke(
     out("config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_MCP_CONFIG)");
     return 1;
   }
+  if (mode === "dates") return runDateProbes(http, out);
   return mode === "probes" ? runProbes(http, out) : runSmoke(http, out);
 }
 

@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -46,6 +46,11 @@ smoke-probes: ## T-022's GET-only probes of the real account (owner runs it; sam
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --probes
+
+smoke-date-probes: ## T-055's GET-only probes of search's date boundary and time zone (owner runs it; same env as the server): dates, counts, the zone's UTC offset, no names or ids
+	npx tsc -p tsconfig.smoke.json
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --dates
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py
