@@ -195,6 +195,9 @@ describe("createServer: enabled toolsets come from the team file only", () => {
       "search_tickets",
       "triage_queue",
       "find_similar_tickets",
+      "search_solutions",
+      "get_solution_article",
+      "list_solution_tree",
     ]);
   });
 
