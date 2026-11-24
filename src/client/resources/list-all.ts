@@ -1,6 +1,7 @@
 // Every item of a paged list, each page checked by a zod schema before the
 // next is asked for. Its callers: `agents.ts` and `groups.ts` (SPEC §7.3),
-// `tickets.ts`'s `listConversations`, `solutions.ts`'s three lists.
+// `tickets.ts`'s `listConversations`, `solutions.ts`'s three lists,
+// `canned.ts`'s `listCannedFolders`.
 //
 // Pages of PER_PAGE (Freshdesk's maximum) through `paginate`, at most
 // MAX_PAGES of them: past the cap the list ends where it stopped, and
