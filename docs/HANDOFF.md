@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T15:53:18+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `41de8bc`
+  (`41de8bc31273a25ca7944a247b6f26ccfb5986a8`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45419249818
+  (workflow `quality`, ran on `41de8bc`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-055 `done (2026-11-24)` (spike),
   `docs/tasks/T-055-search-date-boundary.md` ("Done"). Commits `4f466de`
