@@ -7,11 +7,11 @@ serves it, its cap, and what 100 tickets cost. T-023, T-024, T-043 and the
 tools T-026 to T-030, T-036 and T-037 are built on it.
 
 A row is `documented` when Freshdesk's API v2 documentation settles it (the
-link names the section), or `measured 2026-11-24`: the orchestrator's two
+link names the section), or `measured 2026-11-24`: the orchestrator's three
 runs of `make smoke-probes` (`scripts/smoke/smoke.ts`, `runProbes`) against
 the real account on 2026-11-24, on the owner's authorisation: the first
-run, and the control run after the review of 2026-11-24. A third run on
-2026-11-24, for T-029, added `view_include_stats`. The output is kept
+run, the control run after the review of 2026-11-24, and T-029's run,
+which added `view_include_stats`. The output is kept
 in the gitignored `docs/private/`; only shapes (counts of a page, bands,
 yes/no, credits) are quoted here. Anything still open is listed under
 [Open](#open). This file names no account value: field names are written as
@@ -45,7 +45,7 @@ Sources (read 2026-11-24), all on <https://developers.freshdesk.com/api/>:
   the next page, absent on the last.
 - **Rate limit** (`#ratelimit`): every request counts, invalid ones too.
 
-What the two runs measured (2026-11-24; first run 16 GETs, 10 answered 200
+What the three runs measured (2026-11-24; first run 16 GETs, 10 answered 200
 and 6 answered 400; control run 21 GETs, 14 answered 200 and 7 answered
 400; T-029's run 22 GETs, 15 answered 200 and 7 answered 400):
 
@@ -137,7 +137,10 @@ What the view's `stats` gives a row (full review, 2026-11-24):
 - `last_customer_reply`: `requester_responded_at`; when that is `null` the
   customer's last message is the opening one, so the ticket's `created_at`.
   `unanswered_customer_reply`: true when `agent_responded_at` is `null` or
-  earlier than the customer's reply.
+  earlier than the customer's reply. A limit: a ticket an agent opened (an
+  outbound email, a logged phone call) with no agent reply since also reads
+  as unanswered, its opening counted as the customer's message; `stats`
+  does not say who wrote the opening.
 - `first_response_overdue`, with the flag: true only when `fr_due_by` has
   passed and `first_responded_at` is `null`. Without the flag it says only
   that the due time has passed.

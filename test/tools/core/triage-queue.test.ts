@@ -293,6 +293,8 @@ describe("triage_queue: the listing", () => {
       "the customer's last message, the opening one when there was no later reply",
     );
     expect(description).toContain("reply_signals_incomplete: true");
+    expect(description).toContain("call again later to read them");
+    expect(description).toContain("a ticket an agent opened");
     expect(description).toContain("reply_signals: true");
     expect(description).toContain("has_more");
   });
@@ -740,6 +742,26 @@ describe("triage_queue: reply_signals, one view per row", () => {
     expect(result.api_calls_used).toBe(sent());
     expect(result.has_more).toBe(true);
     expect(result.next_cursor).toBe(cursorFor(TOOL, STATS, 1));
+  });
+
+  it("the first view answered 404, a later one refused by the limiter: the partial return, every signal null", async () => {
+    const { session } = await warm();
+    const page = tickets(4301, 3);
+    reply(searchPath(), found(page), 200, HIGH);
+    reply(viewPath(4301), { message: "gone" }, 404, LOW);
+    const result = output(await run(session, STATS));
+
+    expect(result.items.map((item) => item.id)).toEqual([4301, 4302, 4303]);
+    for (const item of result.items) {
+      expect(item).toMatchObject({
+        last_customer_reply: null,
+        since_last_customer_reply: null,
+        unanswered_customer_reply: null,
+      });
+    }
+    expect((result as unknown as Record<string, unknown>).reply_signals_incomplete).toBe(true);
+    expect(paths()).toEqual([searchPath(), viewPath(4301)]);
+    expect(result.api_calls_used).toBe(sent());
   });
 
   it("a call whose views were all answered has no reply_signals_incomplete key", async () => {
