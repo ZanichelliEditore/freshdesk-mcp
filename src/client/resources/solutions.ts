@@ -7,9 +7,13 @@
 //     `listArticles`: of `GET /solutions/folders/{id}/articles`. All three
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated` past
 //     the cap; a malformed page and an HTTP failure as `listAll` returns them.
+//     Each takes an optional trailing cost class for every page (`cheap`
+//     unless given; `expensive` for `list_solution_tree`'s walk, T-032).
 //     Subfolders (`GET /solutions/folders/{id}/subfolders`) are not read:
 //     an article in a subfolder is reached only through search.
 //   - `getArticle`: `GET /solutions/articles/{id}`.
+//   - `getFolder`: `GET /solutions/folders/{id}`, for the visibility of a
+//     viewed article's folder (T-032).
 //   - `searchArticles`: `GET /search/solutions?term=`, one request; the body
 //     is a list of articles. `HttpClient` percent-encodes the term with
 //     `URLSearchParams`, a space as `+`. Freshdesk documents no page
@@ -20,13 +24,14 @@
 // pass-through: a category is `{id, name}`, a folder `{id, name, visibility}`,
 // an article in a list `{id, title, status, updated_at}`, a search hit the
 // same plus `folder_visibility`, a viewed article `{id, title, text, status,
-// updated_at}` with `text` Freshdesk's plain-text `description_text` (the
+// updated_at, folder_id}` with `text` Freshdesk's plain-text `description_text` (the
 // HTML `description` is dropped; `null` stays `null`, an empty article). A
 // category's `visible_in_portals` is dropped: portal ids, which no tool can
 // label. Each needs a whole-number `id` and `status`, a string `name` and
 // `title`, and a `description_text` string or null. `visibility` and
 // `folder_visibility` are whole numbers, or `null` when missing or
-// unreadable, so a caller can treat an unknown one as not public;
+// unreadable, so a caller can treat an unknown one as not public; a viewed
+// article's `folder_id` a positive safe integer, or `null` likewise;
 // `updated_at` an ISO 8601 date-time with a zone, or `null` likewise. A body
 // in any other shape is
 // `server` with the response's real status, not retryable, and a fixed
@@ -48,6 +53,7 @@
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
 import type { HttpClient } from "../http.js";
+import type { CostClass } from "../rate-limit.js";
 import { listAll, type ListResult } from "./list-all.js";
 
 /**
@@ -67,7 +73,17 @@ const listed = z.object({
   updated_at: z.iso.datetime({ offset: true }).nullable().catch(null),
 });
 const hit = listed.extend({ folder_visibility: wholeOrNull });
-const viewed = listed.extend({ description_text: z.string().nullable() });
+const positiveOrNull = z
+  .number()
+  .int()
+  .positive()
+  .max(Number.MAX_SAFE_INTEGER)
+  .nullable()
+  .catch(null);
+const viewed = listed.extend({
+  description_text: z.string().nullable(),
+  folder_id: positiveOrNull,
+});
 
 export interface SolutionCategory {
   id: number;
@@ -95,10 +111,16 @@ export interface ArticleHit extends ArticleSummary {
 export interface Article extends ArticleSummary {
   /** Plain text: Freshdesk's `description_text`; `null` for an empty article. */
   text: string | null;
+  /** The article's folder; `null` when missing or unreadable. */
+  folder_id: number | null;
 }
 
 export type ArticleResult =
   | { ok: true; article: Article; attempts: number }
+  | { ok: false; error: FreshdeskError; attempts?: number };
+
+export type FolderResult =
+  | { ok: true; folder: SolutionFolder; attempts: number }
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export type ArticleSearchResult =
@@ -108,6 +130,7 @@ export type ArticleSearchResult =
 export async function listCategories(
   http: HttpClient,
   deadline?: number,
+  cost?: CostClass,
 ): Promise<ListResult<SolutionCategory>> {
   const result = await listAll(
     http,
@@ -115,6 +138,8 @@ export async function listCategories(
     named,
     "solution categories",
     deadline,
+    undefined,
+    cost,
   );
   return result.ok ? { ...result, items: result.items.map(toNamed) } : result;
 }
@@ -123,6 +148,7 @@ export async function listFolders(
   http: HttpClient,
   categoryId: number,
   deadline?: number,
+  cost?: CostClass,
 ): Promise<ListResult<SolutionFolder>> {
   if (!isPositiveInt(categoryId)) return refused("category id");
   const result = await listAll(
@@ -132,6 +158,7 @@ export async function listFolders(
     "solution folders",
     deadline,
     { id: categoryId },
+    cost,
   );
   return result.ok ? { ...result, items: result.items.map(toFolder) } : result;
 }
@@ -140,6 +167,7 @@ export async function listArticles(
   http: HttpClient,
   folderId: number,
   deadline?: number,
+  cost?: CostClass,
 ): Promise<ListResult<ArticleSummary>> {
   if (!isPositiveInt(folderId)) return refused("folder id");
   const result = await listAll(
@@ -149,6 +177,7 @@ export async function listArticles(
     "solution articles",
     deadline,
     { id: folderId },
+    cost,
   );
   return result.ok ? { ...result, items: result.items.map(toSummary) } : result;
 }
@@ -168,12 +197,30 @@ export async function getArticle(
   if (!parsed.success) {
     return { ...malformed("a solution article", result.status), attempts: result.attempts };
   }
-  const { title, status, updated_at, description_text } = parsed.data;
+  const { title, status, updated_at, description_text, folder_id } = parsed.data;
   return {
     ok: true,
-    article: { id: parsed.data.id, title, text: description_text, status, updated_at },
+    article: { id: parsed.data.id, title, text: description_text, status, updated_at, folder_id },
     attempts: result.attempts,
   };
+}
+
+export async function getFolder(
+  http: HttpClient,
+  id: number,
+  deadline?: number,
+): Promise<FolderResult> {
+  if (!isPositiveInt(id)) return refused("folder id");
+  const result = await http.requestWithRetry(
+    { path: "/solutions/folders/{id}", params: { id } },
+    deadline,
+  );
+  if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
+  const parsed = folder.safeParse(result.body);
+  if (!parsed.success) {
+    return { ...malformed("a solution folder", result.status), attempts: result.attempts };
+  }
+  return { ok: true, folder: toFolder(parsed.data), attempts: result.attempts };
 }
 
 export async function searchArticles(

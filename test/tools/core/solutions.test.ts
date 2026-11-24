@@ -22,6 +22,7 @@ import {
   categoryPages,
   folderPages,
   searchHits,
+  taggedArticleView,
 } from "../../fixtures/solutions.js";
 import {
   type CallResult,
@@ -44,6 +45,9 @@ const CATEGORIES = "/api/v2/solutions/categories?per_page=100";
 const foldersOf = (id: number) => `/api/v2/solutions/categories/${id}/folders?per_page=100`;
 const articlesOf = (id: number) => `/api/v2/solutions/folders/${id}/articles?per_page=100`;
 const ARTICLE = "/api/v2/solutions/articles/3301";
+const FOLDER = "/api/v2/solutions/folders/3201";
+/** Budget headers below the default reserve of 20 %. */
+const LOW = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" };
 
 const dir = mkdtempSync(join(tmpdir(), "freshdesk-mcp-solutions-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -78,11 +82,11 @@ async function session(): Promise<Session> {
   return open(server);
 }
 
-function reply(path: string, body: unknown, status = 200) {
+function reply(path: string, body: unknown, status = 200, headers: Record<string, string> = {}) {
   mock
     .get(ORIGIN)
     .intercept({ path, method: "GET" })
-    .reply(status, body as object, { headers: JSON_TYPE });
+    .reply(status, body as object, { headers: { ...JSON_TYPE, ...headers } });
 }
 
 function sent(): number {
@@ -106,6 +110,27 @@ function cursorFor(tool: string, args: Record<string, unknown>, position: number
 }
 
 const wrapped = (text: string) => `${OPEN}${text}${CLOSE}`;
+
+/**
+ * Runs a call on a fake clock until it settles: the tree's lists are
+ * `expensive`, paced at 2 a second, so MAX_LISTS of them take about 10 s.
+ */
+async function paced(call: () => Promise<CallResult>): Promise<CallResult> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    let result: CallResult | undefined;
+    void call().then((value) => {
+      result = value;
+    });
+    while (result === undefined) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
+    }
+    return result;
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 interface Envelope {
   items: Record<string, unknown>[];
@@ -132,7 +157,9 @@ describe("the listing", () => {
       expect(tool?.annotations.readOnlyHint).toBe(true);
       expect(tool?.annotations.destructiveHint).toBe(false);
       expect(tool?.description).toContain("Cost: ");
-      expect(tool?.description).toMatch(/draft.*must not be quoted to a customer/s);
+      expect(tool?.description).toContain(
+        "Only an article with customer_safe: true may be quoted to a customer as published guidance",
+      );
       expect(tool?.description.includes(DATA_NOT_INSTRUCTIONS)).toBe(
         name === "get_solution_article",
       );
@@ -166,6 +193,7 @@ describe("the listing", () => {
     expect(text("search_solutions")).toContain(`first ${HIT_CAP} hits`);
     expect(text("get_solution_article")).toContain(`${ARTICLE_CAP.toLocaleString("en-US")}`);
     expect(text("list_solution_tree")).toContain(`at most ${MAX_LISTS} lists`);
+    expect(text("list_solution_tree")).toContain("expensive");
   });
 });
 
@@ -182,14 +210,16 @@ describe("search_solutions", () => {
           title: "Quieting a squeak",
           status: "published",
           visibility: "all users",
-          updated_at: "2026-01-03T10:00:00Z",
+          updated_at: "2026-01-03T10:00:00.000Z",
+          customer_safe: true,
         },
         {
           id: 3304,
           title: "Squeak after oiling",
           status: "published",
           visibility: "agents only",
-          updated_at: "2026-01-03T10:00:00Z",
+          updated_at: "2026-01-03T10:00:00.000Z",
+          customer_safe: false,
         },
       ],
       has_more: false,
@@ -214,6 +244,7 @@ describe("search_solutions", () => {
       await callTool(await session(), "search_solutions", { term: TERM }),
     );
     expect(result.items[0].visibility).toBe(name);
+    expect(result.items[0].customer_safe).toBe(name === "all users");
   });
 
   it.each([
@@ -226,6 +257,7 @@ describe("search_solutions", () => {
       await callTool(await session(), "search_solutions", { term: TERM }),
     );
     expect(result.items[0].status).toBe(name);
+    expect(result.items[0].customer_safe).toBe(name === "published");
   });
 
   it("a title loses its HTML tag and is cut at the name cap, not wrapped", async () => {
@@ -276,6 +308,17 @@ describe("search_solutions", () => {
     expect(result.items.at(-1)?.id).toBe(4000 + HIT_CAP);
     expect(result.truncated).toBe(true);
     expect(result.has_more).toBe(false);
+  });
+
+  it(`exactly ${HIT_CAP} hits: the last page has no more and no truncated key`, async () => {
+    reply(SEARCH, hits(HIT_CAP));
+    const cursor = cursorFor("search_solutions", { term: TERM }, MAX_POSITION);
+    const result = ok<Envelope>(
+      await callTool(await session(), "search_solutions", { term: TERM, cursor }),
+    );
+    expect(result.items).toHaveLength(PAGE_SIZE);
+    expect(result.has_more).toBe(false);
+    expect(result).not.toHaveProperty("truncated");
   });
 
   it("MAX_POSITION is the last page of the hit cap", () => {
@@ -330,29 +373,85 @@ describe("search_solutions", () => {
 describe("get_solution_article", () => {
   it("returns the plain text inside <ticket_content>, no HTML tag, the title through the name helper", async () => {
     reply(ARTICLE, { ...articleView, title: "<i>Fitting</i> a new sprocket" });
+    reply(FOLDER, folderPages[0][0]);
     const response = await callTool(await session(), "get_solution_article", { article_id: 3301 });
     expect(ok(response)).toEqual({
       id: 3301,
       title: "Fitting a new sprocket",
       status: "published",
-      updated_at: "2026-01-03T10:00:00Z",
+      visibility: "all users",
+      customer_safe: true,
+      updated_at: "2026-01-03T10:00:00.000Z",
       text: wrapped("Line the teeth up first, then turn gently."),
-      api_calls_used: 1,
+      api_calls_used: 2,
     });
+    expect(sent()).toBe(2);
     expect(response.content[0].text).not.toContain("<p>");
     expect(response.content[0].text).not.toContain("<i>");
   });
 
-  it("a draft says status: draft", async () => {
+  it("a draft says status: draft, customer_safe: false", async () => {
     reply(ARTICLE, { ...articleView, status: 1 });
+    reply(FOLDER, folderPages[0][0]);
     const result = ok(
       await callTool(await session(), "get_solution_article", { article_id: 3301 }),
     );
     expect(result.status).toBe("draft");
+    expect(result.customer_safe).toBe(false);
+  });
+
+  it("an article in an agents-only folder: visibility agents only, customer_safe: false", async () => {
+    reply(ARTICLE, articleView);
+    reply(FOLDER, { ...folderPages[0][0], visibility: 3 });
+    const result = ok(
+      await callTool(await session(), "get_solution_article", { article_id: 3301 }),
+    );
+    expect(result.visibility).toBe("agents only");
+    expect(result.customer_safe).toBe(false);
+  });
+
+  it("a folder read answered 404: the article comes back, visibility null, customer_safe: false", async () => {
+    reply(ARTICLE, articleView);
+    reply(FOLDER, { message: "gone" }, 404);
+    const result = ok(
+      await callTool(await session(), "get_solution_article", { article_id: 3301 }),
+    );
+    expect(result.text).toBe(wrapped("Line the teeth up first, then turn gently."));
+    expect(result.visibility).toBeNull();
+    expect(result.customer_safe).toBe(false);
+    expect(result.api_calls_used).toBe(2);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("a folder read failing otherwise fails the call with its code", async () => {
+    reply(ARTICLE, articleView);
+    reply(FOLDER, { message: "denied" }, 403);
+    expect(
+      refusal(await callTool(await session(), "get_solution_article", { article_id: 3301 })).code,
+    ).toBe("forbidden");
+  });
+
+  it("an article with no readable folder_id: no folder read, visibility null", async () => {
+    reply(ARTICLE, { ...articleView, folder_id: null });
+    const result = ok(
+      await callTool(await session(), "get_solution_article", { article_id: 3301 }),
+    );
+    expect(result.visibility).toBeNull();
+    expect(result.customer_safe).toBe(false);
+    expect(sent()).toBe(1);
+  });
+
+  it("a tag left in the plain text is stripped: the exact wrapped text has none", async () => {
+    reply("/api/v2/solutions/articles/3305", taggedArticleView);
+    reply(FOLDER, folderPages[0][0]);
+    const response = await callTool(await session(), "get_solution_article", { article_id: 3305 });
+    expect(ok(response).text).toBe(wrapped("Use light oil, then wipe it."));
+    expect(response.content[0].text).not.toMatch(/<\/?(b|i)>/);
   });
 
   it(`a text over ${ARTICLE_CAP} characters is cut, the marker after the block`, async () => {
     reply(ARTICLE, { ...articleView, description_text: "x".repeat(ARTICLE_CAP + 7) });
+    reply(FOLDER, folderPages[0][0]);
     const result = ok(
       await callTool(await session(), "get_solution_article", { article_id: 3301 }),
     );
@@ -363,6 +462,7 @@ describe("get_solution_article", () => {
 
   it("an empty article gives text: null", async () => {
     reply(ARTICLE, { ...articleView, description_text: null });
+    reply(FOLDER, folderPages[0][0]);
     const result = ok(
       await callTool(await session(), "get_solution_article", { article_id: 3301 }),
     );
@@ -395,7 +495,7 @@ describe("list_solution_tree", () => {
 
   it("returns the fixture tree, names through the name helper, api_calls_used the MockAgent count", async () => {
     queueTree();
-    const result = ok(await callTool(await session(), "list_solution_tree", {}));
+    const result = ok(await paced(async () => callTool(await session(), "list_solution_tree", {})));
     expect(result).toEqual({
       categories: [
         {
@@ -411,13 +511,15 @@ describe("list_solution_tree", () => {
                   id: 3301,
                   title: "Fitting a new sprocket",
                   status: "published",
-                  updated_at: "2026-01-03T10:00:00Z",
+                  updated_at: "2026-01-03T10:00:00.000Z",
+                  customer_safe: true,
                 },
                 {
                   id: 3302,
                   title: "Quieting a squeak",
                   status: "draft",
-                  updated_at: "2026-01-03T10:00:00Z",
+                  updated_at: "2026-01-03T10:00:00.000Z",
+                  customer_safe: false,
                 },
               ],
             },
@@ -430,7 +532,8 @@ describe("list_solution_tree", () => {
                   id: 3303,
                   title: "Storing spanners",
                   status: "published",
-                  updated_at: "2026-01-03T10:00:00Z",
+                  updated_at: "2026-01-03T10:00:00.000Z",
+                  customer_safe: false,
                 },
               ],
             },
@@ -448,7 +551,7 @@ describe("list_solution_tree", () => {
     reply(CATEGORIES, [categoryPages[0][0]]);
     reply(foldersOf(3101), [{ ...folderPages[0][0], name: "<b>Getting</b> Started" }]);
     reply(articlesOf(3201), [{ ...articlePages[0][0], title: "Fitting <em>a new</em> sprocket" }]);
-    const response = await callTool(await session(), "list_solution_tree", {});
+    const response = await paced(async () => callTool(await session(), "list_solution_tree", {}));
     const result = ok<{
       categories: { folders: { name: string; articles: { title: string }[] }[] }[];
     }>(response);
@@ -472,7 +575,7 @@ describe("list_solution_tree", () => {
       categories: { folders: { id: number; articles: unknown[] | null }[] }[];
       truncated: boolean;
       api_calls_used: number;
-    }>(await callTool(await session(), "list_solution_tree", {}));
+    }>(await paced(async () => callTool(await session(), "list_solution_tree", {})));
     const read = result.categories[0].folders.filter((folder) => folder.articles !== null);
     const unread = result.categories[0].folders.filter((folder) => folder.articles === null);
     expect(read).toHaveLength(MAX_LISTS - 2);
@@ -480,6 +583,24 @@ describe("list_solution_tree", () => {
     expect(result.truncated).toBe(true);
     expect(sent()).toBe(MAX_LISTS);
     expect(result.api_calls_used).toBe(sent());
+  });
+
+  it(`a tree needing exactly ${MAX_LISTS} lists is read whole: truncated: false`, async () => {
+    const folders = Array.from({ length: MAX_LISTS - 2 }, (_, i) => ({
+      ...folderPages[0][0],
+      id: 5001 + i,
+      name: `Shelf ${i + 1}`,
+    }));
+    reply(CATEGORIES, [categoryPages[0][0]]);
+    reply(foldersOf(3101), folders);
+    for (let i = 0; i < MAX_LISTS - 2; i += 1) reply(articlesOf(5001 + i), []);
+    const result = ok<{
+      categories: { folders: { articles: unknown[] | null }[] }[];
+      truncated: boolean;
+    }>(await paced(async () => callTool(await session(), "list_solution_tree", {})));
+    expect(result.categories[0].folders.every((folder) => folder.articles !== null)).toBe(true);
+    expect(result.truncated).toBe(false);
+    expect(sent()).toBe(MAX_LISTS);
   });
 
   it("a category whose folders were not read has folders: null", async () => {
@@ -493,7 +614,7 @@ describe("list_solution_tree", () => {
     const result = ok<{
       categories: { id: number; folders: unknown[] | null }[];
       truncated: boolean;
-    }>(await callTool(await session(), "list_solution_tree", {}));
+    }>(await paced(async () => callTool(await session(), "list_solution_tree", {})));
     expect(result.categories.filter((category) => category.folders === null)).toHaveLength(2);
     expect(result.truncated).toBe(true);
     expect(sent()).toBe(MAX_LISTS);
@@ -511,17 +632,45 @@ describe("list_solution_tree", () => {
         });
     }
     const result = ok<{ categories: unknown[]; truncated: boolean; api_calls_used: number }>(
-      await callTool(await session(), "list_solution_tree", {}),
+      await paced(async () => callTool(await session(), "list_solution_tree", {})),
     );
     expect(result.categories).toEqual([]);
     expect(result.truncated).toBe(true);
     expect(result.api_calls_used).toBe(sent());
   });
 
+  it("a folder list failing mid-walk fails the call: not_found", async () => {
+    reply(CATEGORIES, categoryPages[0]);
+    reply(foldersOf(3101), { message: "gone" }, 404);
+    expect(
+      refusal(await paced(async () => callTool(await session(), "list_solution_tree", {}))).code,
+    ).toBe("not_found");
+  });
+
+  it("an article list failing mid-walk fails the call: not_found", async () => {
+    reply(CATEGORIES, categoryPages[0]);
+    reply(foldersOf(3101), folderPages[0]);
+    reply(foldersOf(3102), []);
+    reply(articlesOf(3201), articlePages[0]);
+    reply(articlesOf(3202), { message: "gone" }, 404);
+    expect(
+      refusal(await paced(async () => callTool(await session(), "list_solution_tree", {}))).code,
+    ).toBe("not_found");
+  });
+
+  it("its lists are expensive: below the reserve the next list is refused, nothing more sent", async () => {
+    reply(CATEGORIES, categoryPages[0], 200, LOW);
+    const error = refusal(
+      await paced(async () => callTool(await session(), "list_solution_tree", {})),
+    );
+    expect(error.code).toBe("rate_limited");
+    expect(sent()).toBe(1);
+  });
+
   it("a client error is isError with its code", async () => {
     reply(CATEGORIES, { message: "denied" }, 403);
-    expect(refusal(await callTool(await session(), "list_solution_tree", {})).code).toBe(
-      "forbidden",
-    );
+    expect(
+      refusal(await paced(async () => callTool(await session(), "list_solution_tree", {}))).code,
+    ).toBe("forbidden");
   });
 });

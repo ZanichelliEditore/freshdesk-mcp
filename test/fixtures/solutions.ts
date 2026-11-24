@@ -93,3 +93,13 @@ export const searchHits = [
     path: "3304-squeak-after-oiling",
   },
 ];
+
+/** A `GET /solutions/folders/{id}` body. */
+export const folderView = folder(3202, "Squeaks and Rattles", 3);
+
+/** An article whose plain text still carries a tag, as an author can leave one. */
+export const taggedArticleView = article(
+  3305,
+  "Oiling a sprocket",
+  "Use <b>light</b> oil, then <i>wipe</i> it.",
+);

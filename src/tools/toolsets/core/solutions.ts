@@ -3,18 +3,25 @@
 //
 //   - Titles and names (article, folder, category) are admin-set: through
 //     `plainName` (tags stripped, capped at NAME_CAP), never wrapped (owner,
-//     2026-11-23, OD-7). An article's text is wrapped in `<ticket_content>`
-//     and cut at ARTICLE_CAP with format.ts's marker, after the block; there
-//     is no way to fetch the rest, so the marker names none.
+//     2026-11-23, OD-7). An article's text (Freshdesk's plain text) goes
+//     through `htmlToText` first, so a tag an author left in it is gone, then
+//     is wrapped in `<ticket_content>` and cut at ARTICLE_CAP with format.ts's
+//     marker, after the block; there is no way to fetch the rest, so the
+//     marker names none.
 //   - Drafts and non-public content are labelled, not dropped: an article
 //     or hit carries `status` by name (`draft` for 1, `published` for 2,
 //     else `null`), a folder or hit `visibility` by name (Freshdesk's
 //     documented values 1–4, else `null`, unknown). A hit's `visibility` is
-//     its folder's (solutions.ts's `folder_visibility`). Every description
-//     says a draft, or content not visible to all users, is for the agent
-//     and must not be quoted to a customer as published guidance.
-//     `get_solution_article` cannot give visibility (the viewed article has
-//     no folder visibility) and says so.
+//     its folder's (solutions.ts's `folder_visibility`), and so is a tree
+//     article's. Every article, hit and tree article carries `customer_safe`:
+//     true only when `status` is `published` and `visibility` is `all users`;
+//     every description says only those may be quoted to a customer as
+//     published guidance.
+//   - `get_solution_article` reads the article, then its folder (`getFolder`,
+//     2 requests) for `visibility`. A folder answered `not_found`, or an
+//     article with no readable `folder_id` (no folder request), gives
+//     `visibility: null` and the article still; any other failed folder read
+//     fails the call.
 //   - `search_solutions`: the cursor is read first, before any request, with
 //     MAX_POSITION. Freshdesk returns every hit in one response, so each call
 //     runs the search again (1 request) and pages the hits locally, PAGE_SIZE
@@ -29,21 +36,27 @@
 //     read for the cap has `folders: null` / `articles: null`, and
 //     `truncated` is true; it is true too when `listAll`'s own cap cut a
 //     list. Subfolders are not walked (solutions.ts does not read them).
-//     A failed list fails the call.
+//     A failed list fails the call. Every list is `expensive` for the limiter
+//     (the walk is the costliest read here): below the reserve the next list
+//     is refused, nothing sent, and the call is `rate_limited`.
+//   - `updated_at` through rows.ts's `isoUpdated`: a UTC instant, as the
+//     ticket tools give dates, or `null`.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start.
 //     `api_calls_used` is every request sent, retries included (`attempts`).
 
 import { z } from "zod";
 import {
   getArticle,
+  getFolder,
   listArticles,
   listCategories,
   listFolders,
   MAX_TERM_LENGTH,
   searchArticles,
 } from "../../../client/resources/solutions.js";
-import { NAME_CAP, plainName, untrusted } from "../../format.js";
+import { htmlToText, NAME_CAP, plainName, untrusted } from "../../format.js";
 import { listEnvelope, readCursor } from "../../list.js";
+import { isoUpdated } from "../../rows.js";
 import type { Tool } from "../index.js";
 
 /** One call's requests end within this, all of them together. */
@@ -78,8 +91,13 @@ function visibilityName(visibility: number | null): string | null {
     : null;
 }
 
+/** Only a published article visible to all users may be given to a customer. */
+function customerSafe(status: string | null, visibility: string | null): boolean {
+  return status === "published" && visibility === "all users";
+}
+
 const FOR_THE_AGENT =
-  "A draft (status: draft), or content not visible to all users (visibility other than all users; null is unknown, so treat it as not public), is for the agent: it must not be quoted to a customer as published guidance.";
+  "A draft (status: draft), or content not visible to all users (visibility other than all users; null is unknown, so treat it as not public), is for the agent. Only an article with customer_safe: true may be quoted to a customer as published guidance.";
 const NAMES = `Titles and names are shown without HTML and cut at ${NAME_CAP} characters (ending with …).`;
 const ANNOTATIONS = {
   readOnlyHint: true,
@@ -116,13 +134,18 @@ export const searchSolutionsTool: Tool<typeof searchInput> = {
     return {
       ok: true,
       value: listEnvelope(call, {
-        items: kept.slice(start, start + PAGE_SIZE).map((hit) => ({
-          id: hit.id,
-          title: plainName(hit.title),
-          status: statusName(hit.status),
-          visibility: visibilityName(hit.folder_visibility),
-          updated_at: hit.updated_at,
-        })),
+        items: kept.slice(start, start + PAGE_SIZE).map((hit) => {
+          const status = statusName(hit.status);
+          const visibility = visibilityName(hit.folder_visibility);
+          return {
+            id: hit.id,
+            title: plainName(hit.title),
+            status,
+            visibility,
+            updated_at: isoUpdated(hit.updated_at),
+            customer_safe: customerSafe(status, visibility),
+          };
+        }),
         ...(more ? { next: cursor.position + 1 } : {}),
         truncated: found.results.length > HIT_CAP,
         api_calls_used: found.attempts,
@@ -136,30 +159,42 @@ const articleInput = z.object({ article_id: z.number().int().positive() });
 export const getSolutionArticleTool: Tool<typeof articleInput> = {
   name: "get_solution_article",
   description: [
-    "One knowledge-base article by id: its title, status (draft, published, or null), last update and text, as plain text inside <ticket_content>.",
+    "One knowledge-base article by id: its title, status (draft, published, or null), visibility (its folder's: all users, logged-in users, agents only, selected companies, or null when unknown), customer_safe, last update and text, as plain text inside <ticket_content>.",
     `A text over ${ARTICLE_CAP.toLocaleString("en-US")} characters is cut, with a marker after the block saying how many characters were not shown; the rest cannot be fetched.`,
-    "This tool does not give the article's visibility: search_solutions and list_solution_tree give its folder's.",
     FOR_THE_AGENT,
     NAMES,
     "api_calls_used counts every request sent, retries included.",
   ].join(" "),
   input: articleInput,
   annotations: ANNOTATIONS,
-  cost: "1 API call, within 30 s, plus one per retry after an error",
+  cost: "2 API calls (the article, then its folder), within 30 s, plus one per retry after an error",
   customerText: true,
   async handler(args, context) {
-    const got = await getArticle(context.http, args.article_id, Date.now() + CALL_DEADLINE_MS);
+    const deadline = Date.now() + CALL_DEADLINE_MS;
+    const got = await getArticle(context.http, args.article_id, deadline);
     if (!got.ok) return got;
     const { article } = got;
+    let calls = got.attempts;
+    let visibility: string | null = null;
+    if (article.folder_id !== null) {
+      const folder = await getFolder(context.http, article.folder_id, deadline);
+      calls += folder.attempts ?? 0;
+      if (folder.ok) visibility = visibilityName(folder.folder.visibility);
+      else if (folder.error.code !== "not_found") return folder;
+    }
+    const status = statusName(article.status);
     return {
       ok: true,
       value: {
         id: article.id,
         title: plainName(article.title),
-        status: statusName(article.status),
-        updated_at: article.updated_at,
-        text: article.text === null ? null : untrusted(article.text, { cap: ARTICLE_CAP }),
-        api_calls_used: got.attempts,
+        status,
+        visibility,
+        customer_safe: customerSafe(status, visibility),
+        updated_at: isoUpdated(article.updated_at),
+        text:
+          article.text === null ? null : untrusted(htmlToText(article.text), { cap: ARTICLE_CAP }),
+        api_calls_used: calls,
       },
     };
   },
@@ -170,6 +205,7 @@ interface TreeArticle {
   title: string;
   status: string | null;
   updated_at: string | null;
+  customer_safe: boolean;
 }
 
 interface TreeFolder {
@@ -191,7 +227,7 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
   name: "list_solution_tree",
   description: [
     "The knowledge base's outline: categories, each with its folders (name and visibility: all users, logged-in users, agents only, selected companies, or null), each with its articles' ids, titles, status (draft, published, or null) and last update. No article text: get_solution_article gives it.",
-    `It reads at most ${MAX_LISTS} lists a call (the categories, one per category for its folders, one per folder for its articles), categories and folders first: a category or folder past that has folders: null or articles: null, and truncated is true. truncated is true too when a list was longer than 1,000 entries and cut. Subfolders are not shown: an article in a subfolder is found only through search_solutions.`,
+    `It reads at most ${MAX_LISTS} lists a call (the categories, one per category for its folders, one per folder for its articles), categories and folders first: a category or folder past that has folders: null or articles: null, and truncated is true. truncated is true too when a list was longer than 1,000 entries and cut. Subfolders are not shown: an article in a subfolder is found only through search_solutions. Every list is sent as an expensive operation: paced (2 requests a second by default), so a full walk of single-page lists takes about 10 s, and refused with rate_limited when the account's API budget is low (the call then fails). A walk that cannot finish within 30 s fails as network.`,
     FOR_THE_AGENT,
     NAMES,
     "api_calls_used counts every request sent, retries included.",
@@ -203,7 +239,7 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
   async handler(_args, context) {
     const deadline = Date.now() + CALL_DEADLINE_MS;
     let lists = 1;
-    const listed = await listCategories(context.http, deadline);
+    const listed = await listCategories(context.http, deadline, "expensive");
     if (!listed.ok) return listed;
     let calls = listed.attempts;
     let truncated = listed.truncated;
@@ -219,7 +255,7 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
         break;
       }
       lists += 1;
-      const folders = await listFolders(context.http, category.id, deadline);
+      const folders = await listFolders(context.http, category.id, deadline, "expensive");
       if (!folders.ok) return folders;
       calls += folders.attempts;
       truncated ||= folders.truncated;
@@ -237,16 +273,20 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
           break outer;
         }
         lists += 1;
-        const articles = await listArticles(context.http, folder.id, deadline);
+        const articles = await listArticles(context.http, folder.id, deadline, "expensive");
         if (!articles.ok) return articles;
         calls += articles.attempts;
         truncated ||= articles.truncated;
-        folder.articles = articles.items.map((article) => ({
-          id: article.id,
-          title: plainName(article.title),
-          status: statusName(article.status),
-          updated_at: article.updated_at,
-        }));
+        folder.articles = articles.items.map((article) => {
+          const status = statusName(article.status);
+          return {
+            id: article.id,
+            title: plainName(article.title),
+            status,
+            updated_at: isoUpdated(article.updated_at),
+            customer_safe: customerSafe(status, folder.visibility),
+          };
+        });
       }
     }
     return { ok: true, value: { categories, truncated, api_calls_used: calls } };

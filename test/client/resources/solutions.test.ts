@@ -3,6 +3,7 @@ import { HttpClient } from "../../../src/client/http.js";
 import { RateLimiter } from "../../../src/client/rate-limit.js";
 import {
   getArticle,
+  getFolder,
   listArticles,
   listCategories,
   listFolders,
@@ -14,6 +15,7 @@ import {
   articleView,
   categoryPages,
   folderPages,
+  folderView,
   searchHits,
 } from "../../fixtures/solutions.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
@@ -299,6 +301,7 @@ describe("getArticle", () => {
       text: "Line the teeth up first, then turn gently.",
       status: 2,
       updated_at: "2026-01-03T10:00:00Z",
+      folder_id: 3201,
     });
     expect(JSON.stringify(result)).not.toContain("<p>");
     expect(result.attempts).toBe(1);
@@ -322,6 +325,15 @@ describe("getArticle", () => {
     expect(result.article.updated_at).toBeNull();
     expect(JSON.stringify(result)).not.toContain(CANARY);
   });
+
+  it.each([[undefined], [null], ["3201"], [0], [-2], [1.5], [2 ** 53]])(
+    "gives folder_id: null when it is %j",
+    async (folderId) => {
+      reply(ARTICLE, 200, { ...articleView, folder_id: folderId });
+
+      expect(ok(await getArticle(http, 3301)).article.folder_id).toBeNull();
+    },
+  );
 
   it.each(BAD_IDS)("refuses the id %s with nothing sent", async (id) => {
     expectRefused(await getArticle(http, id as number), "id");
@@ -359,6 +371,99 @@ describe("getArticle", () => {
       http_status: null,
     });
     expect(urls()).toHaveLength(0);
+  });
+});
+
+describe("getFolder", () => {
+  const FOLDER = "/api/v2/solutions/folders/3202";
+
+  it("returns id, name and visibility, nothing else", async () => {
+    reply(FOLDER, 200, folderView);
+
+    const result = ok(await getFolder(http, 3202));
+
+    expect(result.folder).toEqual({ id: 3202, name: "Squeaks and Rattles", visibility: 3 });
+    expect(result.attempts).toBe(1);
+    expect(urls().map((url) => url.pathname + url.search)).toEqual([FOLDER]);
+  });
+
+  it("gives visibility: null when it is not a whole number", async () => {
+    reply(FOLDER, 200, { ...folderView, visibility: CANARY });
+
+    const result = ok(await getFolder(http, 3202));
+
+    expect(result.folder.visibility).toBeNull();
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
+  it.each(BAD_IDS)("refuses the folder id %s with nothing sent", async (id) => {
+    expectRefused(await getFolder(http, id as number), "folder id");
+  });
+
+  it("returns a 404 as not_found, with its attempts", async () => {
+    reply(FOLDER, 404, { message: CANARY });
+
+    const result = await getFolder(http, 3202);
+
+    expect(failure(result).code).toBe("not_found");
+    expect(result).toMatchObject({ ok: false, attempts: 1 });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
+  it("refuses a missing name as server, with no body text and its attempts", async () => {
+    reply(FOLDER, 200, { ...folderView, name: undefined, description: CANARY });
+
+    const result = await getFolder(http, 3202);
+
+    expectMalformed(result, "a solution folder");
+    expect(result).toMatchObject({ attempts: 1 });
+  });
+
+  it("passes the deadline on: one already passed sends nothing and is network", async () => {
+    reply(FOLDER, 200, folderView);
+
+    expect(failure(await getFolder(http, 3202, Date.now() - 1))).toMatchObject({
+      code: "network",
+      http_status: null,
+    });
+    expect(urls()).toHaveLength(0);
+  });
+});
+
+describe("the lists: the cost class", () => {
+  /** One article view whose response says 10 of 100 calls are left: under the 20% reserve. */
+  async function drain() {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: ARTICLE, method: "GET" })
+      .reply(200, articleView, {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await getArticle(http, 3301));
+  }
+
+  const lists = [
+    ["listCategories", (cost?: "expensive") => listCategories(http, undefined, cost), CATEGORIES],
+    ["listFolders", (cost?: "expensive") => listFolders(http, 3101, undefined, cost), FOLDERS],
+    ["listArticles", (cost?: "expensive") => listArticles(http, 3201, undefined, cost), ARTICLES],
+  ] as const;
+
+  it.each(lists)(
+    "%s given expensive is refused below the reserve, nothing sent",
+    async (_, call) => {
+      await drain();
+
+      expect(failure(await call("expensive")).code).toBe("rate_limited");
+      expect(urls()).toHaveLength(1);
+    },
+  );
+
+  it.each(lists)("%s is cheap unless given: sent below the reserve", async (_, call, path) => {
+    await drain();
+    reply(path, 200, []);
+
+    ok(await call());
+    expect(urls()).toHaveLength(2);
   });
 });
 

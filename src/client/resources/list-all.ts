@@ -13,10 +13,13 @@
 //
 // `deadline` (epoch ms, optional) is the caller's, for all the pages: see
 // `paginate`. `params` fill the path template (`/tickets/{id}/conversations`).
+// `cost` (optional) is every page's cost class for the limiter, `cheap`
+// unless given.
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
 import type { HttpClient } from "../http.js";
+import type { CostClass } from "../rate-limit.js";
 
 export const PER_PAGE = 100;
 export const MAX_PAGES = 10;
@@ -33,10 +36,11 @@ export async function listAll<T>(
   noun: string,
   deadline?: number,
   params?: Record<string, string | number>,
+  cost?: CostClass,
 ): Promise<ListResult<T>> {
   const items: T[] = [];
   const pages = http.paginate(
-    { path, params, query: { per_page: PER_PAGE } },
+    { path, params, query: { per_page: PER_PAGE }, ...(cost === undefined ? {} : { cost }) },
     { pages: MAX_PAGES },
     deadline,
   );
