@@ -37,6 +37,8 @@ export const MAX_QUERY_LENGTH = 512;
 export const SEARCH_PER_PAGE = 30;
 /** Search refuses any page past this one. */
 export const MAX_SEARCH_PAGE = 10;
+/** The last cursor position of a tool whose position is a search page. */
+export const MAX_SEARCH_POSITION = MAX_SEARCH_PAGE - 1;
 
 const body = z.object({
   total: z.number().int().nonnegative(),

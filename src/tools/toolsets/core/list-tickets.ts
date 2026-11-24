@@ -12,7 +12,7 @@
 //     the source: of search (30 results) with a search filter, of the list
 //     endpoint without. Which source a call uses is known from its arguments
 //     alone (`SEARCH_FILTERS`, the filters `buildTicketQuery` turns into
-//     search conditions), so the bound is MAX_SEARCH_POSITION or
+//     search conditions), so the bound is search.ts's MAX_SEARCH_POSITION or
 //     MAX_LIST_POSITION and a cursor past it sends nothing. Should the query
 //     built ever name the other source, the handler throws (the registry
 //     answers with its fixed internal error) and no ticket request is sent.
@@ -60,6 +60,7 @@
 import { z } from "zod";
 import {
   MAX_SEARCH_PAGE,
+  MAX_SEARCH_POSITION,
   SEARCH_PER_PAGE,
   searchTickets,
 } from "../../../client/resources/search.js";
@@ -70,7 +71,7 @@ import { buildTicketQuery, matchesLocal } from "../../ticket-query.js";
 import type { Tool } from "../index.js";
 
 /** One call's requests end within this, all of them together. */
-export const CALL_DEADLINE_MS = 30_000;
+const CALL_DEADLINE_MS = 30_000;
 
 /** Rows of one list-endpoint page, and where a scan stops reading: search's page size. */
 export const LIST_ROWS = SEARCH_PER_PAGE;
@@ -87,8 +88,6 @@ export const DETAIL_VALUE_CAP = 1000;
 export const SCAN_PAGES = 10;
 /** A scan starts no further page once this much of the call's deadline is spent. */
 export const SCAN_START_MS = CALL_DEADLINE_MS / 2;
-/** The last cursor position of a call search serves: search's last page. */
-export const MAX_SEARCH_POSITION = MAX_SEARCH_PAGE - 1;
 /** The last cursor position of a call the list endpoint serves: its last page. */
 export const MAX_LIST_POSITION = MAX_LIST_PAGE - 1;
 

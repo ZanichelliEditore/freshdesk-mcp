@@ -12,7 +12,11 @@ import {
   type MockInstance,
   vi,
 } from "vitest";
-import { MAX_SEARCH_PAGE, SEARCH_PER_PAGE } from "../../../src/client/resources/search.js";
+import {
+  MAX_SEARCH_PAGE,
+  MAX_SEARCH_POSITION,
+  SEARCH_PER_PAGE,
+} from "../../../src/client/resources/search.js";
 import { MAX_LIST_PAGE } from "../../../src/client/resources/tickets.js";
 import { loadConfig } from "../../../src/config.js";
 import type { Schema } from "../../../src/schema/index.js";
@@ -28,7 +32,6 @@ import {
   DETAIL_VALUE_CAP,
   LIST_ROWS,
   MAX_LIST_POSITION,
-  MAX_SEARCH_POSITION,
   SCAN_MAX_ROWS,
   SCAN_PAGES,
   SCAN_PER_PAGE,

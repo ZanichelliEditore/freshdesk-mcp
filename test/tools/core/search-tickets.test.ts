@@ -15,6 +15,7 @@ import {
 import {
   MAX_QUERY_LENGTH,
   MAX_SEARCH_PAGE,
+  MAX_SEARCH_POSITION,
   SEARCH_PER_PAGE,
 } from "../../../src/client/resources/search.js";
 import { loadConfig } from "../../../src/config.js";
@@ -24,7 +25,6 @@ import { type AppContext, createContext } from "../../../src/tools/context.js";
 import { CLOSE, OPEN } from "../../../src/tools/format.js";
 import { listEnvelope } from "../../../src/tools/list.js";
 import { ticketRow } from "../../../src/tools/rows.js";
-import { MAX_SEARCH_POSITION } from "../../../src/tools/toolsets/core/list-tickets.js";
 import { DATA_NOT_INSTRUCTIONS } from "../../../src/tools/toolsets/index.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../../fixtures/schema.js";
@@ -219,14 +219,15 @@ describe("search_tickets: the listing", () => {
     expect(description).toContain("first 300");
     expect(description).toContain("truncated: true");
     expect(description).toContain("no full text");
+    expect(description).toContain("it is refused and no search is sent");
+    expect(description).toContain(
+      "a nested (dependent) field, at any level, is not searchable (Freshdesk answers 400)",
+    );
+    expect(description).toContain("plain dropdown");
     expect(description).toContain("single quotes");
     expect(description).toContain('no double quote (") and no backslash (\\)');
     expect(description).toContain(`${MAX_QUERY_LENGTH - 2} characters`);
     expect(description).toContain("has_more");
-  });
-
-  it("its last position is search's last page, the one list_tickets uses", () => {
-    expect(MAX_SEARCH_POSITION).toBe(MAX_SEARCH_PAGE - 1);
   });
 
   it("its input schema has no zod default or transform", () => {
@@ -279,6 +280,16 @@ describe("search_tickets: the query", () => {
     expect(error.message).toContain("query");
     expect(error.message).not.toContain("sprocket");
     expect(sent()).toBe(0);
+  });
+
+  it("a refused query on a cold schema sends the schema's 3 requests and no search", async () => {
+    const { session } = await cold();
+    queueSchema();
+    const error = refusal(await callTool(session, TOOL, { query: 'tag:"sprocket"' }));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("query");
+    expect(sent()).toBe(3);
+    expect(paths().some((path) => path.includes("/search/"))).toBe(false);
   });
 
   it("the longest query the client takes is sent", async () => {
