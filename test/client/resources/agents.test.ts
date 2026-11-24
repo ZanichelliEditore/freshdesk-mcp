@@ -99,16 +99,6 @@ describe("listAgents: well-formed pages", () => {
     });
   });
 
-  it.each([null, undefined])("accepts an agent whose email is %s", async (email) => {
-    const pages = clone();
-    const contact = pages[0]![0]!.contact as Record<string, unknown>;
-    if (email === undefined) delete contact.email;
-    else contact.email = email;
-    page(1, pages[0], false);
-
-    expect(agents(await listAgents(http))).toHaveLength(2);
-  });
-
   it("yields an empty list for an empty page", async () => {
     page(1, [], false);
 
@@ -170,12 +160,6 @@ describe("listAgents: a malformed item", () => {
       "an empty name",
       (p) => {
         (p[1]![0]!.contact as Record<string, unknown>).name = "";
-      },
-    ],
-    [
-      "an email that is not a string",
-      (p) => {
-        (p[1]![0]!.contact as Record<string, unknown>).email = 7;
       },
     ],
     [

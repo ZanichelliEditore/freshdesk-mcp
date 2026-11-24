@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_PAGES, PER_PAGE } from "../../../src/client/resources/list-all.js";
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
@@ -128,6 +129,21 @@ describe("list_agents, list_groups: the listing", () => {
   });
 });
 
+describe("list_agents, list_groups: the description's numbers", () => {
+  it.each(NAMES)(
+    "%s: the cap it states is PER_PAGE × MAX_PAGES, in MAX_PAGES calls",
+    async (name) => {
+      const tools = await listTools(await session());
+      const description = tools.find((listed) => listed.name === name)?.description ?? "";
+      const noun = name === "list_agents" ? "agents" : "groups";
+      expect(description).toContain(
+        `longer than ${(PER_PAGE * MAX_PAGES).toLocaleString("en-US")} ${noun}`,
+      );
+      expect(description).toContain(`1 API call per ${PER_PAGE} ${noun}, at most ${MAX_PAGES},`);
+    },
+  );
+});
+
 describe("list_agents: the items", () => {
   it("returns the envelope with the fixture's ids, names and work emails, nothing else", async () => {
     queueFixture("list_agents");
@@ -156,6 +172,30 @@ describe("list_agents: the items", () => {
     const [item] = envelope(response).items;
     expect(Object.keys(item).sort()).toEqual(["email", "id", "name"]);
     expect(response.content[0].text).not.toContain("555");
+  });
+});
+
+describe("list_agents: the email", () => {
+  const long = `${"q".repeat(250)}@example.com`;
+  const cases: [string, (contact: Record<string, unknown>) => void, string | null][] = [
+    ["absent", (contact) => delete contact.email, null],
+    ["null", (contact) => (contact.email = null), null],
+    ["a number", (contact) => (contact.email = 7), null],
+    ["an object", (contact) => (contact.email = { address: "quill@example.com" }), null],
+    ["over 254 characters", (contact) => (contact.email = long), `${long.slice(0, 254)}…`],
+    [
+      "carrying an HTML tag",
+      (contact) => (contact.email = "<b>quill</b>@example.com"),
+      "quill@example.com",
+    ],
+  ];
+
+  it.each(cases)("an email %s comes back as asserted, the key present", async (_, edit, want) => {
+    const [agent] = structuredClone(agentPages[0]) as { contact: Record<string, unknown> }[];
+    edit(agent.contact);
+    page("list_agents", 1, [agent], false);
+    const [item] = envelope(await callTool(await session(), "list_agents", {})).items;
+    expect(item).toEqual({ id: 501, name: "Quill Ottersby", email: want });
   });
 });
 
@@ -219,6 +259,72 @@ describe("list_agents, list_groups: the cap", () => {
     expect(result.api_calls_used).toBe(10);
     expect(result.api_calls_used).toBe(sent());
   });
+});
+
+describe("list_agents, list_groups: api_calls_used and retries", () => {
+  it.each(NAMES)(
+    "%s: recorded limitation: a page retried after a 503 counts once in api_calls_used",
+    async (tool) => {
+      page(tool, 1, { message: "busy" }, false, 503);
+      page(tool, 1, TOOLS[tool].pages[1], false);
+      const result = envelope(await callTool(await session(), tool, {}));
+      expect(result.items).toHaveLength(1);
+      expect(sent()).toBe(2);
+      expect(result.api_calls_used).toBe(1);
+    },
+  );
+});
+
+describe("list_agents, list_groups: one 30 s deadline per call", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Runs the fake clock forward until the call settles; returns the fake ms it took. */
+  async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
+    const started = Date.now();
+    let result: CallResult | undefined;
+    void call.then((value) => {
+      result = value;
+    });
+    while (result === undefined) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
+    }
+    return { result, ms: Date.now() - started };
+  }
+
+  it.each(NAMES)(
+    "%s: slow pages end the call at 30 s as network, with no request after",
+    async (tool) => {
+      // Each page takes 9 s, under one attempt's 10 s: the fourth would come
+      // at 36 s, so with 30 s for each page alone the call would succeed.
+      for (let n = 1; n <= 4; n += 1) {
+        mock
+          .get(ORIGIN)
+          .intercept({ path: pathOf(tool, n), method: "GET" })
+          .reply(200, TOOLS[tool].pages[1] as object, {
+            headers: {
+              ...JSON_TYPE,
+              ...(n < 4 ? { link: `<${ORIGIN}${pathOf(tool, n + 1)}>; rel="next"` } : {}),
+            },
+          })
+          .delay(9000);
+      }
+      const open = await session();
+
+      const { result, ms } = await settle(callTool(open, tool, {}));
+
+      expect(refusal(result).code).toBe("network");
+      expect(ms).toBeLessThanOrEqual(30_000);
+      expect(sent()).toBe(4);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(sent()).toBe(4);
+    },
+  );
 });
 
 describe("list_agents, list_groups: errors", () => {
