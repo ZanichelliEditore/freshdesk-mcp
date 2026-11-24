@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T15:32:01+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `91ea50c`
+  (`91ea50cbb366f17e3aa51d493b19587d1298bc8e`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45415360170
+  (workflow `quality`, ran on `91ea50c`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-035 `done (2026-11-24)`,
   `docs/tasks/T-035-call-budget.md` ("Done"). Commits `f4a8b98`
