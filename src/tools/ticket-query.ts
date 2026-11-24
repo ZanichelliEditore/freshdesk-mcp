@@ -20,8 +20,12 @@
 //     `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'`);
 //     `updated_since` joins them as `updated_at:>'<its UTC day − 1>'`. Both
 //     dates are widened and returned as local checks (`created_between`,
-//     `updated_since` on the result, applied by `matchesLocal`): whether
-//     Freshdesk's `>` and `<` keep the boundary day, the rows are exact.
+//     `updated_since` on the result, which callers must apply with
+//     `matchesLocal`). Exact if Freshdesk compares by UTC day, whether its
+//     `>` and `<` keep the boundary day or not; if it compares by the
+//     account's time-zone day with an exclusive operator, a one-day widening
+//     can under-return on one side (an undercount, not fail-open). Open:
+//     the proposed row T-055.
 //     With no search condition the list endpoint serves the call,
 //     `updated_since` as its parameter (a UTC instant to the second), no
 //     local date check. No filter: the list with no parameter.

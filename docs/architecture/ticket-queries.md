@@ -91,7 +91,7 @@ The two endpoints, in short:
 | tag | search `tag:'<tag>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | `uncategorized` | local check of `custom_fields`: on the list pages alone, on the search results with other filters (see [below](#uncategorized)) | 30,000 / 300 | 1 per 100 scanned / 4 per 100 scanned | measured 2026-11-24 (a nested field is not searchable; both carry `custom_fields`) |
 | `updated_since` | list `updated_since=<ISO instant>` | 30,000 | 1 | documented, [List All Tickets](https://developers.freshdesk.com/api/#list_all_tickets); measured 2026-11-24 (lifts the 30-day window) |
-| `created_between` | search `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'` (days, UTC), then `created_at`'s UTC day checked locally within from–to (T-043) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); the local check makes the open boundary moot |
+| `created_between` | search `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'` (days, UTC), then `created_at`'s UTC day checked locally within from–to (T-043) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); with the local check, exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 
 Several filters at once: one search query, the conditions joined by `AND`
 (spaces sent as `+`, measured 2026-11-24). `updated_since` with any search
@@ -303,8 +303,16 @@ containing `'`, `"`, `\` or a control or format character (`\p{Cc}`,
 documents no escape inside single quotes, so a quote could end the value
 and add a clause; ` OR ` inside the quotes stays one value. The two date
 filters of a search are widened by a day and checked locally (`matchesLocal`
-in `src/tools/ticket-query.ts`), so the open boundary question below does
-not change their rows.
+in `src/tools/ticket-query.ts`): exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055.
+
+What the widening costs. The search asks for the widened set, so its
+300-result cap and its `total` count that set: a page can yield fewer rows
+than it fetched, and `total` is not the filter's count. This bears on
+T-027's `truncated` (a cap reached on the widened set) and on T-036's
+counts (never `total` for a date-filtered search). Every caller of
+`buildTicketQuery` must apply `matchesLocal` to each returned ticket; the
+acceptance of T-027 and T-036 should include a ticket on a widened boundary
+day that is absent from the output.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s two stats signals.
@@ -317,6 +325,6 @@ bears on:
 | Question | Why open | Bears on |
 |---|---|---|
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-027, T-036, T-037 |
-| `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037; moot for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally |
+| `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 | Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three | T-029 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |
