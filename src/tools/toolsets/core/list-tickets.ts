@@ -70,7 +70,7 @@ import { buildTicketQuery, matchesLocal } from "../../ticket-query.js";
 import type { Tool } from "../index.js";
 
 /** One call's requests end within this, all of them together. */
-const CALL_DEADLINE_MS = 30_000;
+export const CALL_DEADLINE_MS = 30_000;
 
 /** Rows of one list-endpoint page, and where a scan stops reading: search's page size. */
 export const LIST_ROWS = SEARCH_PER_PAGE;
