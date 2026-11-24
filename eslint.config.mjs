@@ -171,7 +171,8 @@ export default tseslint.config(
   },
   {
     // The one file under test/ that may start a process: Node itself, on the
-    // built cli (T-019). Exempt from the child_process ban, and from nothing else.
+    // built cli (T-019; RFC 2026-11-23, note of 2026-11-24). Exempt from the
+    // child_process ban, and from nothing else.
     files: ["test/support/cli-process.ts"],
     rules: {
       "no-restricted-imports": testImportBan(

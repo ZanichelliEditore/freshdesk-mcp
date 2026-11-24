@@ -237,6 +237,13 @@ Parked: the T-003 wording on where the backstop lands is fixed in T-003;
 construction once T-003 lands); the HANDOFF Node-matrix line is corrected
 at `/handoff`.
 
+Note (2026-11-24, T-019): rule 4 has a third, partial exemption by path:
+`test/support/cli-process.ts` may import `child_process` (and no other
+banned module), only to build `src/` and run the built `cli.js` from a
+directory under `os.tmpdir()` with no `FRESHDESK_API_KEY` or
+`FRESHDESK_HOST_OVERRIDE` (refused before spawning). The decision is
+unchanged.
+
 ## Appendix: check scripts
 
 Run with `node <script> <dir>`, where `<dir>` holds an `npm i undici@<v>`

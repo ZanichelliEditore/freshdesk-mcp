@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,10 +10,10 @@ import {
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ConfigError, loadConfig } from "../src/config.js";
-import { createServer } from "../src/server.js";
+import { createServer, SERVER_INFO } from "../src/server.js";
 import { createContext } from "../src/tools/context.js";
 import { DATA_NOT_INSTRUCTIONS, type Tool, type Toolsets } from "../src/tools/toolsets/index.js";
-import { buildInto, runNode } from "./support/cli-process.js";
+import { buildCli, runBuiltCli } from "./support/cli-process.js";
 import { type MockAgent, mockDispatcher } from "./support/mock-dispatcher.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -73,8 +73,9 @@ const core = [
 let fileCount = 0;
 
 /** A server built the way cli.ts does: env plus an optional team file on disk. */
+/** `toolsets` undefined: the real registry, as cli.ts builds it. */
 function serverFor(
-  toolsets: Toolsets,
+  toolsets: Toolsets | undefined,
   team?: unknown,
   env: Record<string, string> = {},
 ): McpServer {
@@ -88,7 +89,8 @@ function serverFor(
     ...env,
     ...(path === undefined ? {} : { FRESHDESK_MCP_CONFIG: path }),
   });
-  const server = createServer(createContext(config, mock), toolsets);
+  const context = createContext(config, mock);
+  const server = toolsets === undefined ? createServer(context) : createServer(context, toolsets);
   servers.push(server);
   return server;
 }
@@ -232,6 +234,19 @@ describe("createServer: enabled toolsets come from the team file only", () => {
     expect((error as Error).message).toContain("toolsets");
   });
 
+  it.each(["write", "send"])(
+    "the real registry (no toolsets argument) refuses %s, naming it",
+    (name) => {
+      expect(() => serverFor(undefined, { toolsets: ["core", name] })).toThrow(ConfigError);
+      expect(() => serverFor(undefined, { toolsets: [name] })).toThrow(`"${name}"`);
+    },
+  );
+
+  it("a server from the real registry initializes, and has no tools/list while core is empty", async () => {
+    const session = await open(serverFor(undefined));
+    await expect(session.request("tools/list")).rejects.toThrow(/-32601/);
+  });
+
   it("ignores FRESHDESK_TOOLSETS in the environment", async () => {
     vi.stubEnv("FRESHDESK_TOOLSETS", "write");
     const write = [fakeTool("fake_write", { annotations: { ...READ, readOnlyHint: false } })];
@@ -296,18 +311,37 @@ describe("createServer: tool results", () => {
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).not.toContain(CANARY);
   });
+
+  const circular: Record<string, unknown> = { [CANARY]: 1 };
+  circular.self = circular;
+  it.each([
+    ["a BigInt", { count: 10n }],
+    ["a circular object", circular],
+    ["undefined", undefined],
+    ["a function", () => CANARY],
+  ])("turns a value JSON cannot write (%s) into the tool-name-only message", async (_, value) => {
+    const odd = fakeTool("fake_odd", { handler: async () => ({ ok: true, value }) });
+    const result = await callTool(serverFor({ core: [odd] }), "fake_odd", {});
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: "The tool fake_odd failed with an internal error." },
+    ]);
+  });
+});
+
+describe("SERVER_INFO", () => {
+  it("carries package.json's version", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    expect(SERVER_INFO).toEqual({ name: pkg.name, version: pkg.version });
+  });
 });
 
 describe("the built cli", () => {
   it("exits non-zero with FRESHDESK_API_KEY unset: the message on stderr, nothing on stdout", () => {
     const out = mkdtempSync(join(tmpdir(), "freshdesk-mcp-cli-"));
     try {
-      buildInto(join(out, "dist"));
-      // The build resolves its packages from the repository's node_modules
-      // and loads as ES modules, as it does from the package.
-      symlinkSync(join(ROOT, "node_modules"), join(out, "node_modules"), "dir");
-      writeFileSync(join(out, "package.json"), '{"type":"module"}\n');
-      const run = runNode(join(out, "dist", "cli.js"), {
+      buildCli(out);
+      const run = runBuiltCli(out, {
         PATH: process.env.PATH ?? "",
         FRESHDESK_DOMAIN: "acme.freshdesk.com",
       });
@@ -320,6 +354,29 @@ describe("the built cli", () => {
       rmSync(out, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe("test/support/cli-process.ts", () => {
+  it.each(["FRESHDESK_API_KEY", "FRESHDESK_HOST_OVERRIDE"])(
+    "refuses an env naming %s, even empty, before spawning",
+    (name) => {
+      // No build in this directory: a spawn would fail differently.
+      const out = mkdtempSync(join(tmpdir(), "freshdesk-mcp-cli-"));
+      try {
+        expect(() => runBuiltCli(out, { [name]: "" })).toThrow(`without ${name}`);
+      } finally {
+        rmSync(out, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    ["the repository", ROOT],
+    ["os.tmpdir() itself", tmpdir()],
+  ])("refuses a directory outside os.tmpdir(): %s", (_, where) => {
+    expect(() => runBuiltCli(where, {})).toThrow("not a directory under os.tmpdir()");
+    expect(() => buildCli(where)).toThrow("not a directory under os.tmpdir()");
+  });
 });
 
 describe("examples/team-config.example.json", () => {

@@ -13,7 +13,8 @@
 //   - A handler returns `{ ok: true, value }`, sent as JSON text, or
 //     `{ ok: false, error }` with a `FreshdeskError`, sent as `isError` with
 //     `{ error }` as JSON text (code, message and the rest of its fields). A
-//     handler that throws, or a value JSON cannot write, gives `isError` with
+//     handler that throws, or a value JSON cannot write (a BigInt, a cycle,
+//     `undefined`, a function), gives `isError` with
 //     a fixed message naming the tool only: the thrown value is never read,
 //     so no stack, request body, input text or key can reach the result.
 //   - The toolsets this version has are the keys of `TOOLSETS`; `core` has
@@ -85,8 +86,11 @@ function describe(tool: Tool): string {
   return parts.join("\n\n");
 }
 
+/** Throws for a value JSON cannot write: a BigInt, a cycle, or `undefined`, a function or a symbol. */
 function text(value: unknown) {
-  return [{ type: "text" as const, text: JSON.stringify(value) }];
+  const json: string | undefined = JSON.stringify(value);
+  if (json === undefined) throw new TypeError("no JSON form");
+  return [{ type: "text" as const, text: json }];
 }
 
 /** Register one tool on the server, bound to the context. Throws `TypeError` for an incomplete tool. */
