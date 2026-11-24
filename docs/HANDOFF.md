@@ -4,61 +4,67 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T10:43:23+01:00`
-- **Describes commit:** `26e6101`
-  (`26e6101b88d3212be1311d66bada6d4aff6cc35f`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45367961833
-  (workflow `quality`, ran on `26e6101`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T10:57:30+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-025 `done (2026-11-24)`,
-  `docs/tasks/T-025-client-contacts-companies.md` ("Done"). Commits
-  `f36b597` (status), `2d57a78` (modules), `82c5b91` (review Lows, done).
-  `getContact` → `{name, email, company_id}`, `getCompany` → `{id, name}`,
-  fixed allow-lists (phone, mobile, address and every unlisted key
-  absent). Built by a builder agent under the orchestrator (owner's
+- **Current task:** T-042 `done (2026-11-24)`,
+  `docs/tasks/T-042-ticket-row.md` ("Done"). Commits `d38404f` (status),
+  `5db3dea` (build), `44ffa71` (full-round fixes), `861b4ff` (task file,
+  parked items, journal). `src/tools/rows.ts`: `ticketRow` and
+  `ticketDetail`; category from `uncategorised_fields` (a nested level's
+  name selects its parent field) or the first nested field; deduplicated
+  keys. Built by a builder agent under the orchestrator (owner's
   instruction of 2026-11-23).
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-042** (compact
-  ticket row), then T-043.
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-043** (filters:
+  name → id resolver and request builder). It must match category fields
+  exactly as `rows.ts` does (a level name selects its parent nested
+  field) and record that rule in `docs/architecture/ticket-queries.md`
+  (parked `44ffa71`, code B2).
+  - **The owner:** Homebrew relinked `node` to v26.13.1 on 2026-11-24 at
+    10:52 (likely a formula that depends on `node`); the project targets
+    Node 22 (CI: 22.19 and 24). To return to 22: `brew unlink node &&
+    brew link --overwrite node@22`.
   - **The owner**, Dependabot PRs (unchanged; T-044 "Done").
 
-- **Read before anything else:** PLAN row T-042 and its task file.
+- **Read before anything else:** PLAN row T-043 and its task file;
+  `docs/architecture/ticket-queries.md`.
 
 - **Reviews:**
-  - **Full round** on `8066d3b..2d57a78`, R1 = `2d57a78`. The four quotes
-    matched for all three; no Bash calls. compliance: Wireframes `none`.
-    security: none. code-reviewer: 3 Low (deadline untested; a missing
-    `email` key's handling unpinned; 404 tests assert the code only),
-    fixed in `82c5b91`.
-  - **Scoped round:** not needed: no fix changed a mechanism (rule 9).
+  - **Full round** on `72d89b6..5db3dea`, R1 = `5db3dea`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security: none.
+    code-reviewer: 2 Medium (a listed nested level gave an empty
+    category; category labels overwrote each other), 3 Low; one no-op
+    Bash call, said so. Fixed in `44ffa71`.
+  - **Scoped round** on `5db3dea..44ffa71`. The four quotes matched for all
+    three; no Bash calls. List A empty for all three; compliance `none`.
+    Lists B parked, entry `44ffa71` (day overflow: `Date.parse` rolls
+    2026-02-30 to 03-02, checked by the orchestrator).
 
-- **Proposed plan changes:** none new. Noted for T-036/T-037 (cost
-  argument): see HANDOFF at `8c90427`. T-041 can be sized (OD-4
-  answered). Carried: T-052, T-049 `proposed (2026-11-23)`.
+- **Proposed plan changes:** none new. T-036/T-037 cost argument: see
+  HANDOFF at `8c90427`. T-041 can be sized (OD-4 answered). Carried:
+  T-052, T-049 `proposed (2026-11-23)`.
 
 - **Open doubts (owner):**
-  - **T-025 → T-026:** name, email and company name come back raw; T-026
-    must clean them and put them inside `<ticket_content>`, and skip
-    `getCompany` when `company_id` is null.
-  - **T-024, T-022 (confirm):** see HANDOFF at `8c90427`, `fe4c24c`.
-  - **T-023, T-054, T-021, T-020, T-019, T-053, T-051:** see HANDOFF at
-    `c79a23b`, `ae9da29`, `fcca38f`, `65be293`, `f286c82`, `470124f`,
-    `876ec68`.
-  - **Carried**, unchanged: see HANDOFF at `20f4b2f` and `d20c83b`.
+  - **T-042:** calendar-impossible days roll over instead of `null`.
+  - **T-025 → T-026, T-024, T-022 (confirm):** see HANDOFF at `26e6101`,
+    `8c90427`, `fe4c24c`.
+  - **Earlier tasks:** see HANDOFF at `c79a23b`, `ae9da29`, `fcca38f`,
+    `65be293`, `f286c82`, `470124f`, `876ec68`, `20f4b2f`, `d20c83b`.
 
 - **Dead ends:** none this task. From before: see HANDOFF at `fe4c24c`,
   `ae9da29`, `876ec68`.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (Node 22.23.5), from the builder's
-  run before `82c5b91`:
+- **Checkpoint:** `make quality` exit 0, from the builder's run before
+  `861b4ff` (local Node v26.13.1 after the Homebrew relink; CI is the
+  reference on 22.19 and 24):
   - eslint clean, ruff "All checks passed!";
   - prettier "All matched files use Prettier code style!";
   - `tsc --noEmit` clean;
-  - vitest "Test Files 23 passed (23)", "Tests 1580 passed (1580)";
+  - vitest "Test Files 24 passed (24)", "Tests 1608 passed (1608)";
   - `tools/checks` "Ran 54 tests", OK;
   - `npm run build` clean;
   - both gitleaks scans passed.
