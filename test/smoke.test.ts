@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient, type HttpRequest, type PageRequest } from "../src/client/http.js";
 import { RateLimiter } from "../src/client/rate-limit.js";
 import { listTicketFields } from "../src/client/resources/ticket-fields.js";
-import { choicesShape, main, runSmoke, smoke, SmokeClient } from "../scripts/smoke/smoke.js";
+import {
+  choicesShape,
+  main,
+  runProbes,
+  runSmoke,
+  smoke,
+  SmokeClient,
+} from "../scripts/smoke/smoke.js";
 import { agentPages, groupPages } from "./fixtures/agents-groups.js";
 import { ticketFieldsPayload, ticketFieldsWithEntityChoices } from "./fixtures/ticket-fields.js";
 import { type MockAgent, mockDispatcher } from "./support/mock-dispatcher.js";
@@ -426,5 +433,254 @@ describe("the banner", () => {
     expect(out.split("\n")[0]).toBe(
       "smoke: GET only; shapes and counts, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only shape lines into tracked files.",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-022's probes. Every ticket value below is invented and must not appear in
+// the output: subjects, names, ids (all 100 or more), tags, custom field names
+// and values.
+
+const NOW = Date.parse("2026-11-24T12:00:00Z");
+
+const tickets = [
+  {
+    id: 90311,
+    subject: "Quillmoor sprocket jammed",
+    status: 2,
+    priority: 3,
+    requester_id: 80455,
+    company_id: 60771,
+    responder_id: 70411,
+    group_id: 70421,
+    tags: ["lantern-tag"],
+    fr_due_by: "2026-11-25T10:00:00Z",
+    due_by: "2026-11-27T10:00:00Z",
+    fr_escalated: false,
+    is_escalated: false,
+    created_at: "2026-11-20T09:00:00Z",
+    custom_fields: { cf_colour: "Amber", cf_kit: "Gadgets", cf_family: null, cf_model: null },
+    stats: {
+      first_responded_at: "2026-11-20T10:00:00Z",
+      agent_responded_at: "2026-11-20T10:00:00Z",
+      requester_responded_at: null,
+      resolved_at: null,
+      closed_at: null,
+    },
+  },
+  {
+    id: 90312,
+    subject: "Orrery widget squeaks",
+    status: 3,
+    priority: 1,
+    requester_id: 80456,
+    tags: [],
+    created_at: "2026-08-01T09:00:00Z",
+    custom_fields: { cf_colour: "Teal", cf_kit: null, cf_family: null, cf_model: null },
+  },
+];
+
+/** `raw`: the body is sent as written, as text/html, not as JSON. */
+type Route = { status: number; body: unknown; headers?: Record<string, string>; raw?: true };
+
+/**
+ * Answers every request, whatever its method, from `route`, so a request the
+ * probes should not send is recorded, not refused by the mock.
+ */
+function serve(route: (path: string) => Route) {
+  mock
+    .get(ORIGIN)
+    .intercept({ path: () => true, method: () => true })
+    .reply(({ path }) => {
+      const { status, body, headers, raw } = route(path);
+      return {
+        statusCode: status,
+        data: raw ? String(body) : JSON.stringify(body),
+        responseOptions: {
+          headers: { ...(raw ? { "content-type": "text/html" } : JSON_TYPE), ...headers },
+        },
+      };
+    })
+    .persist();
+}
+
+/** A healthy account: lists, search pages and the ticket fields. */
+function healthy(path: string): Route {
+  const credits = { "x-ratelimit-used-currentrequest": path.includes("include=stats") ? "3" : "1" };
+  if (path.startsWith("/api/v2/ticket_fields")) return { status: 200, body: ticketFieldsPayload };
+  if (path.startsWith("/api/v2/search/tickets")) {
+    if (path.includes("page=11")) {
+      return { status: 400, body: { description: CANARY, errors: [{ message: CANARY }] } };
+    }
+    return { status: 200, body: { total: 412, results: tickets }, headers: credits };
+  }
+  if (path.includes("/conversations")) return { status: 200, body: [], headers: credits };
+  return { status: 200, body: tickets, headers: credits };
+}
+
+async function probes(route: (path: string) => Route = healthy) {
+  serve(route);
+  const lines: string[] = [];
+  const code = await runProbes(client(), (line) => lines.push(line), NOW);
+  return { code, lines, out: lines.join("\n") };
+}
+
+function paths(): string[] {
+  return sent().map((call) => call.fullUrl.slice(ORIGIN.length));
+}
+
+describe("runProbes: what they ask and print", () => {
+  it("prints one line per probe, counts and yes/no only, exit 0", async () => {
+    const { code, lines } = await probes();
+    expect(code).toBe(0);
+    expect(lines[0]).toMatch(/^probes: GET only;/);
+    expect(lines).toContain(
+      "probe list_default: 2 items, next no, created over 31 days ago 1, credits 1",
+    );
+    expect(lines).toContain(
+      "probe list_status_param: 2 items, next no, all status 2 no, credits 1",
+    );
+    expect(lines).toContain(
+      "probe list_include_stats: 2 items, next no, stats first_responded_at yes, agent_responded_at yes, requester_responded_at yes, status_updated_at no, pending_since no, resolved_at yes, closed_at yes, reopened_at no, credits 3",
+    );
+    expect(lines).toContain("probe search_cap_page_1: total 412, over 300 yes, 2 items, credits 1");
+    expect(lines).toContain("probe search_cap_page_11: fail validation");
+    expect(lines).toContain(
+      "probe search_null_nested_last: total 412, over 300 yes, 2 items, all empty yes, credits 1",
+    );
+    expect(lines).toContain(
+      "probe search_null_nested_top: total 412, over 300 yes, 2 items, all empty no, credits 1",
+    );
+    expect(lines.at(-1)).toBe("probes: done");
+  });
+
+  it("sends GET only", async () => {
+    await probes();
+    expect(sent().length).toBeGreaterThan(10);
+    expect(new Set(sent().map((call) => call.method))).toEqual(new Set(["GET"]));
+  });
+
+  it("asks what each line says it asks", async () => {
+    await probes();
+    const sentPaths = paths();
+    const has = (fragment: string) => sentPaths.some((path) => path.includes(fragment));
+    expect(has("updated_since=2025-11-24T12%3A00%3A00Z")).toBe(true);
+    expect(has("requester_id=80455&updated_since=2000-01-01T00%3A00%3A00Z")).toBe(true);
+    expect(has("/api/v2/tickets/90311/conversations?per_page=100")).toBe(true);
+    // The nested field's last level, then its top, asked as empty.
+    expect(has(encodeURIComponent('"cf_model:null"').replace(/%20/g, "+"))).toBe(true);
+    expect(has(encodeURIComponent('"cf_kit:null"').replace(/%20/g, "+"))).toBe(true);
+    expect(has("page=10")).toBe(true);
+    expect(has("page=11")).toBe(true);
+  });
+
+  it("prints no subject, name, id, tag or custom field of the fixtures, nor the domain or the key", async () => {
+    serve(healthy);
+    const lines: string[] = [];
+    const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY };
+    expect(await smoke(env, mock, (line) => lines.push(line), "probes")).toBe(0);
+    const out = [...lines, ...stderr].join("\n");
+    // Ticket keys and stats keys are API words the probes print by a fixed list.
+    const apiWords = new Set([
+      ...tickets.flatMap((ticket) => Object.keys(ticket)),
+      ...Object.keys(tickets[0]!.stats!),
+      ...API_WORDS,
+    ]);
+    const values = [...accountValues([tickets, ticketFieldsPayload])].filter(
+      (value) => !apiWords.has(value) && value.length > 1,
+    );
+    const leaked = values.filter((value) =>
+      new RegExp(`(?<![A-Za-z0-9_])${escape(value)}(?![A-Za-z0-9_])`).test(out),
+    );
+    expect(leaked).toEqual([]);
+    for (const value of ["cf_model", "cf_kit", "90311", "80455", "Quillmoor sprocket jammed"]) {
+      expect(values).toContain(value);
+    }
+    for (const secret of [DOMAIN, "quillmoor", API_KEY, ORIGIN]) {
+      expect(out.toLowerCase()).not.toContain(secret.toLowerCase());
+    }
+  });
+});
+
+describe("runProbes: failures", () => {
+  it("a failed probe prints its error code only", async () => {
+    const { code, lines, out } = await probes(() => ({
+      status: 400,
+      body: { description: CANARY, errors: [{ field: CANARY, message: CANARY }] },
+    }));
+    expect(code).toBe(0);
+    expect(lines).toContain("probe list_default: fail validation");
+    expect(lines).toContain("probe search_status_open: fail validation");
+    expect(lines).toContain("probe nested_field: fail validation");
+    expect(out).not.toContain(CANARY);
+    expect(out).not.toContain("Freshdesk refused");
+    // Every probe that sent a request printed its code and nothing else.
+    const sentLines = lines.filter(
+      (line) => line.startsWith("probe ") && !/_ticket_keys: |: skipped \(/.test(line),
+    );
+    expect(sentLines.length).toBeGreaterThan(5);
+    expect(sentLines.filter((line) => !/^probe [a-z0-9_]+: fail validation$/.test(line))).toEqual(
+      [],
+    );
+  });
+
+  it("a 401 prints auth; a 2xx not JSON, and a JSON body not a list, say so", async () => {
+    const { lines, out } = await probes((path) => {
+      if (path.startsWith("/api/v2/tickets?per_page=100&updated_since")) {
+        return { status: 200, body: `<html>${CANARY}</html>`, raw: true };
+      }
+      if (path.startsWith("/api/v2/search")) return { status: 200, body: { note: CANARY } };
+      return { status: 401, body: { message: CANARY } };
+    });
+    expect(lines).toContain("probe list_default: fail auth");
+    expect(lines).toContain("probe list_updated_since_365d: not JSON");
+    expect(lines).toContain("probe search_status_open: not a list, credits ?");
+    expect(out).not.toContain(CANARY);
+  });
+
+  it("with no recent ticket, the requester and conversation probes are skipped", async () => {
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/ticket_fields")
+        ? { status: 200, body: ticketFieldsPayload }
+        : path.startsWith("/api/v2/search")
+          ? { status: 200, body: { total: 0, results: [] } }
+          : { status: 200, body: [] },
+    );
+    expect(lines).toContain("probe list_requester: skipped (no ticket in the last 30 days)");
+    expect(lines).toContain(
+      "probe conversations_per_page_100: skipped (no ticket in the last 30 days)",
+    );
+    expect(paths().some((path) => path.includes("requester_id"))).toBe(false);
+  });
+
+  it("with no nested field, the null probes are skipped", async () => {
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/ticket_fields")
+        ? { status: 200, body: ticketFieldsPayload.slice(0, 4) }
+        : healthy(path),
+    );
+    expect(lines).toContain("probe nested_field: skipped (no nested field with a plain API name)");
+    expect(paths().some((path) => path.includes("null"))).toBe(false);
+  });
+
+  it("a nested field name unfit for a query is not sent", async () => {
+    const fields = structuredClone(ticketFieldsPayload) as Record<string, unknown>[];
+    fields[4]!.nested_ticket_fields = [{ name: "cf model) OR (x", level: 3 }];
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/ticket_fields") ? { status: 200, body: fields } : healthy(path),
+    );
+    expect(lines).toContain("probe nested_field: skipped (no nested field with a plain API name)");
+    expect(paths().some((path) => path.includes("null"))).toBe(false);
+  });
+});
+
+describe("main: the probes mode", () => {
+  it("runs the probes, not the report", async () => {
+    serve(healthy);
+    const lines: string[] = [];
+    const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY };
+    expect(await main(env, mock, (line) => lines.push(line), "probes")).toBe(0);
+    expect(lines[0]).toMatch(/^probes: /);
+    expect(lines.some((line) => line.startsWith("OD-4"))).toBe(false);
   });
 });

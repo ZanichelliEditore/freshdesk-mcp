@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -41,6 +41,11 @@ smoke: ## GET-only check of the real account (owner runs it; same env as the ser
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js
+
+smoke-probes: ## T-022's GET-only probes of the real account (owner runs it; same env as the server): counts, yes/no and credits, no names or ids
+	npx tsc -p tsconfig.smoke.json
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --probes
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py
