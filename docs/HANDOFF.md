@@ -4,57 +4,63 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T10:57:30+01:00`
-- **Describes commit:** `c7e4b3c`
-  (`c7e4b3cb90c52b9c7c4a605907f9903a3170c6b4`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45370198847
-  (workflow `quality`, ran on `c7e4b3c`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T11:16:15+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-042 `done (2026-11-24)`,
-  `docs/tasks/T-042-ticket-row.md` ("Done"). Commits `d38404f` (status),
-  `5db3dea` (build), `44ffa71` (full-round fixes), `861b4ff` (task file,
-  parked items, journal). `src/tools/rows.ts`: `ticketRow` and
-  `ticketDetail`; category from `uncategorised_fields` (a nested level's
-  name selects its parent field) or the first nested field; deduplicated
-  keys. Built by a builder agent under the orchestrator (owner's
-  instruction of 2026-11-23).
+- **Current task:** T-043 `done (2026-11-24)`,
+  `docs/tasks/T-043-ticket-filters.md` ("Done"). Commits `a8a0384`
+  (status), `e3af096` (build), `d3091cb` (full-round fixes), `e80ad04`
+  (task file, T-055 proposed, parked items). `src/tools/ticket-query.ts`:
+  `buildTicketQuery` (names → ids, list parameters or search query) and
+  `matchesLocal` (the local checks: `uncategorized`, `updated_since`,
+  `created_between`). Built by a builder agent under the orchestrator
+  (owner's instruction of 2026-11-23).
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-043** (filters:
-  name → id resolver and request builder). It must match category fields
-  exactly as `rows.ts` does (a level name selects its parent nested
-  field) and record that rule in `docs/architecture/ticket-queries.md`
-  (parked `44ffa71`, code B2).
-  - **The owner:** Homebrew relinked `node` to v26.13.1 on 2026-11-24 at
-    10:52 (likely a formula that depends on `node`); the project targets
-    Node 22 (CI: 22.19 and 24). To return to 22: `brew unlink node &&
-    brew link --overwrite node@22`.
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-026**
+  (`get_ticket`).
+  - **The owner:** local `node` is v26.13.1 since the Homebrew relink of
+    2026-11-24 (HANDOFF at `c7e4b3c`); CI (22.19, 24) is the reference.
   - **The owner**, Dependabot PRs (unchanged; T-044 "Done").
 
-- **Read before anything else:** PLAN row T-043 and its task file;
-  `docs/architecture/ticket-queries.md`.
+- **Read before anything else:** PLAN row T-026 and its task file (its
+  acceptance was amended on 2026-11-23: field values through
+  `fieldValue`, duplicate labels, cursor clause); T-025's open doubt
+  (names come back raw; skip `getCompany` on a null `company_id`).
 
 - **Reviews:**
-  - **Full round** on `72d89b6..5db3dea`, R1 = `5db3dea`. The four quotes
-    matched for all three. compliance: Wireframes `none`. security: none.
-    code-reviewer: 2 Medium (a listed nested level gave an empty
-    category; category labels overwrote each other), 3 Low; one no-op
-    Bash call, said so. Fixed in `44ffa71`.
-  - **Scoped round** on `5db3dea..44ffa71`. The four quotes matched for all
+  - **Full round** on `901cb00..e3af096`, R1 = `e3af096`. The four quotes
+    matched for all three; no Bash calls. compliance: Wireframes `none`.
+    security: 3 Low (control characters in a tag; type names unstripped
+    in one message; non-boolean `uncategorized` ignored). code-reviewer:
+    2 Medium (the quote clause of the acceptance not met as written;
+    `updated_since` with search resting on the open boundary question),
+    Lows. **Orchestrator's decisions** (owner's delegation): the
+    acceptance now reads "refused, not escaped" (PLAN and task file);
+    date filters on search are widened by a day with a local check. Fixed
+    in `d3091cb`.
+  - **Scoped round** on `e3af096..d3091cb`. The four quotes matched for all
     three; no Bash calls. List A empty for all three; compliance `none`.
-    Lists B parked, entry `44ffa71` (day overflow: `Date.parse` rolls
-    2026-02-30 to 03-02, checked by the orchestrator).
+    Lists B parked, entry `d3091cb`; both reviewers' B on the widening
+    became the `proposed` row T-055.
 
-- **Proposed plan changes:** none new. T-036/T-037 cost argument: see
-  HANDOFF at `8c90427`. T-041 can be sized (OD-4 answered). Carried:
-  T-052, T-049 `proposed (2026-11-23)`.
+- **Proposed plan changes:**
+  - **T-055** `proposed (2026-11-24)`: measure whether search's
+    `created_at`/`updated_at` `>`/`<` keep the boundary day and whose
+    time-zone day they use; a one-day widening can undercount for an
+    account not on UTC. To size before T-036 (`count_tickets`).
+  - T-027 and T-036 acceptance should gain "a ticket on the widened
+    boundary day is absent from the output" (they must call
+    `matchesLocal`); T-036/T-037 cost argument (HANDOFF at `8c90427`).
+  - T-041 can be sized (OD-4 answered). Carried: T-052, T-049
+    `proposed (2026-11-23)`.
 
 - **Open doubts (owner):**
-  - **T-042:** calendar-impossible days roll over instead of `null`.
-  - **T-025 → T-026, T-024, T-022 (confirm):** see HANDOFF at `26e6101`,
-    `8c90427`, `fe4c24c`.
-  - **Earlier tasks:** see HANDOFF at `c79a23b`, `ae9da29`, `fcca38f`,
+  - **T-043:** the acceptance amendment was the orchestrator's; a tag or
+    type with `'`, `"`, `\` or a control/format character can never be
+    filtered; the T-055 question. See the task file.
+  - **Earlier tasks:** see HANDOFF at `c7e4b3c`, `26e6101`, `8c90427`,
+    `fe4c24c` (T-022 confirms), `c79a23b`, `ae9da29`, `fcca38f`,
     `65be293`, `f286c82`, `470124f`, `876ec68`, `20f4b2f`, `d20c83b`.
 
 - **Dead ends:** none this task. From before: see HANDOFF at `fe4c24c`,
@@ -62,13 +68,12 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0, from the builder's run before
-  `861b4ff` (local Node v26.13.1 after the Homebrew relink; CI is the
-  reference on 22.19 and 24):
+- **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), from the
+  builder's run before `e80ad04`:
   - eslint clean, ruff "All checks passed!";
   - prettier "All matched files use Prettier code style!";
   - `tsc --noEmit` clean;
-  - vitest "Test Files 24 passed (24)", "Tests 1608 passed (1608)";
+  - vitest "Test Files 25 passed (25)", "Tests 1688 passed (1688)";
   - `tools/checks` "Ran 54 tests", OK;
   - `npm run build` clean;
   - both gitleaks scans passed.
