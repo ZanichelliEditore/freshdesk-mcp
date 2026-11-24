@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** doing (2026-11-24)
+- **Status:** done (2026-11-24)
 - **Depends on:** T-016
 - **Created:** 2026-11-23
 - **Gates:** The owner's run of T-016's schema report, before the start
@@ -69,60 +69,68 @@ and the tasks it blocks are named; `make quality` green.
 
 ## Done
 - Commits: `e408ca8` (status), `0ab246f` (draft from the docs, probes,
-  tests), the close commit `T-022: measured rows, open items, task file`
-  (measured rows, this file).
+  tests), `e3fcdb1` (first run's measured rows), `86b788a` (review fixes:
+  control probes, note conclusions), the close commit
+  `T-022: control-run conclusions, close` (control-run conclusions, this
+  file).
 - `docs/architecture/ticket-queries.md`: one row per filter of the five
   tools and `get_ticket`'s recent tickets, each `documented` with its URL
-  or `measured 2026-11-24`; `uncategorized` (local check of
-  `custom_fields`: search refuses `<nested level>:null`), past 300 results,
-  cost classes, the parameters of `listTickets` (requester filter
-  `requester_id`, always with `updated_since`) and `searchTickets`; "Open"
+  or `measured 2026-11-24`; `uncategorized` (a local check of
+  `custom_fields`, a nested field not being searchable), past 300 results
+  (an ordered list scan; search windows rejected), scan bounds, cost
+  classes, the parameters of `listTickets` (the requester filter
+  `requester_id`, alone for recent tickets) and `searchTickets`; "Open"
   lists what remains and the tasks it bears on.
 - Probes: `runProbes` in `scripts/smoke/smoke.ts`, `make smoke-probes`
-  (`cli.ts --probes`). Run against the real account by the orchestrator on
-  2026-11-24 (owner's authorisation): exit 0, 16 GETs, 10 answered 200, 6
-  answered 400; output kept in `docs/private/`, only shapes copied.
-- Tests: `test/smoke.test.ts` `runProbes: what they ask and print` (one
-  line per probe, GET only, the queries asked, no fixture value / domain /
-  key in stdout or stderr), `runProbes: failures` (error code only, 401,
-  not JSON, not a list, skipped probes, an unfit field name not sent),
-  `main: the probes mode`. The leak test was seen failing with a probe
-  line made to print a ticket (reverted).
-- Acceptance: every line met; the requester row is `documented` (the probe
-  was inconclusive, so `updated_since` is always sent with it).
-- Reopened 2026-11-24 after the full review round (security: nothing
-  blocking; code: 2 High, 4 Medium, Lows, all on the note's conclusions).
-  The commit `T-022: review fixes: control probes, note conclusions` adds
-  control probes (spaced queries, a nested value query, a plain dropdown
-  `:null`, the deep page in both orders with elapsed bands), prints search
-  totals as bands and key lines as `skipped` when their source is empty,
-  and fixes the note (triage `expensive` with stats, the rejected list
-  route, scan bounds, the ordered scan past 300, the requester trade-off,
-  date boundaries, softened claims). Phase 3 fills the conclusions from the
-  re-run.
+  (`cli.ts --probes`). Two runs against the real account by the
+  orchestrator on 2026-11-24 (owner's authorisation), output kept in
+  `docs/private/`, only shapes copied:
+  - first run: exit 0, 16 GETs, 10 answered 200, 6 answered 400;
+  - control run after the review: exit 0, 21 GETs, 14 answered 200, 7
+    answered 400. It showed `+` read as a space (`OR`, `AND`), a plain
+    dropdown `:null` honoured, a nested field not searchable even for a
+    top-level value, `requester_id` alone lifting the 30-day window (96 of
+    100 older than 31 days, the same with `updated_since=2000`), and the
+    deep page under 2 s in both orders.
+- Tests: `test/smoke.test.ts` `runProbes: what they ask and print`,
+  `runProbes: failures`, `runProbes: control probes (review of
+  2026-11-24)`, `main: the probes mode`: GET only; the queries asked; no
+  fixture value, domain or key in stdout or stderr; a failure prints its
+  code; totals and durations as bands; key lines `skipped` without a
+  source. The leak test was seen failing with a probe line made to print a
+  ticket (reverted).
+- Review: one full round on `c24efd9..e3fcdb1` (security: nothing
+  blocking; code: 2 High, 4 Medium, Lows, all on the note's conclusions),
+  applied in `86b788a`; the control run settled what they left pending.
+- Acceptance: every line met.
 
 ## Dead ends
-- Asking `uncategorized` by search: `<nested top>:null`,
-  `<nested last level>:null` and the same within 30 days are each a 400
-  `validation` (2026-11-24).
+- Asking `uncategorized` by search on the nested field: `:null` at the top
+  and last level, and a top-level value, are each a 400 `validation`
+  (2026-11-24).
 - `include=stats` on search (400) and a `status` parameter on the list
   (400): no single call gives open tickets with their stats.
+- Always sending `updated_since` with `requester_id` (first-run decision):
+  withdrawn, `requester_id` alone lifts the window and a window drops
+  tickets.
 
 ## Open doubts
 - `GET /tickets/{id}?include=stats` is assumed to carry the 8 `stats` keys
   measured on the list (T-029).
-- Whether `requester_id` alone lifts the 30-day window is unknown (the
-  probe's requester had one ticket); moot while `updated_since` is sent.
-- One deep `updated_since` page took about 8 s, near the 10 s per-attempt
-  cut-off (T-027, T-036, T-037).
-- Choice to confirm: with `uncategorised_fields` set, a ticket with **any**
-  listed field empty is uncategorised.
+- Deep-page latency varies (about 8 s once, under 2 s twice): which
+  deadline a scan runs under is open (T-027, T-036, T-037).
+- `created_at:>'<day>'` boundary semantics are undocumented (T-043, T-036,
+  T-037).
+- `company_id` alone was not probed for the 30-day window; moot while
+  `find_similar_tickets` sends its N-day `updated_since` (T-030).
+- Choices to confirm: with `uncategorised_fields` set, a ticket with
+  **any** listed field empty is uncategorised; `uncategorized` is always
+  checked locally, though search `:null` works on plain fields.
 - The doc pages disagree on an include's cost (+2 on List All Tickets, +1
   on View a Ticket); measured +1 on the list.
 
 ## Context pressure
-Low: one builder session over two phases; no file dumped whole.
+Low: one builder session over three phases; no file dumped whole.
 
 ## Next action
-The orchestrator re-runs `make smoke-probes`; phase 3 fills the
-`pending control` conclusions and the Open rows they settle, then closes.
+none: done. T-023 and T-024 are unblocked.
