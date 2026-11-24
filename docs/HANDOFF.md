@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T02:24:53+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `876ec68`
+  (`876ec68285ce90e8dcb2ae7a4fabae5b5f02aeba`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45349049709
+  (workflow `quality`, ran on `876ec68`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-051 `done (2026-11-24)`,
   `docs/tasks/T-051-lint-import-allow-list.md` ("Done"). Commits `0f42776`
