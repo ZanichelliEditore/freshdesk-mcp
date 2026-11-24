@@ -89,7 +89,15 @@ function isoUpdated(value: unknown): string | null {
   return Number.isNaN(time) ? null : new Date(time).toISOString();
 }
 
-function categoryFields(ctx: RowContext, schema: Schema): readonly TicketField[] {
+/**
+ * The category fields (SPEC §10), shared with ticket-query.ts's
+ * `uncategorized`: the fields `uncategorised_fields` names, else the first
+ * nested field.
+ */
+export function categoryFields(
+  ctx: Pick<RowContext, "team">,
+  schema: Schema,
+): readonly TicketField[] {
   const listed = ctx.team.uncategorised_fields;
   if (listed === undefined) {
     const nested = schema.fields.find((field) => field.type === "nested_field");

@@ -196,7 +196,7 @@ value and `:null` at every level were each a 400 `validation`, measured
 (`null`, absent or `""` is empty), which list items and search results both
 carry (measured 2026-11-24):
 
-- **Alone** (or with `updated_since` / `created_between` only): the list
+- **Alone** (or with `updated_since` only): the list
   endpoint, by default its 30-day window (C1's "recent"), with
   `updated_since` for an explicit period; 1 call per 100 tickets
   **scanned**. A `list_tickets` call scans at most a bounded number of list
@@ -204,6 +204,22 @@ carry (measured 2026-11-24):
   `next_cursor`, so one page of results can hold fewer rows than asked.
 - **With a search filter**: the search query for the other filters, then the
   local check on its results: at most 300 scanned, 10 calls.
+  `created_between` is a search filter here like any other (T-043, 2026-11-24):
+  a list scan of a created-at window, as `count_tickets` does, is not built
+  for `list_tickets`.
+
+Which fields are checked (T-043, `src/tools/ticket-query.ts`, through
+`categoryFields` of `src/tools/rows.ts`, so a row's `category` and the
+filter read the setting the same way): the fields `uncategorised_fields`
+names, each name matched to a field's label or API name (trimmed, NFC, any
+case), and **a nested level's label or API name selects its parent nested
+field**; with the setting absent, the first nested field. A nested field is
+checked at its last level (`custom_fields[<last level>]`), whichever of its
+names was listed; any other field where the ticket holds it (a custom field
+in `custom_fields`, a default one at the top level under its ticket key,
+`group` as `group_id`). A ticket is uncategorised when any checked field is
+empty. With no field to check (no nested field and no setting, or a setting
+that names no field), `uncategorized` is a `validation` error.
 
 A plain custom dropdown does work with search `:null`, and the results are
 really empty (measured 2026-11-24). Chosen anyway: the local check for
@@ -280,7 +296,13 @@ with `AND` (measured 2026-11-24). A nested field cannot be queried
 (measured 2026-11-24): T-043 must not build a search condition on one. `searchTickets` refuses a query
 containing `"` or `\` before sending (`validation`, nothing sent; T-024),
 so T-043 must quote values with single quotes and refuse or drop `"` and
-`\` in values itself.
+`\` in values itself. T-043 refuses (2026-11-24): a tag or ticket type
+containing `'`, `"` or `\` is a `validation` error and no query is built.
+Freshdesk documents no escape inside single quotes, so a quote could end the
+value and add a clause; ` OR ` inside the quotes stays one value.
+`updated_since` with a search filter is the instant's UTC day
+(`updated_at:>'<day>'`); whether `>` keeps that day is the open boundary
+question below.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s two stats signals.
