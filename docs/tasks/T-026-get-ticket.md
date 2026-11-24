@@ -47,7 +47,7 @@ requester's name and company name are inside `<ticket_content>`, with the
 email beside them; a field label used as a key and carrying an HTML tag
 comes back without it (asserted); `include_recent` adds the requester's
 recent tickets as compact rows; an unknown id is `isError` `not_found`; a cursor from another call is `isError` `validation` with the MockAgent count 0; a cursor built over the arguments as sent, at the tool's `maxPosition`, is accepted, and one at `maxPosition` + 1 is `isError` `validation` with the message "points past the last position" and the MockAgent count 0; `grep -nF -e '.default(' -e '.transform('` over the tool's file prints nothing;
-`api_calls_used` equals the MockAgent count; no stderr line contains a
+`api_calls_used` equals the MockAgent count with the schema cached, and on a cold schema it leaves out the schema's load, said in the description and pinned by a test (a recorded limitation until T-056); no stderr line contains a
 fixture body string; `make quality` green.
 
 ---

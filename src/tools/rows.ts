@@ -83,7 +83,8 @@ function outputOf(
   return values.length === 0 ? { found: false } : { found: true, value: values[0] };
 }
 
-function isoUpdated(value: unknown): string | null {
+/** A UTC ISO 8601 instant from an ISO 8601 date-time with a zone (`Z` or `±HH:MM`), else `null`. */
+export function isoUpdated(value: unknown): string | null {
   if (typeof value !== "string" || !ISO_WITH_ZONE.test(value)) return null;
   const time = Date.parse(value);
   return Number.isNaN(time) ? null : new Date(time).toISOString();
