@@ -1,0 +1,56 @@
+// `list_groups` (SPEC §8.2): groups for assignment, in the list envelope
+// (SPEC §8.4).
+//
+//   - Each group is `{id, name}`; every other key is left out.
+//   - The name is admin-set: through `plainName` (tags stripped, capped), not
+//     wrapped (owner, 2026-11-23).
+//   - The whole list in one response, through `listGroups`: at most MAX_PAGES
+//     pages, `truncated: true` past them. It never gives a `next_cursor`, so
+//     its last position is 0; a cursor is still read first, before any
+//     request, so one from another call or past 0 sends nothing.
+//   - `api_calls_used` is the pages that came back (see `listAll`).
+
+import { z } from "zod";
+import { listGroups } from "../../../client/resources/groups.js";
+import { NAME_CAP, plainName } from "../../format.js";
+import { listEnvelope, readCursor } from "../../list.js";
+import type { Tool } from "../index.js";
+
+/** The last cursor position this tool serves: it returns one page only. */
+export const MAX_POSITION = 0;
+
+const input = z.object({ cursor: z.string().optional() });
+
+export const listGroupsTool: Tool<typeof input> = {
+  name: "list_groups",
+  description: [
+    "The help desk's groups, for assigning a ticket: each one's id and name.",
+    "The whole list comes in one response; a list longer than 1,000 groups is cut and says truncated: true.",
+    `Names are shown without HTML and cut at ${NAME_CAP} characters (ending with …).`,
+  ].join(" "),
+  input,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  cost: "1 API call per 100 groups, at most 10",
+  customerText: false,
+  async handler(args, context) {
+    const call = { tool: "list_groups", args };
+    const cursor = readCursor(call, MAX_POSITION);
+    if (!cursor.ok) return cursor;
+    const listed = await listGroups(context.http);
+    if (!listed.ok) return listed;
+    const items = listed.items.map((group) => ({ id: group.id, name: plainName(group.name) }));
+    return {
+      ok: true,
+      value: listEnvelope(call, {
+        items,
+        truncated: listed.truncated,
+        api_calls_used: listed.pages,
+      }),
+    };
+  },
+};

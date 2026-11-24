@@ -2,5 +2,11 @@
 
 import type { Tool } from "../index.js";
 import { getTicketSchema } from "./get-ticket-schema.js";
+import { listAgentsTool } from "./list-agents.js";
+import { listGroupsTool } from "./list-groups.js";
 
-export const CORE_TOOLS: readonly Tool[] = Object.freeze([getTicketSchema]);
+export const CORE_TOOLS: readonly Tool[] = Object.freeze([
+  getTicketSchema,
+  listAgentsTool,
+  listGroupsTool,
+]);

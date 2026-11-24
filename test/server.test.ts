@@ -186,7 +186,11 @@ describe("createServer: enabled toolsets come from the team file only", () => {
 
   it("a server from the real registry lists core's tools", async () => {
     const tools = await listTools(await open(serverFor(undefined)));
-    expect(tools.map((tool) => tool.name)).toEqual(["get_ticket_schema"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "get_ticket_schema",
+      "list_agents",
+      "list_groups",
+    ]);
   });
 
   it("ignores FRESHDESK_TOOLSETS in the environment", async () => {

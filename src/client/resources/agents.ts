@@ -1,8 +1,10 @@
 // Agents (SPEC §7.3): `GET /agents`, every page, for the schema service's
-// id → name map. An agent's name is on its contact.
+// id → name map, and for `list_agents`. An agent's name and work email are on
+// its contact.
 //
-// An agent needs a whole-number `id` and a `contact` with a non-empty `name`;
-// keys this module does not know are passed through. Paging and the malformed
+// An agent needs a whole-number `id` and a `contact` with a non-empty `name`
+// and an `email` that is a string, null or absent; keys this module does not
+// know are passed through. Paging and the malformed
 // page error: see `list-all.ts`.
 
 import { z } from "zod";
@@ -11,7 +13,7 @@ import { listAll, type ListResult } from "./list-all.js";
 
 const agent = z.looseObject({
   id: z.number().int(),
-  contact: z.looseObject({ name: z.string().min(1) }),
+  contact: z.looseObject({ name: z.string().min(1), email: z.string().nullish() }),
 });
 
 export type Agent = z.infer<typeof agent>;
