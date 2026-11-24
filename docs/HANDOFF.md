@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T16:45:35+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `f1dde79`
+  (`f1dde79ade9e0354853c61e8b638712406336e49`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45429412843
+  (workflow `quality`, ran on `f1dde79`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-037 `done (2026-11-24)`, `export_tickets`,
   `docs/tasks/T-037-export-tickets.md` ("Done", "Security review").
