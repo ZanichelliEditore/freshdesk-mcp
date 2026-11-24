@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** done (2026-11-24)
+- **Status:** doing (2026-11-24)
 - **Depends on:** T-016
 - **Created:** 2026-11-23
 - **Gates:** The owner's run of T-016's schema report, before the start
@@ -90,6 +90,16 @@ and the tasks it blocks are named; `make quality` green.
   line made to print a ticket (reverted).
 - Acceptance: every line met; the requester row is `documented` (the probe
   was inconclusive, so `updated_since` is always sent with it).
+- Reopened 2026-11-24 after the full review round (security: nothing
+  blocking; code: 2 High, 4 Medium, Lows, all on the note's conclusions).
+  The commit `T-022: review fixes: control probes, note conclusions` adds
+  control probes (spaced queries, a nested value query, a plain dropdown
+  `:null`, the deep page in both orders with elapsed bands), prints search
+  totals as bands and key lines as `skipped` when their source is empty,
+  and fixes the note (triage `expensive` with stats, the rejected list
+  route, scan bounds, the ordered scan past 300, the requester trade-off,
+  date boundaries, softened claims). Phase 3 fills the conclusions from the
+  re-run.
 
 ## Dead ends
 - Asking `uncategorized` by search: `<nested top>:null`,
@@ -114,4 +124,5 @@ and the tasks it blocks are named; `make quality` green.
 Low: one builder session over two phases; no file dumped whole.
 
 ## Next action
-none: done. T-023 and T-024 are unblocked.
+The orchestrator re-runs `make smoke-probes`; phase 3 fills the
+`pending control` conclusions and the Open rows they settle, then closes.

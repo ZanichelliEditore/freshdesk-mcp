@@ -5,11 +5,13 @@ import { RateLimiter } from "../src/client/rate-limit.js";
 import { listTicketFields } from "../src/client/resources/ticket-fields.js";
 import {
   choicesShape,
+  elapsedBand,
   main,
   runProbes,
   runSmoke,
   smoke,
   SmokeClient,
+  totalBand,
 } from "../scripts/smoke/smoke.js";
 import { agentPages, groupPages } from "./fixtures/agents-groups.js";
 import { ticketFieldsPayload, ticketFieldsWithEntityChoices } from "./fixtures/ticket-fields.js";
@@ -518,10 +520,16 @@ function healthy(path: string): Route {
   return { status: 200, body: tickets, headers: credits };
 }
 
-async function probes(route: (path: string) => Route = healthy) {
+/** A clock that moves 3 s at every read: each timed probe takes 3 s. */
+function steppingClock(stepMs = 3_000): () => number {
+  let t = 0;
+  return () => (t += stepMs);
+}
+
+async function probes(route: (path: string) => Route = healthy, clock = steppingClock()) {
   serve(route);
   const lines: string[] = [];
-  const code = await runProbes(client(), (line) => lines.push(line), NOW);
+  const code = await runProbes(client(), (line) => lines.push(line), NOW, clock);
   return { code, lines, out: lines.join("\n") };
 }
 
@@ -543,13 +551,13 @@ describe("runProbes: what they ask and print", () => {
     expect(lines).toContain(
       "probe list_include_stats: 2 items, next no, stats first_responded_at yes, agent_responded_at yes, requester_responded_at yes, status_updated_at no, pending_since no, resolved_at yes, closed_at yes, reopened_at no, credits 3",
     );
-    expect(lines).toContain("probe search_cap_page_1: total 412, over 300 yes, 2 items, credits 1");
+    expect(lines).toContain("probe search_cap_page_1: total >300, 2 items, credits 1");
     expect(lines).toContain("probe search_cap_page_11: fail validation");
     expect(lines).toContain(
-      "probe search_null_nested_last: total 412, over 300 yes, 2 items, all empty yes, credits 1",
+      "probe search_null_nested_last: total >300, 2 items, all empty yes, credits 1",
     );
     expect(lines).toContain(
-      "probe search_null_nested_top: total 412, over 300 yes, 2 items, all empty no, credits 1",
+      "probe search_null_nested_top: total >300, 2 items, all empty no, credits 1",
     );
     expect(lines.at(-1)).toBe("probes: done");
   });
@@ -660,7 +668,7 @@ describe("runProbes: failures", () => {
         : healthy(path),
     );
     expect(lines).toContain("probe nested_field: skipped (no nested field with a plain API name)");
-    expect(paths().some((path) => path.includes("null"))).toBe(false);
+    expect(paths().some((path) => /cf_kit|cf_model|cf_family/.test(path))).toBe(false);
   });
 
   it("a nested field name unfit for a query is not sent", async () => {
@@ -670,7 +678,7 @@ describe("runProbes: failures", () => {
       path.startsWith("/api/v2/ticket_fields") ? { status: 200, body: fields } : healthy(path),
     );
     expect(lines).toContain("probe nested_field: skipped (no nested field with a plain API name)");
-    expect(paths().some((path) => path.includes("null"))).toBe(false);
+    expect(paths().some((path) => /cf_kit|cf_model|cf_family/.test(path))).toBe(false);
   });
 });
 
@@ -682,5 +690,117 @@ describe("main: the probes mode", () => {
     expect(await main(env, mock, (line) => lines.push(line), "probes")).toBe(0);
     expect(lines[0]).toMatch(/^probes: /);
     expect(lines.some((line) => line.startsWith("OD-4"))).toBe(false);
+  });
+});
+
+describe("runProbes: control probes (review of 2026-11-24)", () => {
+  it("asks spaced queries on documented fields, spaces sent as +", async () => {
+    const { lines } = await probes();
+    expect(lines).toContain("probe search_spaced_or: total >300, 2 items, credits 1");
+    expect(lines).toContain("probe search_spaced_and: total >300, 2 items, credits 1");
+    const sentPaths = paths();
+    expect(sentPaths.some((path) => path.includes("%22status%3A2+OR+status%3A3%22"))).toBe(true);
+    expect(sentPaths.some((path) => path.includes("%22status%3A2+AND+priority%3A1%22"))).toBe(true);
+  });
+
+  it("asks the nested top level for one of its own values, and never prints it", async () => {
+    const { lines, out } = await probes();
+    expect(lines).toContain(
+      "probe search_nested_top_value: total >300, 2 items, all match no, credits 1",
+    );
+    expect(paths().some((path) => path.includes("%22cf_kit%3A%27Gadgets%27%22"))).toBe(true);
+    expect(out).not.toContain("Gadgets");
+    expect(out).not.toContain("cf_kit");
+  });
+
+  it("asks a plain custom dropdown for null, as a control", async () => {
+    const { lines } = await probes();
+    expect(lines).toContain(
+      "probe search_null_dropdown: total >300, 2 items, all empty no, credits 1",
+    );
+    expect(paths().some((path) => path.includes("%22cf_colour%3Anull%22"))).toBe(true);
+  });
+
+  it("skips the dropdown control when there is no custom dropdown", async () => {
+    const fields = ticketFieldsPayload.filter((field) => field.type !== "custom_dropdown");
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/ticket_fields") ? { status: 200, body: fields } : healthy(path),
+    );
+    expect(lines).toContain(
+      "probe search_null_dropdown: skipped (no custom dropdown with a plain API name)",
+    );
+    expect(paths().some((path) => path.includes("cf_colour"))).toBe(false);
+  });
+
+  it("skips the nested value control when the value is unfit for a query", async () => {
+    const fields = structuredClone(ticketFieldsPayload) as Record<string, unknown>[];
+    fields[4]!.choices = { "Gad'gets) OR (x": { A: ["b"] } };
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/ticket_fields") ? { status: 200, body: fields } : healthy(path),
+    );
+    expect(lines).toContain(
+      "probe search_nested_top_value: skipped (no top-level choice fit for a query)",
+    );
+    expect(paths().some((path) => path.includes("Gad"))).toBe(false);
+    // The null probes still run.
+    expect(lines.some((line) => line.startsWith("probe search_null_nested_last: total"))).toBe(
+      true,
+    );
+  });
+
+  it("times the deep page in both orders, as a band", async () => {
+    const { lines } = await probes();
+    expect(lines).toContain(
+      "probe list_updated_since_365d: 2 items, next no, created over 31 days ago 1, elapsed 2-5s, credits 1",
+    );
+    expect(lines).toContain(
+      "probe list_updated_since_365d_default_order: 2 items, next no, created over 31 days ago 1, elapsed 2-5s, credits 1",
+    );
+    const deep = paths().filter((path) => path.includes("updated_since=2025-11-24"));
+    expect(deep.some((path) => path.includes("order_by=created_at&order_type=asc"))).toBe(true);
+    expect(deep.some((path) => !path.includes("order_by"))).toBe(true);
+    // Only the two deep pages are timed.
+    expect(lines.filter((line) => line.includes("elapsed"))).toHaveLength(2);
+  });
+
+  it.each([
+    [0, "<2s"],
+    [1_999, "<2s"],
+    [2_000, "2-5s"],
+    [4_999, "2-5s"],
+    [5_000, "5-10s"],
+    [10_000, "5-10s"],
+    [10_001, ">10s"],
+  ])("elapsedBand(%d) is %s", (ms, band) => {
+    expect(elapsedBand(ms)).toBe(band);
+  });
+
+  it.each([
+    [0, "0"],
+    [1, "1-300"],
+    [300, "1-300"],
+    [301, ">300"],
+  ])("totalBand(%d) is %s", (total, band) => {
+    expect(totalBand(total)).toBe(band);
+  });
+
+  it("prints a total as a band, never its figure", async () => {
+    const { out } = await probes();
+    expect(out).not.toContain("412");
+  });
+
+  it("key lines say skipped when their source failed or was empty", async () => {
+    const { lines } = await probes((path) =>
+      path.startsWith("/api/v2/search")
+        ? { status: 200, body: { total: 0, results: [] } }
+        : path.startsWith("/api/v2/ticket_fields")
+          ? { status: 200, body: ticketFieldsPayload }
+          : { status: 400, body: { description: CANARY } },
+    );
+    expect(lines).toContain("probe list_ticket_keys: skipped (no item)");
+    expect(lines).toContain("probe search_ticket_keys: skipped (no item)");
+    expect(lines).toContain(
+      "probe search_include_stats: total 0, 0 items, stats skipped (no item), credits ?",
+    );
   });
 });

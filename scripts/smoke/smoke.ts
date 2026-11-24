@@ -28,6 +28,7 @@
 // `runProbes` (`make smoke-probes`, T-022) is the second report: one line per
 // probe of the ticket list and search endpoints, with the same rules (GET
 // only, no value read from the account printed, a failure as its code).
+// A search total and a duration are printed as bands, not figures.
 // Exit code 0 when the run finished: a refused probe is a measurement.
 
 import type { Dispatcher } from "undici";
@@ -282,6 +283,30 @@ function keysPresent(item: unknown, keys: readonly string[]): string {
   return keys.map((key) => `${key} ${yes(key in record)}`).join(", ");
 }
 
+/** `keysPresent` of the first item, or `skipped (no item)` when there is none to read. */
+function firstKeys(
+  items: unknown[] | undefined,
+  keys: readonly string[],
+  pick = (item: unknown) => item,
+): string {
+  const first = items?.[0];
+  return first === undefined ? "skipped (no item)" : keysPresent(pick(first), keys);
+}
+
+/** A duration as a band, never the figure: `<2s`, `2-5s`, `5-10s`, `>10s`. */
+export function elapsedBand(ms: number): string {
+  if (ms < 2_000) return "<2s";
+  if (ms < 5_000) return "2-5s";
+  if (ms <= 10_000) return "5-10s";
+  return ">10s";
+}
+
+/** A search total as a band, never the figure: `0`, `1-300`, `>300`. */
+export function totalBand(total: number): string {
+  if (total <= 0) return "0";
+  return total <= 300 ? "1-300" : ">300";
+}
+
 function olderThan(items: unknown[], days: number, now: number): number {
   return items.filter((item) => {
     const created = isRecord(item) ? Date.parse(String(item.created_at)) : NaN;
@@ -303,7 +328,9 @@ function positiveId(value: unknown): number | undefined {
 }
 
 /** The first nested field's top-level and last-level API names, from a raw body. */
-function nestedNames(fields: unknown): { top: string; last: string } | undefined {
+function nestedNames(
+  fields: unknown,
+): { top: string; last: string; value: string | undefined } | undefined {
   if (!Array.isArray(fields)) return undefined;
   const field = fields.find((item) => isRecord(item) && item.type === "nested_field") as
     Record<string, unknown> | undefined;
@@ -318,12 +345,27 @@ function nestedNames(fields: unknown): { top: string; last: string } | undefined
     (best, level) => (best === undefined || level.level > best.level ? level : best),
     undefined,
   );
-  return { top: field.name, last: deepest?.name ?? field.name };
+  const value = isRecord(field.choices) ? Object.keys(field.choices)[0] : undefined;
+  return { top: field.name, last: deepest?.name ?? field.name, value };
+}
+
+/** The first custom dropdown's API name, from a raw body. */
+function dropdownName(fields: unknown): string | undefined {
+  if (!Array.isArray(fields)) return undefined;
+  const field = fields.find(
+    (item) => isRecord(item) && item.type === "custom_dropdown" && typeof item.name === "string",
+  ) as { name: string } | undefined;
+  return field?.name;
 }
 
 /** A name fit to stand in a search query unquoted; anything else is not probed. */
 function queryName(name: string): boolean {
   return /^[A-Za-z0-9_]{1,64}$/.test(name);
+}
+
+/** A choice fit to stand in single quotes in a query: no quote, no backslash. */
+function queryValue(value: string | undefined): value is string {
+  return value !== undefined && /^[A-Za-z0-9 _.-]{1,64}$/.test(value);
 }
 
 /** One GET; prints `probe <name>: fail <code>` or calls `ok` with the body's list. */
@@ -333,8 +375,14 @@ async function probe(
   request: PageRequest,
   out: Out,
   ok: (items: unknown[], body: unknown, headers: Headers) => string,
+  clock?: () => number,
 ): Promise<unknown[] | undefined> {
+  const started = clock?.();
   const result = await http.requestWithRetry({ ...request, method: "GET" });
+  const elapsed =
+    clock === undefined || started === undefined
+      ? ""
+      : `, elapsed ${elapsedBand(clock() - started)}`;
   if (!result.ok) {
     out(`probe ${name}: ${failure(result.error)}`);
     return undefined;
@@ -349,7 +397,9 @@ async function probe(
     out(`probe ${name}: not a list, credits ${credits(result.headers)}`);
     return undefined;
   }
-  out(`probe ${name}: ${ok(items, body, result.headers)}, credits ${credits(result.headers)}`);
+  out(
+    `probe ${name}: ${ok(items, body, result.headers)}${elapsed}, credits ${credits(result.headers)}`,
+  );
   return items;
 }
 
@@ -358,11 +408,10 @@ function page(items: unknown[], headers: Headers): string {
   return `${items.length} items, next ${yes(headers.get("link") !== null)}`;
 }
 
-/** `total n, over 300 yes|no, n items` for a search page. */
+/** `total 0|1-300|>300, n items` for a search page. */
 function searchPage(items: unknown[], body: unknown): string {
   const total = isRecord(body) && typeof body.total === "number" ? body.total : undefined;
-  const totalText =
-    total === undefined ? "total ?" : `total ${total}, over 300 ${yes(total > 300)}`;
+  const totalText = total === undefined ? "total ?" : `total ${totalBand(total)}`;
   return `${totalText}, ${items.length} items`;
 }
 
@@ -371,9 +420,14 @@ function search(query: string, extra: Record<string, string | number> = {}): Pag
 }
 
 /** The probes, one line each to `out`. Returns 0 when the run finished. */
-export async function runProbes(http: SmokeClient, out: Out, now = Date.now()): Promise<number> {
+export async function runProbes(
+  http: SmokeClient,
+  out: Out,
+  now = Date.now(),
+  clock: () => number = () => performance.now(),
+): Promise<number> {
   out(
-    "probes: GET only; counts, yes/no and credits, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only these lines into tracked files.",
+    "probes: GET only; counts, bands, yes/no and credits, no names or ids. Keep this output in docs/private/account-facts.md (gitignored); copy only these lines into tracked files.",
   );
   const old = (items: unknown[]) => `created over 31 days ago ${olderThan(items, 31, now)}`;
 
@@ -399,6 +453,16 @@ export async function runProbes(http: SmokeClient, out: Out, now = Date.now()): 
     },
     out,
     (items, _b, h) => `${page(items, h)}, ${old(items)}`,
+    clock,
+  );
+  // The same deep page in the default order (created_at desc): is depth or order slow?
+  await probe(
+    http,
+    "list_updated_since_365d_default_order",
+    { path: "/tickets", query: { per_page: 100, updated_since: instant(now - 365 * DAY_MS) } },
+    out,
+    (items, _b, h) => `${page(items, h)}, ${old(items)}`,
+    clock,
   );
   // GET /tickets documents no status parameter: refused, ignored or applied?
   await probe(
@@ -415,13 +479,10 @@ export async function runProbes(http: SmokeClient, out: Out, now = Date.now()): 
     "list_include_stats",
     { path: "/tickets", query: { per_page: 100, include: "stats" } },
     out,
-    (items, _b, h) => {
-      const first = items[0];
-      const stats = isRecord(first) ? first.stats : undefined;
-      return `${page(items, h)}, stats ${keysPresent(stats, STATS_KEYS)}`;
-    },
+    (items, _b, h) =>
+      `${page(items, h)}, stats ${firstKeys(items, STATS_KEYS, (item) => (isRecord(item) ? item.stats : undefined))}`,
   );
-  out(`probe list_ticket_keys: ${keysPresent(recent?.[0], TICKET_KEYS)}`);
+  out(`probe list_ticket_keys: ${firstKeys(recent, TICKET_KEYS)}`);
 
   // The requester filter of get_ticket's recent tickets, with and without updated_since.
   const firstTicket = recent?.[0];
@@ -466,16 +527,21 @@ export async function runProbes(http: SmokeClient, out: Out, now = Date.now()): 
   const open = await probe(http, "search_status_open", search("status:2"), out, (items, body) =>
     searchPage(items, body),
   );
-  out(`probe search_ticket_keys: ${keysPresent(open?.[0], TICKET_KEYS)}`);
+  out(`probe search_ticket_keys: ${firstKeys(open, TICKET_KEYS)}`);
+  // Spaced queries on fields search documents: a control for `+` as a space.
+  await probe(http, "search_spaced_or", search("status:2 OR status:3"), out, (items, body) =>
+    searchPage(items, body),
+  );
+  await probe(http, "search_spaced_and", search("status:2 AND priority:1"), out, (items, body) =>
+    searchPage(items, body),
+  );
   await probe(
     http,
     "search_include_stats",
     search("status:2", { include: "stats" }),
     out,
-    (items, body) => {
-      const first = items[0];
-      return `${searchPage(items, body)}, stats ${keysPresent(isRecord(first) ? first.stats : undefined, STATS_KEYS)}`;
-    },
+    (items, body) =>
+      `${searchPage(items, body)}, stats ${firstKeys(items, STATS_KEYS, (item) => (isRecord(item) ? item.stats : undefined))}`,
   );
   const all = search("created_at:>'2000-01-01'");
   await probe(http, "search_cap_page_1", all, out, (items, body) => searchPage(items, body));
@@ -496,19 +562,45 @@ export async function runProbes(http: SmokeClient, out: Out, now = Date.now()): 
 
   // field:null on the nested field (uncategorized's default rule).
   const fields = await http.requestWithRetry({ path: "/ticket_fields" });
-  const nested = fields.ok ? nestedNames(fields.body) : undefined;
   if (!fields.ok) {
     out(`probe nested_field: ${failure(fields.error)}`);
-  } else if (nested === undefined || !queryName(nested.top) || !queryName(nested.last)) {
+    out("probes: done");
+    return 0;
+  }
+  const custom = (item: unknown) =>
+    isRecord(item) && isRecord(item.custom_fields) ? item.custom_fields : {};
+  const empty = (name: string) => (items: unknown[], body: unknown) => {
+    const blank = items.every((item) => {
+      const value = custom(item)[name];
+      return value === null || value === undefined || value === "";
+    });
+    return `${searchPage(items, body)}, all empty ${yes(blank)}`;
+  };
+  // A control: `<dropdown>:null` on a plain custom dropdown, which search documents.
+  const dropdown = dropdownName(fields.body);
+  if (dropdown === undefined || !queryName(dropdown)) {
+    out("probe search_null_dropdown: skipped (no custom dropdown with a plain API name)");
+  } else {
+    await probe(http, "search_null_dropdown", search(`${dropdown}:null`), out, empty(dropdown));
+  }
+  const nested = nestedNames(fields.body);
+  if (nested === undefined || !queryName(nested.top) || !queryName(nested.last)) {
     out("probe nested_field: skipped (no nested field with a plain API name)");
   } else {
-    const empty = (name: string) => (items: unknown[], body: unknown) => {
-      const blank = items.every((item) => {
-        const custom = isRecord(item) && isRecord(item.custom_fields) ? item.custom_fields : {};
-        return custom[name] === null || custom[name] === undefined || custom[name] === "";
-      });
-      return `${searchPage(items, body)}, all empty ${yes(blank)}`;
-    };
+    // A control: the nested field's top level asked for one of its own values.
+    const value = nested.value;
+    if (!queryValue(value)) {
+      out("probe search_nested_top_value: skipped (no top-level choice fit for a query)");
+    } else {
+      await probe(
+        http,
+        "search_nested_top_value",
+        search(`${nested.top}:'${value}'`),
+        out,
+        (items, body) =>
+          `${searchPage(items, body)}, all match ${yes(items.every((item) => custom(item)[nested.top] === value))}`,
+      );
+    }
     await probe(
       http,
       "search_null_nested_top",
