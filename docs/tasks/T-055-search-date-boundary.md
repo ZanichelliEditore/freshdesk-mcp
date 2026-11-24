@@ -69,9 +69,17 @@ green.
 
 ## Done
 - Commits: `4f466de` (status), `31428d7` (probes), `8ed5436` (measured
-  boundary, exact date queries), and `T-055: full review fixes: ...`
-  (this round's commit). Built by a builder agent under the orchestrator (owner's
-  instruction of 2026-11-23); the orchestrator ran the probes.
+  boundary, exact date queries), `1fae0e3` (full review fixes), and
+  `T-055: scoped list A wording, done`. Built by a builder agent under the
+  orchestrator (owner's instruction of 2026-11-23); the orchestrator ran
+  the probes.
+- Scoped review round (2026-11-24): security list A empty; code list A one
+  item, A1 (`search_tickets`' description extended the measured rule to
+  every date field, while only `created_at` was measured), fixed as wording
+  only (the rule on `created_at`, "widen the range by a day" for any other
+  date field) and not reviewed again (rule 9). Lists B: `dayBefore`
+  boundary tests added (leap day, month end); the rest parked in
+  `docs/improvements.md`, entry `1fae0e3`.
 - Probes: `make smoke-date-probes` (`runDateProbes` in
   `scripts/smoke/smoke.ts`, cli `--dates`); tests in
   `test/smoke.test.ts::runDateProbes`, `::probeDays`, `::the date probes'

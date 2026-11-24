@@ -240,6 +240,16 @@ describe("buildTicketQuery: the nine filters", () => {
     });
   });
 
+  it.each([
+    ["2024-03-01T05:00:00Z", "2024-02-29"],
+    ["2026-03-01T05:00:00Z", "2026-02-28"],
+    ["2026-01-01T00:00:00Z", "2025-12-31"],
+  ])("updated_since %s beside a search asks updated_at from %s (the day before)", (since, day) => {
+    expect(build({ status: "Open", updated_since: since })).toMatchObject({
+      query: `status:2 AND updated_at:>'${day}'`,
+    });
+  });
+
   it("uncategorized alone is the list endpoint with the local check", () => {
     expect(build({ uncategorized: true })).toEqual({
       ok: true,

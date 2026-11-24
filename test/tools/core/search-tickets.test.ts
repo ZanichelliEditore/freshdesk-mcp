@@ -229,9 +229,14 @@ describe("search_tickets: the listing", () => {
     expect(description).toContain(`${MAX_QUERY_LENGTH - 2} characters`);
     expect(description).toContain("has_more");
     // T-055, measured 2026-11-24: the day given is kept, and it is the UTC day.
-    expect(description).toContain("keep the day given (inclusive)");
-    expect(description).toContain("the day is the UTC day");
-    expect(description).not.toMatch(/widen/i);
+    expect(description).toContain(
+      "on created_at, :> and :< keep the day given (inclusive) and the day is the UTC day (measured 2026-11-24)",
+    );
+    expect(description).toContain(
+      "for any other date field (updated_at, due_by, fr_due_by, custom dates) the rule is not measured, so widen the range by a day",
+    );
+    // Widening is advised for the unmeasured fields only.
+    expect(description?.match(/widen/gi)).toHaveLength(1);
   });
 
   it("its input schema has no zod default or transform", () => {
