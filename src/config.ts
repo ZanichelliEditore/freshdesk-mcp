@@ -70,7 +70,11 @@ const teamSchema = z.strictObject({
       z.strictObject({
         /** Text telling the model what the field means. */
         meaning: z.string().min(1).optional(),
-        /** Left out of every output (personal data). */
+        /**
+         * Left out of a ticket's detail output (personal data). Not an access
+         * control: not applied to the schema tool, to queries or to input, and
+         * not guaranteed in rows, counts or exports (SPEC §7.3).
+         */
         hidden: z.boolean().default(false),
       }),
     )
@@ -93,6 +97,8 @@ const teamSchema = z.strictObject({
       bulk_cap: z.int().positive().default(50),
       /** How long the ticket-field schema is cached, seconds. */
       schema_ttl_s: z.int().positive().default(3600),
+      /** Most API calls one tool call may estimate before it needs `confirm: true` (SPEC §7.2). */
+      call_budget: z.int().positive().default(250),
     })
     .refine((limits) => limits.floor_pct <= limits.reserve_pct, {
       path: ["floor_pct"],

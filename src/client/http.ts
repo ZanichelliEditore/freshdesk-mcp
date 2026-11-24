@@ -188,6 +188,16 @@ export class HttpClient {
   }
 
   /**
+   * The limiter's reserve refusal, read without a call (`RateLimiter`'s
+   * `reserveRefusal`): the one view of the limiter's state a tool gets, so
+   * an operation's budget check (src/tools/budget.ts) can refuse below the
+   * reserve before it starts. Read-only: it takes no token.
+   */
+  reserveRefusal(): FreshdeskError | undefined {
+    return this.#limiter.reserveRefusal();
+  }
+
+  /**
    * Throws a `TypeError` only for what the calling code got wrong: a `path`
    * that is not a template, a parameter the template names and `params`
    * lacks, a `body` that JSON cannot carry. Values (a parameter's, a URL's)

@@ -125,7 +125,14 @@ describe("team config: defaults", () => {
     toolsets: ["core"],
     fields: {},
     forward_allow_list: [],
-    limits: { reserve_pct: 20, floor_pct: 5, pacing_rps: 2, bulk_cap: 50, schema_ttl_s: 3600 },
+    limits: {
+      reserve_pct: 20,
+      floor_pct: 5,
+      pacing_rps: 2,
+      bulk_cap: 50,
+      schema_ttl_s: 3600,
+      call_budget: 250,
+    },
   };
 
   it("applies every default with no team file", () => {
@@ -152,7 +159,14 @@ describe("team config: defaults", () => {
       },
       uncategorised_fields: ["cf_area", "cf_topic"],
       forward_allow_list: ["@example.com", "legal@example.org"],
-      limits: { reserve_pct: 30, floor_pct: 10, pacing_rps: 0.5, bulk_cap: 25, schema_ttl_s: 60 },
+      limits: {
+        reserve_pct: 30,
+        floor_pct: 10,
+        pacing_rps: 0.5,
+        bulk_cap: 25,
+        schema_ttl_s: 60,
+        call_budget: 1000,
+      },
       export_dir: "/var/tmp/exports",
     };
     expect(loadTeam(team).team).toEqual({
@@ -201,6 +215,8 @@ describe("team config: errors name the file and the path", () => {
     ["no toolset at all", { toolsets: [] }, "toolsets"],
     ["a bulk cap of zero", { limits: { bulk_cap: 0 } }, "limits.bulk_cap"],
     ["a fractional bulk cap", { limits: { bulk_cap: 2.5 } }, "limits.bulk_cap"],
+    ["a call budget of zero", { limits: { call_budget: 0 } }, "limits.call_budget"],
+    ["a fractional call budget", { limits: { call_budget: 2.5 } }, "limits.call_budget"],
     ["a reserve over 100 %", { limits: { reserve_pct: 101 } }, "limits.reserve_pct"],
     ["a negative floor", { limits: { floor_pct: -1 } }, "limits.floor_pct"],
     ["zero pacing", { limits: { pacing_rps: 0 } }, "limits.pacing_rps"],
@@ -290,5 +306,6 @@ describe("examples/team-config.example.json", () => {
       "uncategorised_fields",
     ]);
     expect(team.forward_allow_list.every((entry) => entry.endsWith("example.com"))).toBe(true);
+    expect(team.limits.call_budget).toBe(250);
   });
 });

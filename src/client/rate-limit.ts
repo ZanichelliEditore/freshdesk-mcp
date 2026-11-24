@@ -9,6 +9,8 @@
 //   - Every allowed call takes one token from the local count; the next
 //     response's headers replace that count with the account's real one.
 //   - Reserve: below `reserve_pct` of Total, `expensive` is refused.
+//     `reserveRefusal()` reads that refusal without a call, so an operation
+//     can be refused before it starts (src/tools/budget.ts).
 //   - Floor: below `floor_pct` of Total, at zero, and after a 429, every call
 //     waits for the window's end, or is refused when that is too far.
 //   - Pacing: `expensive` calls start at most `pacing_rps` per second.
@@ -47,7 +49,9 @@ export interface RateLimitOptions {
   pacing_rps: number;
 }
 
-export type Acquired = { ok: true } | { ok: false; error: FreshdeskError };
+type Refused = { ok: false; error: FreshdeskError };
+
+export type Acquired = { ok: true } | Refused;
 
 interface HeaderReader {
   get(name: string): string | null;
@@ -107,12 +111,7 @@ export class RateLimiter {
         continue;
       }
       if (cost === "expensive") {
-        if (this.#below(this.#options.reserve_pct)) {
-          return refuse(
-            `${this.#left()}: below the reserve, expensive operations are refused`,
-            windowEnd - now,
-          );
-        }
+        if (this.#below(this.#options.reserve_pct)) return this.#belowReserve(windowEnd - now);
         if (now < this.#nextExpensiveAt) {
           if (tooFar(this.#nextExpensiveAt)) {
             return refuse(
@@ -128,6 +127,20 @@ export class RateLimiter {
       this.#remaining -= 1;
       return { ok: true };
     }
+  }
+
+  /**
+   * The refusal an `expensive` call meets now for being below the reserve, or
+   * `undefined` when there is none. Read-only: it takes no token, starts no
+   * pacing and changes no state; a window already ended counts as fresh, as
+   * `acquire` would take it. Floor, 429 hold and pacing waits stay
+   * `acquire`'s.
+   */
+  reserveRefusal(): FreshdeskError | undefined {
+    const now = Date.now();
+    if (this.#windowEnd === undefined || now >= this.#windowEnd) return undefined;
+    if (!this.#below(this.#options.reserve_pct)) return undefined;
+    return this.#belowReserve(this.#windowEnd - now).error;
   }
 
   /**
@@ -172,12 +185,16 @@ export class RateLimiter {
     return this.#remaining < (this.#total * pct) / 100;
   }
 
+  #belowReserve(waitMs: number): Refused {
+    return refuse(`${this.#left()}: below the reserve, expensive operations are refused`, waitMs);
+  }
+
   #left(): string {
     return `${this.#remaining} of ${this.#total} API calls left in this window`;
   }
 }
 
-function refuse(why: string, waitMs: number): Acquired {
+function refuse(why: string, waitMs: number): Refused {
   const seconds = Math.ceil(waitMs / 1000);
   return {
     ok: false,

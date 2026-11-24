@@ -57,7 +57,14 @@ function ctxWith(uncategorised_fields?: string[]): QueryContext {
     toolsets: ["core"],
     fields: {},
     forward_allow_list: [],
-    limits: { reserve_pct: 20, floor_pct: 5, pacing_rps: 2, bulk_cap: 50, schema_ttl_s: 3600 },
+    limits: {
+      reserve_pct: 20,
+      floor_pct: 5,
+      pacing_rps: 2,
+      bulk_cap: 50,
+      schema_ttl_s: 3600,
+      call_budget: 250,
+    },
     ...(uncategorised_fields === undefined ? {} : { uncategorised_fields }),
   } as TeamConfig;
   return { team };

@@ -160,6 +160,30 @@ describe("reserve", () => {
   });
 });
 
+describe("reserveRefusal: the reserve, read without a call", () => {
+  it("below the reserve gives the refusal the next expensive acquire gives", async () => {
+    const limiter = limiterAt(100, 19);
+    vi.advanceTimersByTime(12_500);
+    const read = limiter.reserveRefusal();
+    expect(read).toMatchObject({ code: "rate_limited", retry_after_s: WINDOW_S - 12 });
+    expect(read).toEqual(refusal(await limiter.acquire("expensive")));
+  });
+
+  it("gives none at the reserve, with no headers seen, and once the window has ended", () => {
+    expect(limiterAt(100, 20).reserveRefusal()).toBeUndefined();
+    expect(new RateLimiter(limits).reserveRefusal()).toBeUndefined();
+    const stale = limiterAt(100, 19);
+    vi.advanceTimersByTime(WINDOW_S * 1000);
+    expect(stale.reserveRefusal()).toBeUndefined();
+  });
+
+  it("takes no token and starts no pacing", async () => {
+    const limiter = limiterAt(100, 20);
+    for (let i = 0; i < 5; i++) expect(limiter.reserveRefusal()).toBeUndefined();
+    expect(await settlesNow(limiter.acquire("expensive"))).toBe(true);
+  });
+});
+
 describe("floor", () => {
   const windowMs = WINDOW_S * 1000;
   const boundMs = MAX_WAIT_S * 1000;
