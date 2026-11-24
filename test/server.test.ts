@@ -190,6 +190,7 @@ describe("createServer: enabled toolsets come from the team file only", () => {
       "get_ticket_schema",
       "list_agents",
       "list_groups",
+      "get_ticket",
     ]);
   });
 
