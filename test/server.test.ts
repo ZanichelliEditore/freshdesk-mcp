@@ -198,6 +198,8 @@ describe("createServer: enabled toolsets come from the team file only", () => {
       "search_solutions",
       "get_solution_article",
       "list_solution_tree",
+      "list_canned_responses",
+      "get_canned_response",
     ]);
   });
 

@@ -7,6 +7,7 @@ import { getTicketSchema } from "./get-ticket-schema.js";
 import { listAgentsTool } from "./list-agents.js";
 import { listGroupsTool } from "./list-groups.js";
 import { listTicketsTool } from "./list-tickets.js";
+import { getCannedResponseTool, listCannedResponsesTool } from "./canned.js";
 import { searchTicketsTool } from "./search-tickets.js";
 import { getSolutionArticleTool, listSolutionTreeTool, searchSolutionsTool } from "./solutions.js";
 import { triageQueueTool } from "./triage-queue.js";
@@ -23,4 +24,6 @@ export const CORE_TOOLS: readonly Tool[] = Object.freeze([
   searchSolutionsTool,
   getSolutionArticleTool,
   listSolutionTreeTool,
+  listCannedResponsesTool,
+  getCannedResponseTool,
 ]);
