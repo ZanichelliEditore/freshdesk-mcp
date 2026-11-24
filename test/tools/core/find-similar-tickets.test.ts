@@ -407,6 +407,20 @@ describe("find_similar_tickets: the requests", () => {
     expect(output(await run(session)).items.map((item) => item.id)).toEqual([edge.id]);
   });
 
+  it("a ticket updated 1 ms before the window's start is excluded", async () => {
+    const { session } = await warm();
+    const before = ticket(5014, {
+      requester_id: REQUESTER,
+      updated_at: "2025-12-11T11:59:59.999Z",
+    });
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER), [before]);
+    reply(listPath("company_id", COMPANY), []);
+    reply(searchPath(), found([]));
+    expect(output(await run(session)).items).toEqual([]);
+    expect(sent()).toBe(4);
+  });
+
   it("a ticket with no company sends no company request", async () => {
     const { session } = await warm();
     reply(viewPath(SOURCE_ID), { ...SOURCE, company_id: null });
@@ -581,6 +595,20 @@ describe("find_similar_tickets: candidates and their order", () => {
       [A.id, ["requester"]],
     ]);
     expect(paths()).not.toContain(listPath("company_id", COMPANY));
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("hidden requester, no company and no category: only the view is sent, no result", async () => {
+    const { session } = await warm({ fields: { requester: { hidden: true } } });
+    reply(viewPath(SOURCE_ID), {
+      ...SOURCE,
+      company_id: null,
+      custom_fields: { cf_kit: null, cf_family: null, cf_model: null },
+    });
+    const result = output(await run(session));
+    expect(result.items).toEqual([]);
+    expect(paths()).toEqual([viewPath(SOURCE_ID)]);
+    expect(result.api_calls_used).toBe(1);
   });
 
   it("a team hiding the category field: matching still runs and same says category (hidden is not guaranteed)", async () => {
