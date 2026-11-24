@@ -252,7 +252,13 @@ page took about 8 s once and under 2 s twice (measured 2026-11-24): the
 latency varies, so the bound is the deadline, not a page count assumed from
 one sample. Under one 30 s deadline for the whole call, a scan may get as
 few as 3 slow pages; with `paginate`'s 30 s per page, the budget is the
-bound. Which one a scan runs under is open for T-027, T-036 and T-037.
+bound. Which one a scan runs under is open for T-036 and T-037.
+
+`list_tickets` (T-027, 2026-11-24) runs its `uncategorized` scan under the
+one 30 s deadline of the call, and so that the deadline does not cut a page
+it starts none once 15 s of it are spent; it also stops at 10 list pages a
+call (1,000 tickets read) or once it holds 30 rows, and gives `next_cursor`
+for the next list page. A failed page fails the call.
 
 ## Cost class for the limiter
 
@@ -265,10 +271,12 @@ signals and `get_ticket` (its recent tickets included), each a bounded
 number of pages. A request with `include=stats` costs 2 credits (measured
 2026-11-24, on the list); a plain one 1.
 
-`searchTickets` and `listTickets` send every request as `cheap` (T-024,
-T-023). T-036 and T-037 must add an optional cost argument to both, so the
-pages of `count_tickets` and `export_tickets` go to the limiter as
-`expensive`; it is not added now.
+`searchTickets` sends every request as `cheap` (T-024). `listTickets`
+(T-023) does too unless its caller gives the optional cost argument (T-027,
+2026-11-24: `list_tickets` gives `expensive` for its `uncategorized` scan).
+T-036 and T-037 must give it for their scans and add the same argument to
+`searchTickets`, so the pages of `count_tickets` and `export_tickets` go to
+the limiter as `expensive`.
 
 ## Parameters
 
@@ -324,7 +332,7 @@ bears on:
 
 | Question | Why open | Bears on |
 |---|---|---|
-| Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-027, T-036, T-037 |
+| Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
 | `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 | Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three | T-029 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |

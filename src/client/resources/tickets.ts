@@ -29,10 +29,15 @@
 // `attempts` is the requests sent, retries included: what a tool reports as
 // API calls. `deadline` (epoch ms, optional) is the caller's: see
 // `requestWithRetry` and `paginate`.
+//
+// Cost class: `cheap`, except a `listTickets` page whose caller gives
+// `expensive` (a scan: docs/architecture/ticket-queries.md, "Cost class for
+// the limiter").
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
 import type { HttpClient } from "../http.js";
+import type { CostClass } from "../rate-limit.js";
 import { listAll, type ListResult, PER_PAGE } from "./list-all.js";
 
 /** A ticket as a list, a view and a search result carry it. */
@@ -52,6 +57,9 @@ const conversation = z.looseObject({
   incoming: z.boolean(),
   private: z.boolean(),
 });
+
+/** Freshdesk returns no page of `GET /tickets` past this one (30,000 tickets at 100 a page). */
+export const MAX_LIST_PAGE = 300;
 
 export type Ticket = z.infer<typeof ticket>;
 export type Conversation = z.infer<typeof conversation>;
@@ -101,6 +109,7 @@ export async function listTickets(
   http: HttpClient,
   options: ListTicketsOptions = {},
   deadline?: number,
+  cost?: CostClass,
 ): Promise<ListTicketsResult> {
   const { per_page, page, order_by, order_type, include, requester_id, company_id } = options;
   if (per_page !== undefined && !(isPositiveInt(per_page) && per_page <= PER_PAGE)) {
@@ -117,7 +126,11 @@ export async function listTickets(
     const value = options[name];
     if (value !== undefined) query[name] = value;
   }
-  const pages = http.paginate({ path: "/tickets", query }, { pages: 1 }, deadline);
+  const pages = http.paginate(
+    { path: "/tickets", query, ...(cost === undefined ? {} : { cost }) },
+    { pages: 1 },
+    deadline,
+  );
   let tickets: Ticket[] = [];
   for (;;) {
     // By hand, not `for await`: the return value is where `truncated` is.

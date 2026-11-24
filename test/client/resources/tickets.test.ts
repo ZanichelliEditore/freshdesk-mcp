@@ -240,6 +240,47 @@ describe("listTickets: the page", () => {
   });
 });
 
+describe("listTickets: the cost class", () => {
+  const TICKETS = "/api/v2/tickets";
+
+  /** One page whose response says 10 of 100 calls are left: under the 20% reserve. */
+  async function drain() {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: (path: string) => path.split("?")[0] === TICKETS, method: "GET" })
+      .reply(200, ticketPage, {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await listTickets(http));
+  }
+
+  it("is cheap unless given: a page is sent below the reserve", async () => {
+    await drain();
+    reply(TICKETS, 200, ticketPage);
+
+    ok(await listTickets(http, { page: 2 }));
+
+    expect(urls()).toHaveLength(2);
+  });
+
+  it("given expensive, the page goes to the limiter as expensive: refused below the reserve", async () => {
+    await drain();
+
+    const error = failure(await listTickets(http, { page: 2 }, undefined, "expensive"));
+
+    expect(error.code).toBe("rate_limited");
+    expect(urls()).toHaveLength(1);
+  });
+
+  it("given expensive above the reserve, the page is sent", async () => {
+    reply(TICKETS, 200, ticketPage);
+
+    ok(await listTickets(http, {}, undefined, "expensive"));
+
+    expect(onlyQuery()).toEqual({ per_page: "100" });
+  });
+});
+
 describe("listTickets: a malformed item", () => {
   const cases: [string, (page: Record<string, unknown>[]) => unknown][] = [
     [

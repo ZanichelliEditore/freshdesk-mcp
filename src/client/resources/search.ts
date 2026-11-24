@@ -33,6 +33,8 @@ import { type Ticket, ticket } from "./tickets.js";
 
 /** Freshdesk's limit on the query, counted here with its two quotes. */
 export const MAX_QUERY_LENGTH = 512;
+/** Results on a full page of search (documented; a page of 30 measured 2026-11-24). */
+export const SEARCH_PER_PAGE = 30;
 /** Search refuses any page past this one. */
 export const MAX_SEARCH_PAGE = 10;
 
