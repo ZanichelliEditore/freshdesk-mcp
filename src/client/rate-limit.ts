@@ -134,7 +134,9 @@ export class RateLimiter {
    * `undefined` when there is none. Read-only: it takes no token, starts no
    * pacing and changes no state; a window already ended counts as fresh, as
    * `acquire` would take it. Floor, 429 hold and pacing waits stay
-   * `acquire`'s.
+   * `acquire`'s. Below the floor it still gives the reserve refusal, where
+   * `acquire` would apply the floor rule first (wait for the window or
+   * refuse): it errs closed.
    */
   reserveRefusal(): FreshdeskError | undefined {
     const now = Date.now();

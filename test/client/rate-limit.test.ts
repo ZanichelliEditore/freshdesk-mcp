@@ -180,7 +180,9 @@ describe("reserveRefusal: the reserve, read without a call", () => {
   it("takes no token and starts no pacing", async () => {
     const limiter = limiterAt(100, 20);
     for (let i = 0; i < 5; i++) expect(limiter.reserveRefusal()).toBeUndefined();
-    expect(await settlesNow(limiter.acquire("expensive"))).toBe(true);
+    const acquired = limiter.acquire("expensive");
+    expect(await settlesNow(acquired)).toBe(true);
+    expect((await acquired).ok).toBe(true);
   });
 });
 

@@ -51,26 +51,45 @@ async function run(context: AppContext) {
 }
 
 describe("estimateCalls", () => {
-  it("2,000 tickets with conversations estimate 2,020 calls", () => {
-    expect(estimateCalls({ tickets: 2000, conversations: true })).toBe(2020);
+  it("2,000 tickets at 100 a page with conversations estimate 2,020 calls", () => {
+    expect(estimateCalls({ tickets: 2000, pageSize: 100, conversations: true })).toBe(2020);
   });
 
-  it("counts one list page per 100 tickets, and one call per ticket for conversations", () => {
-    expect(estimateCalls({ tickets: 2000, conversations: false })).toBe(20);
-    expect(estimateCalls({ tickets: 0, conversations: false })).toBe(0);
-    expect(estimateCalls({ tickets: 0, conversations: true })).toBe(0);
-    expect(estimateCalls({ tickets: 1, conversations: false })).toBe(1);
-    expect(estimateCalls({ tickets: 1, conversations: true })).toBe(2);
-    expect(estimateCalls({ tickets: 100, conversations: false })).toBe(1);
-    expect(estimateCalls({ tickets: 101, conversations: false })).toBe(2);
+  it("counts one page per pageSize tickets, one call per ticket for conversations, and the probe", () => {
+    expect(estimateCalls({ tickets: 2000, pageSize: 100, conversations: false })).toBe(20);
+    expect(estimateCalls({ tickets: 300, pageSize: 30, conversations: false })).toBe(10);
+    expect(estimateCalls({ tickets: 245, pageSize: 30, conversations: true, probe: 1 })).toBe(255);
+    expect(estimateCalls({ tickets: 0, pageSize: 100, conversations: false })).toBe(0);
+    expect(estimateCalls({ tickets: 0, pageSize: 100, conversations: true, probe: 1 })).toBe(1);
+    expect(estimateCalls({ tickets: 1, pageSize: 100, conversations: false })).toBe(1);
+    expect(estimateCalls({ tickets: 1, pageSize: 100, conversations: true })).toBe(2);
+    expect(estimateCalls({ tickets: 100, pageSize: 100, conversations: false })).toBe(1);
+    expect(estimateCalls({ tickets: 101, pageSize: 100, conversations: false })).toBe(2);
   });
 
   it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
     "refuses a ticket count of %s",
     (tickets) => {
-      expect(() => estimateCalls({ tickets, conversations: false })).toThrow(RangeError);
+      expect(() => estimateCalls({ tickets, pageSize: 100, conversations: false })).toThrow(
+        RangeError,
+      );
     },
   );
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a page size of %s",
+    (pageSize) => {
+      expect(() => estimateCalls({ tickets: 10, pageSize, conversations: false })).toThrow(
+        RangeError,
+      );
+    },
+  );
+
+  it.each([-1, 1.5, Number.NaN])("refuses a probe of %s", (probe) => {
+    expect(() =>
+      estimateCalls({ tickets: 10, pageSize: 100, conversations: false, probe }),
+    ).toThrow(RangeError);
+  });
 });
 
 describe("checkBudget: the per-call budget", () => {
@@ -109,10 +128,28 @@ describe("checkBudget: the per-call budget", () => {
     expect(refused?.message).toContain("10");
   });
 
-  it("refuses an estimate that is not a number without confirm (fails closed)", () => {
-    expect(checkBudget(contextWith(), Number.NaN, undefined)).toMatchObject({
-      code: "validation",
-    });
+  it.each([
+    ["NaN", Number.NaN],
+    ["-1", -1],
+    ["1.5", 1.5],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["null", null],
+    ['"5"', "5"],
+  ])("refuses a malformed estimate (%s) with and without confirm (fails closed)", (_what, bad) => {
+    const context = contextWith();
+    for (const confirm of [undefined, false, true]) {
+      expect(checkBudget(context, bad as unknown as number, confirm)).toMatchObject({
+        code: "validation",
+        http_status: null,
+        retryable: false,
+      });
+    }
+    expect(sent()).toBe(0);
+  });
+
+  it("lets an estimate of 0 run", () => {
+    expect(checkBudget(contextWith(), 0, undefined)).toBeUndefined();
   });
 });
 
