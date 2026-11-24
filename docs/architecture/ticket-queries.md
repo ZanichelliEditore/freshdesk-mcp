@@ -248,6 +248,11 @@ signals and `get_ticket` (its recent tickets included), each a bounded
 number of pages. A request with `include=stats` costs 2 credits (measured
 2026-11-24, on the list); a plain one 1.
 
+`searchTickets` and `listTickets` send every request as `cheap` (T-024,
+T-023). T-036 and T-037 must add an optional cost argument to both, so the
+pages of `count_tickets` and `export_tickets` go to the limiter as
+`expensive`; it is not added now.
+
 ## Parameters
 
 `listTickets` (T-023), on `GET /tickets`, sends:
@@ -272,7 +277,10 @@ in double quotes, ≤ 512 characters, percent-encoded) and `page` (1–10). No
 `include` (refused, measured 2026-11-24). The client encodes the query with
 `URLSearchParams`, a space as `+`; search reads it as a space with `OR` and
 with `AND` (measured 2026-11-24). A nested field cannot be queried
-(measured 2026-11-24): T-043 must not build a search condition on one.
+(measured 2026-11-24): T-043 must not build a search condition on one. `searchTickets` refuses a query
+containing `"` or `\` before sending (`validation`, nothing sent; T-024),
+so T-043 must quote values with single quotes and refuse or drop `"` and
+`\` in values itself.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s two stats signals.

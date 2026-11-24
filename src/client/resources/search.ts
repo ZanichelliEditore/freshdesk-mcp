@@ -6,7 +6,8 @@
 //     puts them in double quotes and `HttpClient` percent-encodes them with
 //     `URLSearchParams`, a space as `+` (measured to work, 2026-11-24).
 //   - `query` is a non-blank string with no double quote (it would end the
-//     quoted query), at most MAX_QUERY_LENGTH characters once quoted:
+//     quoted query) and no backslash (it could escape one), at most
+//     MAX_QUERY_LENGTH UTF-16 units once quoted:
 //     Freshdesk documents 512, and counting the quotes is the cautious
 //     reading. `page` is a whole number 1–10: page 11 is refused by
 //     Freshdesk (measured 2026-11-24). Any other value, whatever a cast let
@@ -50,7 +51,12 @@ export async function searchTickets(
   page = 1,
   deadline?: number,
 ): Promise<SearchResult> {
-  if (typeof query !== "string" || query.trim() === "" || query.includes('"')) {
+  if (
+    typeof query !== "string" ||
+    query.trim() === "" ||
+    query.includes('"') ||
+    query.includes("\\")
+  ) {
     return refused("query");
   }
   const quoted = `"${query}"`;

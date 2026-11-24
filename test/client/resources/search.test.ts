@@ -104,6 +104,25 @@ describe("searchTickets: the request", () => {
 
     expect(urls()[0]!.searchParams.get("query")).toBe(`"${query}"`);
   });
+  it("sends a non-ASCII character UTF-8 percent-encoded", async () => {
+    reply(200, searchPage);
+
+    ok(await searchTickets(http, "tag:'caffè'"));
+
+    expect(urls()[0]!.href).toBe(`${ORIGIN}${SEARCH}?query=%22tag%3A%27caff%C3%A8%27%22&page=1`);
+  });
+
+  it("counts a character outside the BMP as two UTF-16 units: 255 of them fit", async () => {
+    // Two units each: 255 of them quoted is 512 units.
+    expect("🦊").toHaveLength(2);
+    reply(200, searchPage);
+
+    ok(await searchTickets(http, "🦊".repeat(255)));
+  });
+
+  it("refuses 256 characters outside the BMP (514 units quoted) with nothing sent", async () => {
+    expectRefused(await searchTickets(http, "🦊".repeat(256)), "query");
+  });
 });
 
 describe("searchTickets: the result", () => {
@@ -166,6 +185,7 @@ describe("searchTickets: values refused before sending", () => {
     ["empty", ""],
     ["blank", "   "],
     ["containing a double quote", `tag:"x"`],
+    ["containing a backslash", "tag:'a\\b'"],
     ["not a string", 42],
     ["an array", ["status:2"]],
     ["undefined", undefined],
