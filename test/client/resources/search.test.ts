@@ -247,3 +247,66 @@ describe("searchTickets: Freshdesk's answers", () => {
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
 });
+
+describe("searchTickets: the cost class", () => {
+  /** One answered page whose response says 10 of 100 calls are left: under the 20% reserve. */
+  async function drain() {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: (path: string) => path.split("?")[0] === SEARCH, method: "GET" })
+      .reply(200, searchPage, {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await searchTickets(http, "status:2"));
+  }
+
+  it("is cheap unless given: a page is sent below the reserve", async () => {
+    await drain();
+    reply(200, searchPage);
+
+    ok(await searchTickets(http, "status:2", 2));
+
+    expect(urls()).toHaveLength(2);
+  });
+
+  it("given expensive, the page goes to the limiter as expensive: refused below the reserve", async () => {
+    await drain();
+
+    const refusedPage = await searchTickets(http, "status:2", 2, undefined, "expensive");
+
+    expect(failure(refusedPage)).toMatchObject({ code: "rate_limited", http_status: null });
+    expect(urls()).toHaveLength(1);
+  });
+
+  it("given expensive above the reserve, the page is sent", async () => {
+    reply(200, searchPage);
+
+    ok(await searchTickets(http, "status:2", 1, undefined, "expensive"));
+
+    expect(urls()).toHaveLength(1);
+  });
+});
+
+describe("searchTickets: a failure's attempts", () => {
+  it("a failed page says how many requests it took: 0 when the limiter refused it", async () => {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: (path: string) => path.split("?")[0] === SEARCH, method: "GET" })
+      .reply(200, searchPage, {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await searchTickets(http, "status:2"));
+
+    expect(await searchTickets(http, "status:2", 2, undefined, "expensive")).toMatchObject({
+      ok: false,
+      attempts: 0,
+    });
+
+    reply(400, { errors: [] });
+    expect(await searchTickets(http, "status:2")).toMatchObject({ ok: false, attempts: 1 });
+  });
+
+  it("a page refused before sending has no attempts key", async () => {
+    expect(await searchTickets(http, "status:2", 11)).not.toHaveProperty("attempts");
+  });
+});

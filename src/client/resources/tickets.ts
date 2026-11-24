@@ -12,6 +12,9 @@
 //     `stats` is passed through unchecked: its reader checks it.
 //   - `listConversations`: every page of `GET /tickets/{id}/conversations`,
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`.
+//   - `listConversationPage`: its first page alone (the oldest 100), and
+//     whether another exists; for a caller bounded to one request a ticket
+//     (`find_similar_tickets`' excerpt, T-030).
 //
 // A ticket needs a whole-number `id`, `requester_id`, `status` and
 // `priority`, a string `subject` and a `custom_fields` object; a conversation
@@ -31,12 +34,13 @@
 // API calls. `deadline` (epoch ms, optional) is the caller's: see
 // `requestWithRetry` and `paginate`.
 //
-// Cost class: `cheap`, except a `listTickets` page or a `getTicket` view
-// whose caller gives `expensive` (a scan, or `triage_queue`'s view per row:
+// Cost class: `cheap`, except a `listTickets` page, a `getTicket` view or a
+// `listConversationPage` page whose caller gives `expensive` (a scan,
+// `triage_queue`'s view per row, `find_similar_tickets`:
 // docs/architecture/ticket-queries.md, "Cost class for the limiter"). A
-// `listTickets` page or a `getTicket` view that fails after its values were
-// accepted carries `attempts` too: the requests sent for it, 0 when the
-// limiter refused it before any.
+// `listTickets` page, a `getTicket` view or a `listConversationPage` page
+// that fails after its values were accepted carries `attempts` too: the
+// requests sent for it, 0 when the limiter refused it before any.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -96,6 +100,10 @@ export type TicketResult =
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export type ConversationsResult = ListResult<Conversation>;
+
+export type ConversationPageResult =
+  | { ok: true; conversations: Conversation[]; has_more: boolean; attempts: number }
+  | { ok: false; error: FreshdeskError; attempts?: number };
 
 const ORDER_BY = new Set(["created_at", "due_by", "updated_at", "status"]);
 const ORDER_TYPE = new Set(["asc", "desc"]);
@@ -190,6 +198,42 @@ export function listConversations(
   return listAll(http, "/tickets/{id}/conversations", conversation, "conversations", deadline, {
     id: ticketId,
   });
+}
+
+export async function listConversationPage(
+  http: HttpClient,
+  ticketId: number,
+  deadline?: number,
+  cost?: CostClass,
+): Promise<ConversationPageResult> {
+  if (!isPositiveInt(ticketId)) return refused("ticket id");
+  const pages = http.paginate(
+    {
+      path: "/tickets/{id}/conversations",
+      params: { id: ticketId },
+      query: { per_page: PER_PAGE },
+      ...(cost === undefined ? {} : { cost }),
+    },
+    { pages: 1 },
+    deadline,
+  );
+  let conversations: Conversation[] = [];
+  for (;;) {
+    // By hand, not `for await`: the return value is where `truncated` is.
+    const step = await pages.next();
+    if (step.done) {
+      const { truncated, attempts } = step.value;
+      return { ok: true, conversations, has_more: truncated, attempts };
+    }
+    const result = step.value;
+    if (!result.ok) {
+      const end = await pages.next();
+      return { ...result, attempts: end.done ? end.value.attempts : 0 };
+    }
+    const parsed = conversation.array().safeParse(result.body);
+    if (!parsed.success) return malformed("conversations", result.status);
+    conversations = parsed.data;
+  }
 }
 
 function malformed(noun: string, status: number): { ok: false; error: FreshdeskError } {

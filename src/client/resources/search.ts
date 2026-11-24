@@ -14,7 +14,9 @@
 //     through, is `validation` with `http_status: null`, naming the
 //     parameter, not the value, and no request is sent.
 //   - No `include`: search refuses `include=stats` (measured 2026-11-24).
-//   - Cost class `cheap` (ticket-queries.md, "Cost class for the limiter").
+//   - Cost class `cheap` unless the caller gives `expensive`
+//     (`find_similar_tickets`, T-030; ticket-queries.md, "Cost class for the
+//     limiter").
 //
 // The body is `{total, results}`: `total` a whole number from 0 (it can
 // exceed 300, the 10 pages' reach), `results` tickets in `tickets.ts`'s shape,
@@ -23,12 +25,15 @@
 // nothing from it. An HTTP failure is returned unchanged (a 400 is
 // `validation` with Freshdesk's `errors[]`).
 //
-// `attempts` is the requests sent, retries included. `deadline` (epoch ms,
-// optional) is the caller's: see `requestWithRetry`.
+// `attempts` is the requests sent, retries included; a page that fails after
+// its values were accepted carries it too (0 when the limiter refused it
+// before any request). `deadline` (epoch ms, optional) is the caller's: see
+// `requestWithRetry`.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
 import type { HttpClient } from "../http.js";
+import type { CostClass } from "../rate-limit.js";
 import { type Ticket, ticket } from "./tickets.js";
 
 /** Freshdesk's limit on the query, counted here with its two quotes. */
@@ -47,13 +52,14 @@ const body = z.object({
 
 export type SearchResult =
   | { ok: true; results: Ticket[]; total: number; attempts: number }
-  | { ok: false; error: FreshdeskError };
+  | { ok: false; error: FreshdeskError; attempts?: number };
 
 export async function searchTickets(
   http: HttpClient,
   query: string,
   page = 1,
   deadline?: number,
+  cost?: CostClass,
 ): Promise<SearchResult> {
   if (
     typeof query !== "string" ||
@@ -67,10 +73,14 @@ export async function searchTickets(
   if (quoted.length > MAX_QUERY_LENGTH) return refused("query");
   if (!(Number.isInteger(page) && page >= 1 && page <= MAX_SEARCH_PAGE)) return refused("page");
   const result = await http.requestWithRetry(
-    { path: "/search/tickets", query: { query: quoted, page }, cost: "cheap" },
+    {
+      path: "/search/tickets",
+      query: { query: quoted, page },
+      ...(cost === undefined ? {} : { cost }),
+    },
     deadline,
   );
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
   const parsed = body.safeParse(result.body);
   if (!parsed.success) {
     return {

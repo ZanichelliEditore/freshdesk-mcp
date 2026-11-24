@@ -3,6 +3,7 @@ import { HttpClient } from "../../../src/client/http.js";
 import { RateLimiter } from "../../../src/client/rate-limit.js";
 import {
   getTicket,
+  listConversationPage,
   listConversations,
   listTickets,
   type ListTicketsOptions,
@@ -507,6 +508,77 @@ describe("listConversations", () => {
     reply(THREAD, 200, pages[1]);
 
     const error = failure(await listConversations(http, 4101));
+
+    expect(error).toEqual({
+      code: "server",
+      http_status: 200,
+      message: "Freshdesk sent conversations in an unexpected shape (HTTP 200).",
+      retryable: false,
+    });
+    expect(JSON.stringify(error)).not.toContain(CANARY);
+  });
+});
+
+describe("listConversationPage", () => {
+  const THREAD = "/api/v2/tickets/4101/conversations";
+
+  it("asks one page of 100, oldest first, and says whether another exists", async () => {
+    reply(THREAD, 200, conversationPages[0], `${ORIGIN}${THREAD}?per_page=100&page=2`);
+
+    const result = ok(await listConversationPage(http, 4101));
+
+    expect(result.conversations.map((c) => c.id)).toEqual([6201, 6202]);
+    expect(result).toMatchObject({ has_more: true, attempts: 1 });
+    expect(urls().map((url) => url.href)).toEqual([`${ORIGIN}${THREAD}?per_page=100`]);
+  });
+
+  it("says no other page exists without a Link", async () => {
+    reply(THREAD, 200, conversationPages[1]);
+
+    expect(ok(await listConversationPage(http, 4101))).toMatchObject({
+      has_more: false,
+      attempts: 1,
+    });
+  });
+
+  it.each([0, -7, 2.5])("refuses the ticket id %s with nothing sent", async (id) => {
+    expectRefused(await listConversationPage(http, id), "ticket id");
+  });
+
+  it("returns a 404 as not_found, with its attempts", async () => {
+    reply("/api/v2/tickets/4999/conversations", 404, {});
+
+    const result = await listConversationPage(http, 4999);
+
+    expect(failure(result).code).toBe("not_found");
+    expect(result).toMatchObject({ attempts: 1 });
+  });
+
+  it("given expensive, the page goes to the limiter as expensive: refused below the reserve, 0 attempts", async () => {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: (path: string) => path.split("?")[0] === THREAD, method: "GET" })
+      .reply(200, conversationPages[1], {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await listConversationPage(http, 4101));
+    reply(THREAD, 200, conversationPages[1]);
+    ok(await listConversationPage(http, 4101));
+    expect(urls()).toHaveLength(2);
+
+    const refusedPage = await listConversationPage(http, 4101, undefined, "expensive");
+
+    expect(failure(refusedPage)).toMatchObject({ code: "rate_limited", http_status: null });
+    expect(refusedPage).toMatchObject({ ok: false, attempts: 0 });
+    expect(urls()).toHaveLength(2);
+  });
+
+  it("refuses a malformed entry as server, with no body text", async () => {
+    const page = clone(conversationPages[0]) as Record<string, unknown>[];
+    page[0]!.id = CANARY;
+    reply(THREAD, 200, page);
+
+    const error = failure(await listConversationPage(http, 4101));
 
     expect(error).toEqual({
       code: "server",
