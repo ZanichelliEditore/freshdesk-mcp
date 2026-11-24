@@ -14,6 +14,10 @@
 //
 // A body in any other shape is `server` with the response's real status, not
 // retryable. Its message is fixed text: it quotes nothing from the body.
+//
+// On success `attempts` is the requests sent, retries included
+// (`requestWithRetry`'s count), for the schema service to report. A failure
+// carries none.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -47,7 +51,7 @@ const ticketFields = z.array(ticketField);
 export type TicketField = z.infer<typeof ticketField>;
 
 export type TicketFieldsResult =
-  { ok: true; fields: TicketField[] } | { ok: false; error: FreshdeskError };
+  { ok: true; fields: TicketField[]; attempts: number } | { ok: false; error: FreshdeskError };
 
 /** `deadline` (epoch ms) is the caller's: see `requestWithRetry`. */
 export async function listTicketFields(
@@ -55,7 +59,7 @@ export async function listTicketFields(
   deadline?: number,
 ): Promise<TicketFieldsResult> {
   const result = await http.requestWithRetry({ path: "/ticket_fields" }, deadline);
-  // The error only: the result's `attempts` is not this function's to pass on.
+  // The error only: a failure reports no `attempts`.
   if (!result.ok) return { ok: false, error: result.error };
   const parsed = ticketFields.safeParse(result.body);
   if (!parsed.success) {
@@ -69,5 +73,5 @@ export async function listTicketFields(
       },
     };
   }
-  return { ok: true, fields: parsed.data };
+  return { ok: true, fields: parsed.data, attempts: result.attempts };
 }

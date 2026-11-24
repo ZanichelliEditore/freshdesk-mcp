@@ -17,6 +17,12 @@
 //     request in flight is cut and no other is started. The error is the
 //     client's: `network`, retryable, or `rate_limited` for a limiter wait
 //     that would reach it. Like any failed load, it is not cached.
+//   - `attempts` on a loaded result is the requests that load sent, retries
+//     included (the three lists' `attempts` added up), for the one call that
+//     started the load: what a tool adds to its `api_calls_used`. A call
+//     served from the cache, or joining a load in flight, gets 0, so a load's
+//     requests are counted once whoever reports them. A failed load reports
+//     none, as the lists it reads report none on failure.
 //   - Of an agent only the id and the name are kept: the contact's personal
 //     data (email, phone) is dropped here.
 //   - `truncated` is carried from the list: an id missing from a truncated
@@ -101,7 +107,8 @@ export function deepFreeze<T>(value: T): T {
 /** Longest one load may take, ticket fields, agents and groups together. */
 export const LOAD_DEADLINE_MS = 30_000;
 
-export type SchemaResult = { ok: true; schema: Schema } | { ok: false; error: FreshdeskError };
+export type SchemaResult =
+  { ok: true; schema: Schema; attempts: number } | { ok: false; error: FreshdeskError };
 
 export class SchemaService {
   // Real private members, and the instance frozen at the end of the
@@ -119,13 +126,19 @@ export class SchemaService {
     Object.freeze(this);
   }
 
-  /** The cached schema while its TTL lasts; otherwise a new load. */
+  /**
+   * The cached schema while its TTL lasts; otherwise a new load. `attempts`
+   * is the load's requests for the call that started it, 0 for any other.
+   */
   get(): Promise<SchemaResult> {
     const age = this.#cached ? Date.now() - this.#cached.loadedAt : -1;
     if (this.#cached && age >= 0 && age < this.#ttlS * 1000) {
-      return Promise.resolve({ ok: true, schema: this.#cached.schema });
+      return Promise.resolve({ ok: true, schema: this.#cached.schema, attempts: 0 });
     }
-    this.#inFlight ??= this.#load().finally(() => {
+    if (this.#inFlight) {
+      return this.#inFlight.then((result) => (result.ok ? { ...result, attempts: 0 } : result));
+    }
+    this.#inFlight = this.#load().finally(() => {
       this.#inFlight = undefined;
     });
     return this.#inFlight;
@@ -153,6 +166,6 @@ export class SchemaService {
       },
     });
     this.#cached = { schema, loadedAt: startedAt };
-    return { ok: true, schema };
+    return { ok: true, schema, attempts: fields.attempts + agents.attempts + groups.attempts };
   }
 }

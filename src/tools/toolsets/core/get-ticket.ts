@@ -57,10 +57,10 @@
 //     read as an unknown ticket; nothing of the failed response is quoted.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start, shared
 //     by every request and by the schema's load.
-//   - `api_calls_used` is every request this call sent for the ticket, the
-//     requester, the recent tickets and the thread, retries included. The
-//     schema's cold load (at least 3 requests, once per cache lifetime) is
-//     not in it: the schema service does not report its requests (T-056).
+//   - `api_calls_used` is every request this call sent, retries included:
+//     for the ticket, the requester, the recent tickets and the thread, and
+//     the schema's load when this call started it (the service's `attempts`:
+//     0 from the cache or for a load another call started).
 
 import { z } from "zod";
 import type { FreshdeskError } from "../../../client/errors.js";
@@ -229,7 +229,7 @@ export const getTicketTool: Tool<typeof input> = {
     `A thread longer than ${THREAD_CAP.toLocaleString("en-US")} conversations is cut and says truncated: true.`,
     `include_recent: true adds recent_tickets, the requester's last ${RECENT_COUNT} tickets by creation as compact rows.`,
     "A field the team configuration hides is left out. When it hides the requester there is no requester, no author (user_id is null) and no address on any conversation, and recent_tickets_unavailable in place of recent_tickets.",
-    "api_calls_used counts every request sent for this call, retries included, but not a load of the ticket-field schema.",
+    "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
   input,
   annotations: {
@@ -250,14 +250,14 @@ export const getTicketTool: Tool<typeof input> = {
     if (!loaded.ok) return loaded;
     const { schema } = loaded;
     const requesterShown = shows(context, schema, REQUESTER);
-    let calls = 0;
+    let calls = loaded.attempts;
     let head: Record<string, unknown> = {};
 
     if (cursor.position === 0) {
       const got = await getTicket(context.http, id, [], deadline);
       if (!got.ok) return got;
       const { ticket } = got;
-      calls = got.attempts;
+      calls += got.attempts;
       head = { ticket: ticketDetail(context, schema, ticket) };
       if (requesterShown) {
         const asked = await requesterOf(context, schema, ticket, deadline);

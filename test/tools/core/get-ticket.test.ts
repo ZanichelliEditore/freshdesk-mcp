@@ -247,7 +247,10 @@ describe("get_ticket: the listing", () => {
     expect(tool?.annotations.destructiveHint).toBe(false);
     expect(tool?.description).toMatch(/Cost: .*1 API call for the ticket.*plus one per retry/s);
     expect(tool?.description).toContain(DATA_NOT_INSTRUCTIONS);
-    expect(tool?.description).toContain("retries included, but not a load of the ticket-field");
+    expect(tool?.description).toContain(
+      "retries included, and the ticket-field schema's load when this call starts it",
+    );
+    expect(tool?.description).not.toContain("but not a load");
     expect(tool?.description).toContain("the contact's company");
     expect(tool?.description).toContain(`${THREAD_PAGE} conversations at a time`);
   });
@@ -1013,7 +1016,7 @@ describe("get_ticket: api_calls_used", () => {
     expect(result.api_calls_used).toBe(sent());
   });
 
-  it("on a cold schema it leaves out the schema's load, as the description says", async () => {
+  it("on a cold schema it equals the MockAgent count: the schema's load is in it", async () => {
     const session = await cold();
     reply(FIELDS, fieldsPayload);
     reply(AGENTS, agentPages.flat());
@@ -1023,10 +1026,10 @@ describe("get_ticket: api_calls_used", () => {
     const result = output(await callTool(session, TOOL, { ticket_id: ID }));
     expect(result.ticket?.fields.Status).toBe("Open");
     expect(sent()).toBe(7);
-    expect(result.api_calls_used).toBe(4);
+    expect(result.api_calls_used).toBe(sent());
   });
 
-  it("a cursor call on a cold schema loads it too, and leaves the load out the same way", async () => {
+  it("a cursor call on a cold schema loads it too, and counts the load the same way", async () => {
     const session = await cold();
     reply(FIELDS, fieldsPayload);
     reply(AGENTS, agentPages.flat());
@@ -1037,7 +1040,40 @@ describe("get_ticket: api_calls_used", () => {
     const result = output(await callTool(session, TOOL, { ...args, cursor }));
     expect(result.items.map((item) => item.id)).toEqual([6000 + THREAD_PAGE + 1]);
     expect(sent()).toBe(4);
-    expect(result.api_calls_used).toBe(1);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("the call after a cold one counts its own requests only", async () => {
+    const session = await cold();
+    reply(FIELDS, fieldsPayload);
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    const args = { ticket_id: ID };
+    const cursor = cursorFor(TOOL, args, 1);
+    reply(THREAD, []);
+    const first = output(await callTool(session, TOOL, { ...args, cursor }));
+    reply(THREAD, []);
+    const second = output(await callTool(session, TOOL, { ...args, cursor }));
+    expect(first.api_calls_used).toBe(4);
+    expect(second.api_calls_used).toBe(1);
+    expect(sent()).toBe(5);
+  });
+
+  it("two calls on a cold schema at once count its load once between them", async () => {
+    const session = await cold();
+    reply(FIELDS, fieldsPayload);
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    reply(THREAD, []);
+    reply(THREAD, []);
+    const args = { ticket_id: ID };
+    const cursor = cursorFor(TOOL, args, 1);
+    const [one, other] = await Promise.all([
+      callTool(session, TOOL, { ...args, cursor }),
+      callTool(session, TOOL, { ...args, cursor }),
+    ]);
+    expect(sent()).toBe(5);
+    expect(output(one).api_calls_used + output(other).api_calls_used).toBe(sent());
   });
 });
 

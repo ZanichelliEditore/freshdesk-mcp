@@ -71,6 +71,20 @@ function schemaOf(result: SchemaResult): Schema {
 
 const ONE_LOAD = [FIELDS, AGENTS, `${AGENTS}&page=2`, GROUPS, `${GROUPS}&page=2`];
 
+/** Runs the fake clock forward until the load settles; returns the fake ms it took. */
+async function settle(call: Promise<SchemaResult>): Promise<{ result: SchemaResult; ms: number }> {
+  const started = Date.now();
+  let result: SchemaResult | undefined;
+  void call.then((value) => {
+    result = value;
+  });
+  while (result === undefined) {
+    await new Promise((resolve) => setImmediate(resolve));
+    if (result === undefined) await vi.advanceTimersByTimeAsync(100);
+  }
+  return { result, ms: Date.now() - started };
+}
+
 describe("SchemaService: load and TTL cache", () => {
   it("loads fields, agents and groups once, then serves them from the cache", async () => {
     queueLoad();
@@ -266,22 +280,6 @@ describe("SchemaService: a cold load ends within 30 s", () => {
       .delay(delay);
   }
 
-  /** Runs the fake clock forward until the load settles; returns the fake ms it took. */
-  async function settle(
-    call: Promise<SchemaResult>,
-  ): Promise<{ result: SchemaResult; ms: number }> {
-    const started = Date.now();
-    let result: SchemaResult | undefined;
-    void call.then((value) => {
-      result = value;
-    });
-    while (result === undefined) {
-      await new Promise((resolve) => setImmediate(resolve));
-      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-    }
-    return { result, ms: Date.now() - started };
-  }
-
   it("gives up at 30 s with a retryable network error, sends nothing after, and loads again on the next get", async () => {
     // Each answer takes 9 s, under the 10 s of one attempt: the fourth would
     // come at 36 s. With 30 s for each request the load would go on.
@@ -414,13 +412,113 @@ describe("SchemaService: a cold load ends within 30 s", () => {
   });
 });
 
+describe("SchemaService: the requests a load sent", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  });
+
+  function attemptsOf(result: SchemaResult): number {
+    if (!result.ok) throw new Error(`expected a schema, got ${result.error.code}`);
+    return result.attempts;
+  }
+
+  it("reports the load's requests to the call that started it, a retry included", async () => {
+    reply(FIELDS, { message: "busy" }, undefined, 503);
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+
+    const { result } = await settle(service.get());
+
+    expect(sentPaths()).toEqual([FIELDS, ...ONE_LOAD]);
+    expect(attemptsOf(result)).toBe(6);
+  });
+
+  it("reports 0 to a call served from the cache", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const first = await service.get();
+
+    const second = await service.get();
+
+    expect(attemptsOf(first)).toBe(5);
+    expect(attemptsOf(second)).toBe(0);
+    expect(schemaOf(second)).toBe(schemaOf(first));
+    expect(sentPaths()).toEqual(ONE_LOAD);
+  });
+
+  it("reports 0 to a call joining a load in flight, and the load's requests once", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+
+    const [started, joined, joinedToo] = await Promise.all([
+      service.get(),
+      service.get(),
+      service.get(),
+    ]);
+
+    expect(sentPaths()).toEqual(ONE_LOAD);
+    expect(attemptsOf(started)).toBe(5);
+    expect(attemptsOf(joined)).toBe(0);
+    expect(attemptsOf(joinedToo)).toBe(0);
+    expect(schemaOf(joined)).toBe(schemaOf(started));
+  });
+
+  it("reports the requests of each load: a load after the TTL counts again", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    await service.get();
+    vi.setSystemTime(Date.now() + TTL_S * 1000);
+    queueLoad();
+
+    expect(attemptsOf(await service.get())).toBe(5);
+    expect(sentPaths()).toEqual([...ONE_LOAD, ...ONE_LOAD]);
+  });
+
+  it.each([
+    ["the ticket fields", () => reply(FIELDS, { message: "denied" }, undefined, 403)],
+    [
+      "the agents",
+      () => {
+        reply(FIELDS, schemaFieldsPayload);
+        reply(AGENTS, { message: "denied" }, undefined, 403);
+      },
+    ],
+    [
+      "a malformed groups page",
+      () => {
+        reply(FIELDS, schemaFieldsPayload);
+        reply(AGENTS, agentPages[1]);
+        reply(GROUPS, [{ id: 701 }]);
+      },
+    ],
+  ])(
+    "a load that fails at %s reports none, to the starter and to a joiner, and the next get() loads again",
+    async (_name, queueFailure) => {
+      queueFailure();
+      const service = new SchemaService(http, TTL_S);
+
+      const [failed, joined] = await Promise.all([service.get(), service.get()]);
+
+      expect(failed.ok).toBe(false);
+      expect(Object.keys(failed).sort()).toEqual(["error", "ok"]);
+      expect(joined).toEqual(failed);
+      const before = sentPaths().length;
+
+      queueLoad();
+      expect(attemptsOf(await service.get())).toBe(5);
+      expect(sentPaths().slice(before)).toEqual(ONE_LOAD);
+    },
+  );
+});
+
 describe("SchemaService: a cast reaches neither the cache nor the TTL (A3)", () => {
   const plantedSchema: Schema = {
     fields: [],
     agents: { names: new Map(), truncated: false },
     groups: { names: new Map(), truncated: false },
   };
-  const planted = (): Promise<SchemaResult> => Promise.resolve({ ok: true, schema: plantedSchema });
+  const planted = (): Promise<SchemaResult> =>
+    Promise.resolve({ ok: true, schema: plantedSchema, attempts: 0 });
 
   /** Each assignment through a cast, a throw taken as no change. */
   function attempt(service: SchemaService, values: Record<string, unknown>): void {
