@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T20:41:58+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `6dd1a61`
+  (`6dd1a61f7d30a35073a95b3690bac15b056ea882`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45473182373
+  (workflow `quality`, ran on `6dd1a61`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-038 `done (2026-11-24)`, package runnable with
   `npx`, README, `docs/tasks/T-038-npx-package.md` ("Done"). Commits
