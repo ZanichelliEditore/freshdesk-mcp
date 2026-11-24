@@ -6,7 +6,9 @@
 //     (a `Link` to it). It sends `per_page` (100 unless given) and only the
 //     other parameters given, field by field: no `updated_since` unless asked,
 //     since `requester_id` alone lifts the 30-day window (measured 2026-11-24).
-//   - `getTicket`: `GET /tickets/{id}`, with the includes asked for.
+//   - `getTicket`: `GET /tickets/{id}`, with `include=stats` when asked. No
+//     other include: a requester's or a company's data comes from T-025's
+//     contact and company reads, which drop what no tool should return.
 //   - `listConversations`: every page of `GET /tickets/{id}/conversations`,
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`.
 //
@@ -17,6 +19,12 @@
 // other shape is `server` with the response's real status, not retryable,
 // and a message of fixed text that quotes nothing from the body. An HTTP
 // failure is returned unchanged.
+//
+// Values are checked before anything is sent, whatever a cast let through:
+// an id is a positive safe integer, `per_page` 1–100, `page` a whole number
+// from 1, `order_by`, `order_type` and an include in their sets. Any other
+// is `validation` with `http_status: null`, naming the parameter, not the
+// value, and no request is sent.
 //
 // `attempts` is the requests sent, retries included: what a tool reports as
 // API calls. `deadline` (epoch ms, optional) is the caller's: see
@@ -67,13 +75,16 @@ export type ListTicketsResult =
   | { ok: true; tickets: Ticket[]; has_more: boolean; attempts: number }
   | { ok: false; error: FreshdeskError };
 
-/** The includes `GET /tickets/{id}` takes besides `conversations` (first ten only). */
-export type TicketInclude = "stats" | "requester" | "company";
+/** The one include `getTicket` sends: see the file's header. */
+export type TicketInclude = "stats";
 
 export type TicketResult =
   { ok: true; ticket: Ticket; attempts: number } | { ok: false; error: FreshdeskError };
 
 export type ConversationsResult = ListResult<Conversation>;
+
+const ORDER_BY = new Set(["created_at", "due_by", "updated_at", "status"]);
+const ORDER_TYPE = new Set(["asc", "desc"]);
 
 const OPTIONAL = [
   "page",
@@ -90,6 +101,16 @@ export async function listTickets(
   options: ListTicketsOptions = {},
   deadline?: number,
 ): Promise<ListTicketsResult> {
+  const { per_page, page, order_by, order_type, include, requester_id, company_id } = options;
+  if (per_page !== undefined && !(isPositiveInt(per_page) && per_page <= PER_PAGE)) {
+    return refused("per_page");
+  }
+  if (page !== undefined && !isPositiveInt(page)) return refused("page");
+  if (order_by !== undefined && !ORDER_BY.has(order_by)) return refused("order_by");
+  if (order_type !== undefined && !ORDER_TYPE.has(order_type)) return refused("order_type");
+  if (include !== undefined && include !== "stats") return refused("include");
+  if (requester_id !== undefined && !isPositiveInt(requester_id)) return refused("requester_id");
+  if (company_id !== undefined && !isPositiveInt(company_id)) return refused("company_id");
   const query: Record<string, string | number> = { per_page: options.per_page ?? PER_PAGE };
   for (const name of OPTIONAL) {
     const value = options[name];
@@ -119,6 +140,8 @@ export async function getTicket(
   include: readonly TicketInclude[] = [],
   deadline?: number,
 ): Promise<TicketResult> {
+  if (!isPositiveInt(id)) return refused("id");
+  if (!include.every((name) => name === "stats")) return refused("include");
   const result = await http.requestWithRetry(
     {
       path: "/tickets/{id}",
@@ -138,6 +161,7 @@ export function listConversations(
   ticketId: number,
   deadline?: number,
 ): Promise<ConversationsResult> {
+  if (!isPositiveInt(ticketId)) return Promise.resolve(refused("ticket id"));
   return listAll(http, "/tickets/{id}/conversations", conversation, "conversations", deadline, {
     id: ticketId,
   });
@@ -150,6 +174,22 @@ function malformed(noun: string, status: number): { ok: false; error: FreshdeskE
       code: "server",
       http_status: status,
       message: `Freshdesk sent ${noun} in an unexpected shape (HTTP ${status}).`,
+      retryable: false,
+    },
+  };
+}
+
+function isPositiveInt(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+function refused(name: string): { ok: false; error: FreshdeskError } {
+  return {
+    ok: false,
+    error: {
+      code: "validation",
+      http_status: null,
+      message: `Not sent: ${name} is not a valid value.`,
       retryable: false,
     },
   };

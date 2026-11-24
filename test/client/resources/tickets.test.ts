@@ -69,6 +69,18 @@ function failure<T extends { ok: boolean }>(result: T) {
   return (result as unknown as { error: { code: string; message: string } }).error;
 }
 
+/** A local `validation` naming the parameter, with no request sent. */
+function expectRefused(result: { ok: boolean }, name: string) {
+  const error = failure(result);
+  expect(error).toEqual({
+    code: "validation",
+    http_status: null,
+    message: `Not sent: ${name} is not a valid value.`,
+    retryable: false,
+  });
+  expect(urls()).toHaveLength(0);
+}
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -126,6 +138,47 @@ describe("listTickets: the parameters of docs/architecture/ticket-queries.md", (
       order_type: "desc",
       per_page: "5",
     });
+  });
+});
+
+describe("listTickets: values refused before sending", () => {
+  const cases: [string, ListTicketsOptions, string][] = [
+    ["per_page 0", { per_page: 0 }, "per_page"],
+    ["per_page 101", { per_page: 101 }, "per_page"],
+    ["per_page 2.5", { per_page: 2.5 }, "per_page"],
+    ["page 0", { page: 0 }, "page"],
+    ["page 1.5", { page: 1.5 }, "page"],
+    ["requester_id 0", { requester_id: 0 }, "requester_id"],
+    ["requester_id -3", { requester_id: -3 }, "requester_id"],
+    ["requester_id past the safe range", { requester_id: 2 ** 53 }, "requester_id"],
+    ["company_id 1.5", { company_id: 1.5 }, "company_id"],
+    [
+      "order_by outside its set",
+      { order_by: "subject" } as unknown as ListTicketsOptions,
+      "order_by",
+    ],
+    [
+      "order_type outside its set",
+      { order_type: "up" } as unknown as ListTicketsOptions,
+      "order_type",
+    ],
+    [
+      "include other than stats",
+      { include: "requester" } as unknown as ListTicketsOptions,
+      "include",
+    ],
+  ];
+
+  it.each(cases)("refuses %s as validation with nothing sent", async (_, options, name) => {
+    expectRefused(await listTickets(http, options), name);
+  });
+
+  it("sends only the parameters it knows, whatever a cast adds", async () => {
+    reply("/api/v2/tickets", 200, ticketPage);
+
+    ok(await listTickets(http, { status: 2, email: "x" } as unknown as ListTicketsOptions));
+
+    expect(onlyQuery()).toEqual({ per_page: "100" });
   });
 });
 
@@ -193,12 +246,14 @@ describe("listTickets: a malformed item", () => {
       "an id that is not a whole number",
       (p) => {
         p[1]!.id = "4102";
+        p[1]!.subject = CANARY;
       },
     ],
     [
       "a ticket without custom_fields",
       (p) => {
         delete p[1]!.custom_fields;
+        p[1]!.subject = CANARY;
       },
     ],
     [
@@ -262,13 +317,25 @@ describe("getTicket", () => {
     expect(onlyQuery()).toEqual({});
   });
 
-  it("sends the includes asked for, comma-separated", async () => {
+  it("sends include=stats when asked", async () => {
     reply(VIEW, 200, { ...ticketView, stats: { first_responded_at: null } });
 
-    const result = ok(await getTicket(http, 4101, ["stats", "requester", "company"]));
+    const result = ok(await getTicket(http, 4101, ["stats"]));
 
-    expect(onlyQuery()).toEqual({ include: "stats,requester,company" });
+    expect(onlyQuery()).toEqual({ include: "stats" });
     expect(result.ticket.stats).toEqual({ first_responded_at: null });
+  });
+
+  it("refuses any other include, given through a cast, with nothing sent", async () => {
+    for (const other of ["requester", "company", "conversations"]) {
+      const include = ["stats", other] as unknown as "stats"[];
+
+      expectRefused(await getTicket(http, 4101, include), "include");
+    }
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, 2 ** 53])("refuses the id %s with nothing sent", async (id) => {
+    expectRefused(await getTicket(http, id), "id");
   });
 
   it("returns a 404 as not_found", async () => {
@@ -322,6 +389,10 @@ describe("listConversations", () => {
     expect(result.items).toHaveLength(10);
     expect(result).toMatchObject({ truncated: true, attempts: 10 });
     expect(urls()).toHaveLength(10);
+  });
+
+  it.each([0, -7, 2.5])("refuses the ticket id %s with nothing sent", async (id) => {
+    expectRefused(await listConversations(http, id), "ticket id");
   });
 
   it("returns a 404 as not_found", async () => {
