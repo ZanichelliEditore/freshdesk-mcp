@@ -19,6 +19,21 @@ const networkModules = [
 ].flatMap((name) => (name === "undici" ? [name] : [name, `node:${name}`]));
 const noNetworkInTests =
   "Tests must not open real connections (RFC 2026-11-23 rule 4): use test/support/mock-dispatcher.ts.";
+/** The test/** import ban over `modules`, plus cli.ts. */
+const testImportBan = (modules) => [
+  "error",
+  {
+    paths: modules.map((name) => ({ name, message: noNetworkInTests })),
+    patterns: [
+      { group: modules.map((name) => `${name}/*`), message: noNetworkInTests },
+      {
+        group: ["**/cli", "**/cli.js", "**/cli.ts"],
+        message:
+          "Tests must not import cli.ts, which builds the real Agent (RFC 2026-11-23 rule 2).",
+      },
+    ],
+  },
+];
 const noGlobalFetch = "Use undici's fetch with the injected dispatcher (RFC 2026-11-23 rule 3).";
 
 const noGlobalFetchRules = {
@@ -151,20 +166,17 @@ export default tseslint.config(
     ignores: ["test/support/mock-dispatcher.ts", "test/setup.ts"],
     rules: {
       ...noGlobalFetchRules,
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: networkModules.map((name) => ({ name, message: noNetworkInTests })),
-          patterns: [
-            { group: networkModules.map((name) => `${name}/*`), message: noNetworkInTests },
-            {
-              group: ["**/cli", "**/cli.js", "**/cli.ts"],
-              message:
-                "Tests must not import cli.ts, which builds the real Agent (RFC 2026-11-23 rule 2).",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": testImportBan(networkModules),
+    },
+  },
+  {
+    // The one file under test/ that may start a process: Node itself, on the
+    // built cli (T-019). Exempt from the child_process ban, and from nothing else.
+    files: ["test/support/cli-process.ts"],
+    rules: {
+      "no-restricted-imports": testImportBan(
+        networkModules.filter((name) => !name.endsWith("child_process")),
+      ),
     },
   },
   ...toolImportBlocks,

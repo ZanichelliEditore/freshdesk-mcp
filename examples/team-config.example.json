@@ -1,5 +1,5 @@
 {
-  "toolsets": ["core", "write"],
+  "toolsets": ["core"],
   "fields": {
     "Product": {
       "meaning": "Which product the ticket is about. Three levels: product > area > topic."

@@ -67,6 +67,21 @@ describe("eslint: test/** network import ban (RFC rule 4)", () => {
     ]);
   });
 
+  it.each(['import "node:child_process";', 'import { spawn } from "child_process";'])(
+    "lets test/support/cli-process.ts, and no other file, start a process: %s",
+    async (code) => {
+      expect(await ruleIds(code, "test/support/cli-process.ts")).toEqual([]);
+      expect(await ruleIds(code, "test/support/other.ts")).toEqual(["no-restricted-imports"]);
+    },
+  );
+
+  it.each(networkImports.filter((code) => !code.includes("child_process")))(
+    "still refuses in test/support/cli-process.ts %s",
+    async (code) => {
+      expect(await ruleIds(code, "test/support/cli-process.ts")).toEqual(["no-restricted-imports"]);
+    },
+  );
+
   it("allows an ordinary import", async () => {
     expect(await ruleIds('import "../../src/client/errors.js";', "test/client/x.test.ts")).toEqual(
       [],
