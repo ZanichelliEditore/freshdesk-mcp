@@ -127,7 +127,7 @@ reply key. With it, one view per returned row, one after another, each sent
 as `expensive` (`getTicket`'s cost argument): at most 1 + 30 = 31 requests a
 call, 61 credits, retries apart; at the default pacing of 2 a second a full
 page takes about 15 s of the call's one 30 s deadline. The search request
-itself stays `cheap` (`searchTickets` has no cost argument yet), so below
+itself stays `cheap` (T-029 gives `searchTickets` no cost argument), so below
 the reserve such a call spends 1 request before the first view is refused.
 A result whose status is neither 2 nor 3 is dropped locally. A ticket in a
 custom status is not in the queue.
@@ -196,12 +196,37 @@ control run, so latency gives the windows no edge.
 | resolved or closed in the last N days | search `(status:4 OR status:5) AND updated_at:>'<day>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | subject keyword overlap | local, on the candidates | — | 0 | no API (no full text, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets)) |
 
-Candidates come from the last three sources (one page of each by default);
+Candidates come from the last three sources (one page of each);
 category and keyword matching are local. Here `updated_since=<N days ago>`
 is the tool's own window, not a fix for the 30-day one: a ticket resolved
 or closed in the last N days was updated in them, so it drops only what the
 tool would drop anyway, and it keeps one page of a busy requester or
 company to the tickets that can match.
+
+T-030's choices (2026-11-24, `src/tools/toolsets/core/find-similar-tickets.ts`):
+
+- Similar means: resolved or closed (status 4 or 5) with `updated_at` in the
+  last N days (1–365, 90 by default; the last update stands in for the
+  resolution time, which neither source gives), and sharing at least one of
+  the category, the requester, the company. The search source exists for
+  the category: it finds other customers' tickets, kept only when every
+  category field (`categoryFields`, each level of a nested one) equals the
+  ticket's.
+- One page of each source: the requester's list and the company's list
+  (100 each, `updated_since=<N days ago>`), the search (30, its day widened
+  by one and `updated_at` checked locally with `matchesLocal`). A source
+  with more than that page makes the result `truncated: true`.
+- Ranked by subject keywords shared (lower case, NFC, runs of letters,
+  marks and digits of 3 code points or more, a short English and Italian
+  stop-word list left out), then the last update, then the id; the top 5
+  returned. The excerpt is one `GET /tickets/{id}/conversations?per_page=100`
+  per result (its first page, the oldest 100): the last entry an agent
+  wrote.
+- **Bound: 9 requests a call** (the view, two lists, one search page, five
+  thread pages), retries apart, plus the schema's load when not cached;
+  every one `expensive`, the view first, so below the reserve nothing is
+  sent. After the view, a limiter refusal unsent ends the reads and the
+  call returns what it read with `incomplete: true`.
 
 ### `export_tickets`
 
@@ -320,14 +345,17 @@ signals and `get_ticket` (its recent tickets included), each a bounded
 number of pages. A request with `include=stats` costs 2 credits (measured
 2026-11-24, on the list and on a one-ticket view); a plain one 1.
 
-`searchTickets` sends every request as `cheap` (T-024). `listTickets`
+`searchTickets` sends every request as `cheap` (T-024) unless its caller
+gives the optional cost argument (T-030, 2026-11-24: `find_similar_tickets`
+gives `expensive`, as it does for its view, lists and conversation pages).
+`listTickets`
 (T-023) does too unless its caller gives the optional cost argument (T-027,
 2026-11-24: `list_tickets` gives `expensive` for its `uncategorized` scan),
 and so does `getTicket` (T-029, 2026-11-24: `triage_queue` gives `expensive`
 for its view per row).
-T-036 and T-037 must give it for their scans and add the same argument to
-`searchTickets`, so the pages of `count_tickets` and `export_tickets` go to
-the limiter as `expensive`.
+T-036 and T-037 must give it for their scans and to `searchTickets`, so
+the pages of `count_tickets` and `export_tickets` go to the limiter as
+`expensive`.
 
 ## Parameters
 

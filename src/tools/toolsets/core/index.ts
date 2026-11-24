@@ -1,6 +1,7 @@
 // The `core` toolset (SPEC §8.2): read tools, in the order they are listed.
 
 import type { Tool } from "../index.js";
+import { findSimilarTicketsTool } from "./find-similar-tickets.js";
 import { getTicketTool } from "./get-ticket.js";
 import { getTicketSchema } from "./get-ticket-schema.js";
 import { listAgentsTool } from "./list-agents.js";
@@ -17,4 +18,5 @@ export const CORE_TOOLS: readonly Tool[] = Object.freeze([
   listTicketsTool,
   searchTicketsTool,
   triageQueueTool,
+  findSimilarTicketsTool,
 ]);
