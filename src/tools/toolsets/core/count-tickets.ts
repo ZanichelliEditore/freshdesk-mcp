@@ -5,10 +5,11 @@
 //
 //   - Group-by fields (checked first, before any request): one or two, each
 //     a ticket field by label or API name (trimmed, NFC, any case), each of a
-//     known closed type (GROUPABLE: number, decimal, checkbox, date, date
-//     time, dropdown, ticket type, nested field, status, priority, source,
-//     agent, group). A free-text field is `free_text_field`, any other type,
-//     known or not, `unsupported_field`; a third field, none, a name no field
+//     known closed type (GROUPABLE: number, decimal, checkbox, date,
+//     dropdown, ticket type, nested field, status, priority, source, agent,
+//     group). A free-text field is `free_text_field`, any other type, known
+//     or not, `unsupported_field` (a date-time among them: SPEC §8.2 names
+//     date, and a date-time is one group per ticket); a third field, none, a name no field
 //     has, several fields share, or the same field twice is `validation` too.
 //     The count of fields is checked before the schema is read, so a third
 //     field sends no request at all; the rest needs the schema (its load is
@@ -21,7 +22,14 @@
 //     `ticketOutput` leaves out count under `null`. Hidden fields: built on
 //     `ticketOutput` as it is, so a field the team hides counts every ticket
 //     under `null`; nothing else is done about `hidden`, which is not an
-//     access control (SPEC §7.3) and not guaranteed in counts.
+//     access control (SPEC §7.3) and not guaranteed in counts. An agent or
+//     group is grouped by its id, not its name: when several ids in the
+//     result share a name, each shows as `Name (id)`.
+//   - Each ticket id is counted once: a ticket a later page repeats (it
+//     moved while the call read the pages) is skipped. One that moved the
+//     other way can be missing.
+//   - At most GROUP_CAP groups are returned, largest first; past it
+//     `groups_not_shown` says how many more and the result is `truncated`.
 //   - The query: `buildTicketQuery` with the filters and the period as
 //     `created_between`, so always a search query, exact on the days
 //     (measured, T-055). Search page 1 is the probe; every request of the
@@ -37,7 +45,9 @@
 //     period. Its estimate is a floor, the probe plus one page per 100 of
 //     `total` (the scan also reads tickets created before the period, or not
 //     matching): `checkBudget` refuses it when even that is over the budget,
-//     and without `confirm: true` the scan stops at the budget while it runs.
+//     and without `confirm: true` the scan stops at the budget while it runs
+//     (before a page once the ticket requests, retries included, reach it).
+//     `confirm` lifts the budget only, never SCAN_START_MS.
 //     A refused estimate has spent the probe: the message says so.
 //   - `matchesLocal` on every ticket either source returns (the period's
 //     guard, `uncategorized`).
@@ -77,6 +87,8 @@ export const LIST_PAGE_SIZE = 100;
 const SEARCH_CAP = MAX_SEARCH_PAGE * SEARCH_PAGE_SIZE;
 /** Group-by fields a call takes at most. */
 export const MAX_GROUP_FIELDS = 2;
+/** Groups a result shows at most, largest first. */
+export const GROUP_CAP = 200;
 
 /** Field types whose values form a closed set: the only ones a count groups by. */
 const GROUPABLE = new Set([
@@ -84,7 +96,6 @@ const GROUPABLE = new Set([
   "custom_decimal",
   "custom_checkbox",
   "custom_date",
-  "custom_date_time",
   "custom_dropdown",
   "default_ticket_type",
   "nested_field",
@@ -163,6 +174,12 @@ function groupFields(schema: Schema, names: readonly string[]): TicketField[] | 
         `${shown} is free text: counts group only by a field with a closed set of values.`,
       );
     }
+    if (field.type === "custom_date_time") {
+      return problem(
+        "unsupported_field",
+        `${shown} is a date-time: nearly every ticket has its own, so it cannot group. Group by a date field instead.`,
+      );
+    }
     if (!GROUPABLE.has(field.type)) {
       return problem(
         "unsupported_field",
@@ -175,17 +192,29 @@ function groupFields(schema: Schema, names: readonly string[]): TicketField[] | 
   return fields;
 }
 
-/** The value a ticket is counted under for one field: `null` when it shows none. */
+/** Where an agent's or a group's id sits on the ticket: they are grouped by it. */
+const ID_KEY: Readonly<Record<string, string>> = {
+  default_agent: "responder_id",
+  default_group: "group_id",
+};
+
+/**
+ * What a ticket is counted under for one field: `shown`, the value shown
+ * (`null` when it shows none), and `key`, what groups it (the id for an agent
+ * or a group, else the value shown).
+ */
 function groupValue(
   context: AppContext,
   schema: Schema,
   field: TicketField,
   ticket: Ticket,
-): unknown {
-  const shown = Object.values(context.ticketOutput({ ...schema, fields: [field] }, ticket));
-  const value: unknown = shown[0];
-  if (value === undefined || value === null || value === "") return null;
-  return fieldValue(field, value);
+): { key: unknown; shown: unknown } {
+  const out = Object.values(context.ticketOutput({ ...schema, fields: [field] }, ticket));
+  const value: unknown = out[0];
+  if (value === undefined || value === null || value === "") return { key: null, shown: null };
+  const shown = fieldValue(field, value);
+  const idKey = ID_KEY[field.type];
+  return { key: idKey === undefined ? shown : (ticket[idKey] ?? null), shown };
 }
 
 /** The search filters, checked on a list ticket (the scan cannot ask them of Freshdesk). */
@@ -232,9 +261,9 @@ export const countTicketsTool: Tool<typeof input> = {
   description: [
     `Counts of the tickets created in a period, grouped by one or two ticket fields (group_by, by label or API name), counted here from every matching ticket. created_between {from, to}: days as YYYY-MM-DD, UTC, both included. Filters as list_tickets: status, priority, group and agent by name or id; type by name; tag (one tag, exact); uncategorized: true.`,
     `Only a field with a closed set of values can group: a number, checkbox, date, dropdown, type, nested field (its full path), status, priority, source, agent or group. A free-text field or any other is refused, and nothing is sent.`,
-    `Example: {"group_by": ["Status", "Priority"], "created_between": {"from": "2026-01-01", "to": "2026-01-31"}} returns {"groups": [{"values": {"Status": "Open", "Priority": "High"}, "count": 2}, ...], "total": 2, "api_calls_used": 1}: groups by count, largest first; total is the tickets counted. A ticket with no value counts under null, and so does every ticket when the team config hides the field.`,
-    `Up to ${SEARCH_CAP} matching tickets it reads Freshdesk's search, ${SEARCH_PAGE_SIZE} a request; above that it reads the list of tickets updated since the period's start, oldest created first, ${LIST_PAGE_SIZE} a request, until it passes the period's end. It first asks for one search page to learn the size, estimates the calls, and is refused when the estimate is over the per-call API budget: narrow the period or the filters, or call again with confirm: true. Without confirm the list read also stops at the budget.`,
-    `When the read was cut (the budget, Freshdesk's last list page, the time limit, or the API rate limit), the counts are of what was read and say truncated: true: narrow the period or call again later. It counts as an expensive operation and is refused when the API budget is low. A ticket changed in the last few minutes can be missing.`,
+    `Example: {"group_by": ["Status", "Priority"], "created_between": {"from": "2026-01-01", "to": "2026-01-31"}} returns {"groups": [{"values": {"Status": "Open", "Priority": "High"}, "count": 2}, ...], "total": 2, "api_calls_used": 1}: groups by count, largest first; total is the tickets counted. A ticket with no value counts under null, and so does every ticket when the team config hides the field. Agents and groups that share a name show as "Name (id)". At most ${GROUP_CAP} groups are shown, the largest; groups_not_shown says how many more.`,
+    `Up to ${SEARCH_CAP} matching tickets it reads Freshdesk's search, ${SEARCH_PAGE_SIZE} a request; above that it reads the list of tickets updated since the period's start, oldest created first, ${LIST_PAGE_SIZE} a request, until it passes the period's end. It first asks for one search page to learn the size, estimates the calls, and is refused when the estimate is over the per-call API budget: narrow the period or the filters, or call again with confirm: true. Without confirm the list read also stops at the budget. confirm lifts the API budget only, not the time limit: the list read starts no request after ${SCAN_START_MS / 1000} s, about ${(SCAN_START_MS / 1000) * 2} requests (${((SCAN_START_MS / 1000) * 2 * LIST_PAGE_SIZE).toLocaleString("en-US")} tickets) at the default pacing.`,
+    `When the read was cut (the budget, Freshdesk's last list page, the time limit, or the API rate limit), the counts are of what was read and say truncated: true (so does a result past ${GROUP_CAP} groups): narrow the period or call again later. It counts as an expensive operation and is refused when the API budget is low. A ticket changed in the last few minutes, or while the call reads, can be missing; no ticket is counted twice.`,
     "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
   input,
@@ -244,7 +273,7 @@ export const countTicketsTool: Tool<typeof input> = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  cost: `1 API call per ${SEARCH_PAGE_SIZE} matching tickets up to ${SEARCH_CAP} (${MAX_SEARCH_PAGE} at most); above that 1 plus 1 per ${LIST_PAGE_SIZE} tickets read, up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true; all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached`,
+  cost: `1 API call per ${SEARCH_PAGE_SIZE} matching tickets up to ${SEARCH_CAP} (${MAX_SEARCH_PAGE} at most); above that 1 plus 1 per ${LIST_PAGE_SIZE} tickets read, up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true, and a list read starts no request after ${SCAN_START_MS / 1000} s (about ${(SCAN_START_MS / 1000) * 2} at the default pacing); all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached`,
   customerText: true,
   async handler(args, context) {
     const started = Date.now();
@@ -282,14 +311,19 @@ export const countTicketsTool: Tool<typeof input> = {
       const label = plainName(field.label);
       keys.push(keys.includes(label) ? `${label} (${plainName(field.name)})` : label);
     }
-    const groups = new Map<string, { values: unknown[]; count: number }>();
+    const groups = new Map<string, { keys: unknown[]; shown: unknown[]; count: number }>();
+    const counted = new Set<number>();
     let total = 0;
     const count = (ticket: Ticket) => {
-      const values = fields.map((field) => groupValue(context, schema, field, ticket));
-      const id = JSON.stringify(values);
+      // A ticket a later page repeats (it moved during the call) is counted once.
+      if (counted.has(ticket.id)) return;
+      counted.add(ticket.id);
+      const parts = fields.map((field) => groupValue(context, schema, field, ticket));
+      const keys = parts.map((part) => part.key);
+      const id = JSON.stringify(keys);
       const group = groups.get(id);
       if (group) group.count += 1;
-      else groups.set(id, { values, count: 1 });
+      else groups.set(id, { keys, shown: parts.map((part) => part.shown), count: 1 });
       total += 1;
     };
 
@@ -349,7 +383,8 @@ export const countTicketsTool: Tool<typeof input> = {
       const matches = fieldMatcher(schema, args);
       const { from, to } = args.created_between;
       for (let page = 1; ; page++) {
-        if (requests + 1 > budget || Date.now() - started >= SCAN_START_MS) {
+        // Ticket requests, retries included, at the budget: no further page.
+        if (requests >= budget || Date.now() - started >= SCAN_START_MS) {
           truncated = true;
           break;
         }
@@ -389,12 +424,27 @@ export const countTicketsTool: Tool<typeof input> = {
     const sorted = [...groups.entries()].sort(([a, x], [b, y]) =>
       y.count !== x.count ? y.count - x.count : a < b ? -1 : a > b ? 1 : 0,
     );
+    // An agent or group name several ids share in this result shows its id.
+    const shared = fields.map((field, i) => {
+      const ids = new Map<unknown, Set<unknown>>();
+      if (ID_KEY[field.type] !== undefined) {
+        for (const group of groups.values()) {
+          const set = ids.get(group.shown[i]) ?? new Set();
+          set.add(group.keys[i]);
+          ids.set(group.shown[i], set);
+        }
+      }
+      return (shown: unknown) => shown !== null && (ids.get(shown)?.size ?? 0) > 1;
+    });
+    const shownGroups = sorted.slice(0, GROUP_CAP);
+    const notShown = sorted.length - shownGroups.length;
     return {
       ok: true,
       value: {
-        groups: sorted.map(([, group]) => {
+        groups: shownGroups.map(([, group]) => {
           const values: Record<string, unknown> = {};
-          group.values.forEach((value, i) => {
+          group.shown.forEach((shown, i) => {
+            const value = shared[i]!(shown) ? `${String(shown)} (${String(group.keys[i])})` : shown;
             // Defined, not assigned: a label `__proto__` stays an own key.
             Object.defineProperty(values, keys[i]!, {
               value,
@@ -405,8 +455,9 @@ export const countTicketsTool: Tool<typeof input> = {
           });
           return { values, count: group.count };
         }),
+        ...(notShown > 0 ? { groups_not_shown: notShown } : {}),
         total,
-        ...(truncated ? { truncated: true } : {}),
+        ...(truncated || notShown > 0 ? { truncated: true } : {}),
         api_calls_used: used,
       },
     };

@@ -7,6 +7,7 @@ import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { type AppContext, createContext } from "../../../src/tools/context.js";
 import {
+  GROUP_CAP,
   LIST_PAGE_SIZE,
   MAX_GROUP_FIELDS,
   SCAN_START_MS,
@@ -46,6 +47,8 @@ const FIELDS_PAYLOAD = [
   ...schemaFieldsPayload,
   { id: 1020, name: "cf_urgent", label: "Urgent", type: "custom_checkbox", default: false },
   { id: 1021, name: "cf_mystery", label: "Mystery", type: "custom_mystery", default: false },
+  { id: 1022, name: "cf_units", label: "Units", type: "custom_number", default: false },
+  { id: 1023, name: "cf_due_at", label: "Due at", type: "custom_date_time", default: false },
 ];
 
 function searchPath(query: string, page = 1): string {
@@ -156,16 +159,16 @@ async function cold(team: unknown = FAST): Promise<Desk> {
   return { session: await open(server), context };
 }
 
-function queueSchema() {
+function queueSchema(agents: unknown[] = agentPages.flat()) {
   reply(FIELDS, FIELDS_PAYLOAD);
-  reply(AGENTS, agentPages.flat());
+  reply(AGENTS, agents);
   reply(GROUPS, groupPages.flat());
 }
 
 /** A session whose schema is cached, the MockAgent's count back at 0. */
-async function warm(team: unknown = FAST): Promise<Desk> {
+async function warm(team: unknown = FAST, agents?: unknown[]): Promise<Desk> {
   const desk = await cold(team);
-  queueSchema();
+  queueSchema(agents);
   const loaded = await desk.context.schema.get();
   if (!loaded.ok) throw new Error("the fixture schema did not load");
   mock.clearCallHistory();
@@ -179,6 +182,7 @@ interface Group {
 
 interface Output {
   groups: Group[];
+  groups_not_shown?: number;
   total: number;
   truncated?: boolean;
   api_calls_used: number;
@@ -229,12 +233,17 @@ describe("count_tickets: the listing", () => {
     expect(description).toContain('"group_by": ["Status", "Priority"]');
     expect(description).toContain('{"values": {"Status": "Open", "Priority": "High"}, "count": 2}');
     expect(description).toContain("hides");
+    expect(description).toContain("confirm lifts the API budget only, not the time limit");
+    expect(description).toContain("about 40 requests (4,000 tickets)");
+    expect(description).toContain("no ticket is counted twice");
+    expect(description).toContain("groups_not_shown");
   });
 
   it("its page sizes are the two endpoints' and it groups by two fields at most", () => {
     expect(SEARCH_PAGE_SIZE).toBe(30);
     expect(LIST_PAGE_SIZE).toBe(100);
     expect(MAX_GROUP_FIELDS).toBe(2);
+    expect(GROUP_CAP).toBe(200);
   });
 
   it("its input schema has no zod default or transform", () => {
@@ -310,8 +319,9 @@ describe("count_tickets: counts from search (total ≤ 300)", () => {
       await callTool(session, TOOL, { group_by: ["Agent", "Group"], created_between: PERIOD }),
     );
     expect(byPeople.groups).toEqual([
-      { values: { Agent: "Juniper Vantablack", Group: "Spanner Desk" }, count: 1 },
+      // Equal counts: ordered by id (agent 501 before 502).
       { values: { Agent: "Quill Ottersby", Group: "Sprocket Desk" }, count: 1 },
+      { values: { Agent: "Juniper Vantablack", Group: "Spanner Desk" }, count: 1 },
     ]);
   });
 
@@ -392,6 +402,86 @@ describe("count_tickets: counts from search (total ≤ 300)", () => {
   });
 });
 
+describe("count_tickets: each ticket once, the group cap, shared names", () => {
+  it("a ticket on page 1 and again on page 2 (it moved) is counted once", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
+    reply(searchPath(PERIOD_QUERY, 2), found([ticket(4330), ...many(4331, 14)], 45));
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    expect(result.total).toBe(44);
+    expect(result.groups).toEqual([{ values: { Status: "Open" }, count: 44 }]);
+  });
+
+  it("past GROUP_CAP groups: the largest shown, groups_not_shown and truncated: true", async () => {
+    const { session } = await warm();
+    // 210 tickets: units 0 on six of them, then 204 other values, one each: 205 groups.
+    const units = (id: number, n: number) =>
+      ticket(id, { custom_fields: { ...rawTicket.custom_fields, cf_units: n } });
+    const all = [
+      ...Array.from({ length: 6 }, (_, i) => units(5000 + i, 0)),
+      ...Array.from({ length: 204 }, (_, i) => units(5100 + i, i + 1)),
+    ];
+    for (let page = 1; page <= 7; page++) {
+      reply(searchPath(PERIOD_QUERY, page), found(all.slice((page - 1) * 30, page * 30), 210));
+    }
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Units"], created_between: PERIOD }),
+    );
+    expect(result.groups).toHaveLength(GROUP_CAP);
+    expect(result.groups[0]).toEqual({ values: { Units: 0 }, count: 6 });
+    expect(result.groups_not_shown).toBe(5);
+    expect(result.truncated).toBe(true);
+    expect(result.total).toBe(210);
+  });
+
+  it("exactly GROUP_CAP groups: all shown, not truncated", async () => {
+    const { session } = await warm();
+    const all = Array.from({ length: GROUP_CAP }, (_, i) =>
+      ticket(5000 + i, { custom_fields: { ...rawTicket.custom_fields, cf_units: i } }),
+    );
+    for (let page = 1; page <= 7; page++) {
+      reply(
+        searchPath(PERIOD_QUERY, page),
+        found(all.slice((page - 1) * 30, page * 30), GROUP_CAP),
+      );
+    }
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Units"], created_between: PERIOD }),
+    );
+    expect(result.groups).toHaveLength(GROUP_CAP);
+    expect(result).not.toHaveProperty("groups_not_shown");
+    expect(result).not.toHaveProperty("truncated");
+  });
+
+  it("two agents with one name are two groups, each shown with its id; a unique name stays plain", async () => {
+    const twin = {
+      ...agentPages[0]![0]!,
+      id: 504,
+      contact: { ...agentPages[0]![0]!.contact, name: "Juniper Vantablack" },
+    };
+    const { session } = await warm(FAST, [...agentPages.flat(), twin]);
+    reply(
+      searchPath(PERIOD_QUERY),
+      found([
+        ticket(4301),
+        ticket(4302),
+        ticket(4303, { responder_id: 504 }),
+        ticket(4304, { responder_id: 501 }),
+      ]),
+    );
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Agent"], created_between: PERIOD }),
+    );
+    expect(result.groups).toEqual([
+      { values: { Agent: "Juniper Vantablack (502)" }, count: 2 },
+      { values: { Agent: "Quill Ottersby" }, count: 1 },
+      { values: { Agent: "Juniper Vantablack (504)" }, count: 1 },
+    ]);
+  });
+});
+
 describe("count_tickets: refused, no request sent", () => {
   it("a third field is validation, with no request even on a cold schema", async () => {
     const { session } = await cold();
@@ -438,6 +528,18 @@ describe("count_tickets: refused, no request sent", () => {
     expect(error.errors).toEqual([
       expect.objectContaining({ field: "group_by", code: "unsupported_field" }),
     ]);
+    expect(sent()).toBe(0);
+  });
+
+  it("a date-time field is unsupported_field, with the reason, nothing sent", async () => {
+    const { session } = await warm();
+    const error = refusal(
+      await callTool(session, TOOL, { group_by: ["Due at"], created_between: PERIOD }),
+    );
+    expect(error.errors).toEqual([
+      expect.objectContaining({ field: "group_by", code: "unsupported_field" }),
+    ]);
+    expect(error.errors?.[0]?.message).toContain("date-time");
     expect(sent()).toBe(0);
   });
 
@@ -523,6 +625,39 @@ describe("count_tickets: the budget", () => {
       await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
     );
     expect(result.total).toBe(120);
+  });
+
+  it("a later search page the limiter refuses: the counts so far, truncated: true", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 120));
+    // Page 2's response says 10 of 100 calls are left: page 3 is refused unsent.
+    reply(searchPath(PERIOD_QUERY, 2), found(many(4401, 30), 120), {
+      headers: { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+    });
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    expect(result.total).toBe(60);
+    expect(result.truncated).toBe(true);
+    expect(sent()).toBe(2);
+    expect(result.api_calls_used).toBe(2);
+  });
+
+  it("starts no search page after SCAN_START_MS: truncated: true, not an error", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // 8 s a page: page 3 ends at 24 s, past SCAN_START_MS: no page 4.
+    for (let page = 1; page <= 4; page++) {
+      reply(searchPath(PERIOD_QUERY, page), found(many(4000 + page * 100, 30), 120)).delay(8000);
+    }
+    const { result, ms } = await settle(
+      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    const counted = output(result);
+    expect(counted.truncated).toBe(true);
+    expect(counted.total).toBe(90);
+    expect(sent()).toBe(3);
+    expect(ms).toBeLessThan(30_000);
   });
 
   it("below the reserve the probe is refused as rate_limited: expensive, nothing sent", async () => {
@@ -632,6 +767,41 @@ describe("count_tickets: past 300, the ordered list scan", () => {
     expect(result.api_calls_used).toBe(5);
   });
 
+  it("with confirm: true the scan reads past the budget, to the list's end, not truncated", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 3 } });
+    reply(searchPath(PERIOD_QUERY), over);
+    for (let page = 1; page <= 5; page++) {
+      reply(scanPath(page), many(6000 + page * 100, LIST_PAGE_SIZE), { next: page < 5 });
+    }
+    const result = output(
+      await callTool(session, TOOL, {
+        group_by: ["Status"],
+        created_between: PERIOD,
+        confirm: true,
+      }),
+    );
+    expect(result.total).toBe(5 * LIST_PAGE_SIZE);
+    expect(result).not.toHaveProperty("truncated");
+    expect(sent()).toBe(6);
+  });
+
+  it("a page that took a retry counts both requests: the scan stops at the budget, no page after", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 5 } });
+    reply(searchPath(PERIOD_QUERY), over);
+    reply(scanPath(1), { message: "busy" }, { status: 503 });
+    for (let page = 1; page <= 4; page++) {
+      reply(scanPath(page), many(6000 + page * 100, LIST_PAGE_SIZE), { next: true });
+    }
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    // The probe, page 1 twice, pages 2 and 3: 5 requests, the budget.
+    expect(sent()).toBe(5);
+    expect(result.total).toBe(3 * LIST_PAGE_SIZE);
+    expect(result.truncated).toBe(true);
+    expect(result.api_calls_used).toBe(5);
+  });
+
   it("a later page the limiter refuses: the counts so far, truncated: true", async () => {
     const { session } = await warm();
     reply(searchPath(PERIOD_QUERY), over);
@@ -677,20 +847,51 @@ describe("count_tickets: past 300, the ordered list scan", () => {
     expect(ms).toBeLessThan(30_000);
   });
 
-  it("the list's last page, full, is a cut: truncated: true", async () => {
-    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 1000 } });
-    reply(searchPath(PERIOD_QUERY), over);
-    // Headers that leave the limiter's reserve far away for 300 pages.
-    const roomy = { "x-ratelimit-total": "5000", "x-ratelimit-remaining": "4900" };
-    for (let page = 1; page <= 300; page++) {
+  /** Headers that leave the limiter's reserve far away for 300 pages. */
+  const roomy = { "x-ratelimit-total": "5000", "x-ratelimit-remaining": "4900" };
+
+  /** Pages 1–299 of one ticket each, each linking the next. */
+  function pagesBeforeTheLast() {
+    for (let page = 1; page < 300; page++) {
       reply(scanPath(page), [ticket(7000 + page)], { next: true, headers: roomy });
     }
+  }
+
+  it("the list's last page linking a next one is a cut: truncated: true", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 1000 } });
+    reply(searchPath(PERIOD_QUERY), over);
+    pagesBeforeTheLast();
+    reply(scanPath(300), [ticket(7300)], { next: true, headers: roomy });
     const result = output(
       await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
     );
     expect(result.total).toBe(300);
     expect(result.truncated).toBe(true);
     expect(sent()).toBe(301);
+  });
+
+  it("the list's last page full with no Link is a cut too: truncated: true", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 1000 } });
+    reply(searchPath(PERIOD_QUERY), over);
+    pagesBeforeTheLast();
+    reply(scanPath(300), many(8000, LIST_PAGE_SIZE), { headers: roomy });
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    expect(result.total).toBe(299 + LIST_PAGE_SIZE);
+    expect(result.truncated).toBe(true);
+    expect(sent()).toBe(301);
+  });
+
+  it("the list's last page one short of full with no Link is the end: not truncated", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 1000 } });
+    reply(searchPath(PERIOD_QUERY), over);
+    pagesBeforeTheLast();
+    reply(scanPath(300), many(8000, LIST_PAGE_SIZE - 1), { headers: roomy });
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    expect(result).not.toHaveProperty("truncated");
   });
 });
 

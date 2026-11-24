@@ -209,6 +209,14 @@ T-036's choices (2026-11-24, `src/tools/toolsets/core/count-tickets.ts`):
   budget of 250 is reached.
 - `truncated: true` also for page 300 linking a next page or full, and for
   a later page the limiter refuses unsent. Any other failure fails the call.
+- Full review fixes (2026-11-24): each ticket id is counted once (a
+  ticket a later page repeats is skipped; one that moved the other way can
+  be missing); at most 200 groups, largest first, the rest as
+  `groups_not_shown` with `truncated: true`; a date-time field is refused
+  (`unsupported_field`, one group per ticket); agents and groups are
+  grouped by id, a name several ids share in the result shown as
+  `Name (id)`; the scan stops before a page once the ticket requests,
+  retries included, reach the budget.
 
 ### `find_similar_tickets`
 
@@ -349,7 +357,10 @@ page took about 8 s once and under 2 s twice (measured 2026-11-24): the
 latency varies, so the bound is the deadline, not a page count assumed from
 one sample. Under one 30 s deadline for the whole call, a scan may get as
 few as 3 slow pages; with `paginate`'s 30 s per page, the budget is the
-bound. Which one a scan runs under is open for T-036 and T-037.
+bound. Which one a scan runs under is open for T-037. `count_tickets`
+(T-036, 2026-11-24) runs under the one 30 s deadline of the call and starts
+no page after 20 s: about 40 list pages (4,000 tickets) at the default
+pacing, below the default budget; `confirm: true` lifts the budget only.
 
 `list_tickets` (T-027, 2026-11-24) runs its `uncategorized` scan under the
 one 30 s deadline of the call, and so that the deadline does not cut a page
