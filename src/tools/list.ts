@@ -20,8 +20,8 @@
 //   - A cursor is model-supplied input. `readCursor` checks it before any
 //     request: not a string, over CURSOR_MAX_LENGTH, not in the form above,
 //     a digest that does not match this call, or a position above the bound
-//     the tool passes (each list tool passes its own) is a `validation` error with
-//     `http_status: null`, and its message never quotes the cursor. What it
+//     the tool passes (required: each list tool passes its own) is a
+//     `validation` error with `http_status: null`, and its message never quotes the cursor. What it
 //     returns is a position and nothing else: no cursor content can reach a
 //     URL, a host or a path.
 
@@ -82,13 +82,13 @@ export function listEnvelope<T>(call: ListCall, page: ListPage<T>): ListEnvelope
 
 /**
  * The position the call's `cursor` argument gives: 0 without one.
- * `maxPosition` is the tool's own bound (each list tool passes the last
- * position it can serve); a position above it is refused like a bad cursor.
- * Throws a `TypeError` for a bound that is not a whole number, zero or more,
- * and for arguments that are not JSON (see `canonical`).
+ * `maxPosition` is the tool's own bound, required (each list tool passes the
+ * last position it can serve); a position above it is refused like a bad
+ * cursor. Throws a `TypeError` for a bound that is missing or not a whole
+ * number, zero or more, and for arguments that are not JSON (see `canonical`).
  */
-export function readCursor(call: ListCall, maxPosition?: number): CursorResult {
-  if (maxPosition !== undefined && !(Number.isSafeInteger(maxPosition) && maxPosition >= 0)) {
+export function readCursor(call: ListCall, maxPosition: number): CursorResult {
+  if (!(Number.isSafeInteger(maxPosition) && maxPosition >= 0)) {
     throw new TypeError("A cursor's maximum position is a whole number, zero or more.");
   }
   const cursor = call.args[CURSOR_ARG];
@@ -111,7 +111,7 @@ export function readCursor(call: ListCall, maxPosition?: number): CursorResult {
       "the cursor belongs to another call; use it only with the tool and arguments it came with",
     );
   }
-  if (maxPosition !== undefined && position > maxPosition) {
+  if (position > maxPosition) {
     return refuse("the cursor points past the last position this tool serves");
   }
   return { ok: true, position };

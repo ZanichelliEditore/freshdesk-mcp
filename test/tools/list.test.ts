@@ -4,6 +4,7 @@ import { HttpClient } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
 import {
   CURSOR_MAX_LENGTH,
+  type CursorResult,
   type ListCall,
   listEnvelope,
   readCursor,
@@ -22,12 +23,15 @@ function cursorFor(call: ListCall, next: number): string {
   return envelope.next_cursor as string;
 }
 
+/** A bound no test position reaches, for the cases that test something else. */
+const ANY = Number.MAX_SAFE_INTEGER;
+
 function withCursor(call: ListCall, cursor: unknown): ListCall {
   return { tool: call.tool, args: { ...call.args, cursor } };
 }
 
 function refused(call: ListCall): FreshdeskError {
-  const result = readCursor(call);
+  const result = readCursor(call, ANY);
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error("unreachable");
   expect(result.error.code).toBe("validation");
@@ -101,15 +105,18 @@ describe("listEnvelope", () => {
 
 describe("readCursor: round trip", () => {
   it("no cursor is position 0", () => {
-    expect(readCursor(CALL)).toEqual({ ok: true, position: 0 });
+    expect(readCursor(CALL, ANY)).toEqual({ ok: true, position: 0 });
   });
 
   it.each([0, 1, 100, 123_456, Number.MAX_SAFE_INTEGER])("position %i round-trips", (n) => {
-    expect(readCursor(withCursor(CALL, cursorFor(CALL, n)))).toEqual({ ok: true, position: n });
+    expect(readCursor(withCursor(CALL, cursorFor(CALL, n)), ANY)).toEqual({
+      ok: true,
+      position: n,
+    });
   });
 
   it("decodes to a whole number only: the result has no other key", () => {
-    const result = readCursor(withCursor(CALL, cursorFor(CALL, 42)));
+    const result = readCursor(withCursor(CALL, cursorFor(CALL, 42)), ANY);
     expect(Object.keys(result).sort()).toEqual(["ok", "position"]);
     if (!result.ok) throw new Error("unreachable");
     expect(Number.isSafeInteger(result.position)).toBe(true);
@@ -125,7 +132,7 @@ describe("readCursor: round trip", () => {
         status: "Open",
       },
     };
-    expect(readCursor(withCursor(reordered, cursorFor(CALL, 9)))).toEqual({
+    expect(readCursor(withCursor(reordered, cursorFor(CALL, 9)), ANY)).toEqual({
       ok: true,
       position: 9,
     });
@@ -134,7 +141,7 @@ describe("readCursor: round trip", () => {
   it("the cursor argument itself is not part of the digest", () => {
     const first = withCursor(CALL, cursorFor(CALL, 30));
     const second = cursorFor(first, 60);
-    expect(readCursor(withCursor(CALL, second))).toEqual({ ok: true, position: 60 });
+    expect(readCursor(withCursor(CALL, second), ANY)).toEqual({ ok: true, position: 60 });
   });
 
   it("a cursor is short, and has no character a URL, host or path needs", () => {
@@ -249,7 +256,6 @@ describe("readCursor: the tool's maximum position", () => {
       ok: true,
       position: 100,
     });
-    expect(readCursor(withCursor(CALL, cursorFor(CALL, 101)))).toEqual({ ok: true, position: 101 });
     const result = readCursor(withCursor(CALL, cursorFor(CALL, 101)), 100);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
@@ -266,6 +272,17 @@ describe("readCursor: the tool's maximum position", () => {
 
   it.each([-1, 1.5, Number.NaN, Infinity])("a maximum of %s throws", (max) => {
     expect(() => readCursor(CALL, max)).toThrow(TypeError);
+  });
+
+  it("no maximum does not type-check, and through a cast throws", () => {
+    const at101 = withCursor(CALL, cursorFor(CALL, 101));
+    // @ts-expect-error -- maxPosition is required: no list tool reads a cursor without its bound.
+    expect(() => readCursor(at101)).toThrow(TypeError);
+    const unbound = readCursor as (call: ListCall, maxPosition?: number) => CursorResult;
+    for (const call of [CALL, at101]) {
+      expect(() => unbound(call)).toThrow(TypeError);
+      expect(() => unbound(call, undefined)).toThrow(TypeError);
+    }
   });
 });
 
@@ -291,9 +308,11 @@ describe("arguments are the raw JSON ones: anything else throws", () => {
       expect(() => listEnvelope(call, { items: [], next: 1, api_calls_used: 1 })).toThrow(
         TypeError,
       );
-      expect(() => readCursor({ tool: CALL.tool, args: { ...args, cursor: "1.x" } })).not.toThrow();
+      expect(() =>
+        readCursor({ tool: CALL.tool, args: { ...args, cursor: "1.x" } }, ANY),
+      ).not.toThrow();
       const good = cursorFor({ tool: CALL.tool, args: {} }, 1);
-      expect(() => readCursor({ tool: CALL.tool, args: { ...args, cursor: good } })).toThrow(
+      expect(() => readCursor({ tool: CALL.tool, args: { ...args, cursor: good } }, ANY)).toThrow(
         TypeError,
       );
     }
@@ -302,7 +321,7 @@ describe("arguments are the raw JSON ones: anything else throws", () => {
   it("a null-prototype object is a plain object", () => {
     const args = Object.assign(Object.create(null) as Record<string, unknown>, { status: "Open" });
     const cursor = cursorFor({ tool: CALL.tool, args }, 5);
-    expect(readCursor({ tool: CALL.tool, args: { status: "Open", cursor } })).toEqual({
+    expect(readCursor({ tool: CALL.tool, args: { status: "Open", cursor } }, ANY)).toEqual({
       ok: true,
       position: 5,
     });
@@ -310,7 +329,7 @@ describe("arguments are the raw JSON ones: anything else throws", () => {
 
   it("-0 is the same argument as 0, as in JSON", () => {
     const cursor = cursorFor({ tool: CALL.tool, args: { n: 0 } }, 5);
-    expect(readCursor({ tool: CALL.tool, args: { n: -0, cursor } })).toEqual({
+    expect(readCursor({ tool: CALL.tool, args: { n: -0, cursor } }, ANY)).toEqual({
       ok: true,
       position: 5,
     });
@@ -318,7 +337,7 @@ describe("arguments are the raw JSON ones: anything else throws", () => {
 
   it("an undefined argument is an absent one", () => {
     const cursor = cursorFor({ tool: CALL.tool, args: {} }, 5);
-    expect(readCursor({ tool: CALL.tool, args: { agent: undefined, cursor } })).toEqual({
+    expect(readCursor({ tool: CALL.tool, args: { agent: undefined, cursor } }, ANY)).toEqual({
       ok: true,
       position: 5,
     });
@@ -346,9 +365,12 @@ describe("readCursor before a request: nothing is sent on a refusal", () => {
     await mock.close();
   });
 
-  /** The shape every list tool takes: read the cursor, and only then send. */
+  /** The last position the fake tool serves: each list tool passes its own. */
+  const MAX_POSITION = 100;
+
+  /** The shape every list tool takes: read the cursor against its bound, and only then send. */
   async function fakeTool(call: ListCall): Promise<FreshdeskError | number> {
-    const cursor = readCursor(call);
+    const cursor = readCursor(call, MAX_POSITION);
     if (!cursor.ok) return cursor.error;
     const result = await http.request({
       method: "GET",
