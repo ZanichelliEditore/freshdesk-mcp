@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** todo (2026-11-24)
+- **Status:** doing (2026-11-24)
 - **Depends on:** T-043
 - **Created:** 2026-11-24
 
