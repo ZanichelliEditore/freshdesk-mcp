@@ -4,44 +4,37 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T15:06:43+01:00`
-- **Describes commit:** `36bb6fc`
-  (`36bb6fce7b314fd7f9abadff8af6bb34cf691b26`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45410604953
-  (workflow `quality`, ran on `36bb6fc`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T15:17:43+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-033 `done (2026-11-24)`,
-  `docs/tasks/T-033-client-canned.md` ("Done"). Commits `ec6a469`
-  (status), `cdb1457` (resource), `26f1f8f` (measured facts, done).
-  `src/client/resources/canned.ts`: folders `{id, name, personal}`, a
-  folder's responses `{id, title}`, one response
-  `{id, title, text, folder_id, visibility}`; explicit allow-lists.
-  **Measured** (2026-11-24, orchestrator, GET only, status and counts
-  only): the key reads `/canned_response_folders`; `per_page` is accepted
-  there and on `/solutions/categories`. Counts in the gitignored
-  `docs/private/account-facts.md`. Built by a builder agent under the
+- **Current task:** T-034 `done (2026-11-24)`,
+  `docs/tasks/T-034-canned-tools.md` ("Done"). Commits `ff8489a`
+  (status), `16c1c85` (build), `c8b1180` (review fixes, done). Tools
+  `list_canned_responses` (folders with `personal`, their response
+  titles with `shared: null`, paged over folders, every request
+  `expensive`) and `get_canned_response` (text wrapped and capped,
+  `visibility`, `shared`). Built by a builder agent under the
   orchestrator (owner's instruction of 2026-11-23).
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-034** (tools
-  `list_canned_responses`, `get_canned_response`). Take a folder's
-  `personal` from `listCannedFolders` (`listCannedResponses` does not
-  carry it); treat `visibility` other than 0, or `null`, as not shared
-  with all agents; `truncated` comes from T-034's own cap.
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-035** (cost
+  estimate and per-call budget). Then **T-055** should be sized and done
+  before T-036 (`count_tickets`): it measures the search date boundary
+  and time zone that T-036's counts depend on (HANDOFF at `46c8af8`).
   - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`).
   - **The owner**, Dependabot PRs (unchanged; T-044 "Done").
 
-- **Read before anything else:** PLAN row T-034 and its task file; the
-  T-033 task file's "Open doubts".
+- **Read before anything else:** PLAN row T-035 and its task file.
 
 - **Reviews:**
-  - **Full round** on `3c37ca8..cdb1457`, R1 = `cdb1457`. The four quotes
+  - **Full round** on `8df5479..16c1c85`, R1 = `16c1c85`. The four quotes
     matched for all three; no Bash calls. compliance: Wireframes `none`.
-    security: none (1 info for T-034). code-reviewer: 1 Medium (whether
-    Freshdesk refuses `per_page` on the folder list: measured, accepted),
-    1 Low (the allow-list deviation unrecorded: recorded), 1 info.
-  - **Scoped round:** not needed: no code changed after the full round.
+    security: 1 Low (a listed response had no sharing label, so a
+    group-limited title could look shared). code-reviewer: 1 Medium (no
+    test proved the folder list goes `expensive`), 4 Low. Fixed in
+    `c8b1180`; two Lows parked.
+  - **Scoped round:** not needed: a field, tests and an import, no
+    mechanism changed (rule 9).
 
 - **Proposed plan changes:** none new. T-055 `proposed (2026-11-24)`
   (search date boundary; size before T-036). T-036 boundary-day line:
@@ -49,13 +42,14 @@
   `proposed (2026-11-23)`.
 
 - **Open doubts (owner):**
-  - **T-033:** a response's `visibility` on the view and an empty folder's
-    shape are not measured; a non-admin key would get `forbidden`.
-  - **T-032 and earlier:** see HANDOFF at `4d37b3e`, `4894e33`, `cae6a52`,
-    `f1fee04`, `86e2cea`, `85afd63`, `0b830e0`, `e8c3120`, `46c8af8`,
-    `c7e4b3c`, `26e6101`, `8c90427`, `fe4c24c` (T-022 confirms),
-    `c79a23b`, `ae9da29`, `fcca38f`, `65be293`, `f286c82`, `470124f`,
-    `876ec68`, `20f4b2f`, `d20c83b`.
+  - **T-034:** a canned response's `visibility` on the view and an empty
+    folder's shape are not measured; a non-admin key gets `forbidden`;
+    the folder list is read again on every page.
+  - **T-033 and earlier:** see HANDOFF at `36bb6fc`, `4d37b3e`, `4894e33`,
+    `cae6a52`, `f1fee04`, `86e2cea`, `85afd63`, `0b830e0`, `e8c3120`,
+    `46c8af8`, `c7e4b3c`, `26e6101`, `8c90427`, `fe4c24c` (T-022
+    confirms), `c79a23b`, `ae9da29`, `fcca38f`, `65be293`, `f286c82`,
+    `470124f`, `876ec68`, `20f4b2f`, `d20c83b`.
 
 - **Dead ends:** none this task. From before: HANDOFF at `4d37b3e`,
   `85afd63`, `fe4c24c`, `ae9da29`, `876ec68`.
@@ -63,8 +57,8 @@
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), from the
-  builder's run on `26f1f8f`'s tree:
+  builder's run on `c8b1180`'s tree:
   - eslint, prettier, ruff, `tsc --noEmit`, `npm run build` clean;
-  - vitest "Test Files 33 passed (33)", "Tests 2261 passed (2261)";
+  - vitest "Test Files 34 passed (34)", "Tests 2304 passed (2304)";
   - `tools/checks` "Ran 54 tests", OK;
   - both gitleaks scans passed.
