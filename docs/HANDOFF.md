@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T11:16:15+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `46c8af8`
+  (`46c8af823daf35bd6b4a93fe2929831359e19e2e`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45373290175
+  (workflow `quality`, ran on `46c8af8`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-043 `done (2026-11-24)`,
   `docs/tasks/T-043-ticket-filters.md` ("Done"). Commits `a8a0384`
