@@ -108,7 +108,7 @@ describe("listAgents: well-formed pages", () => {
   it("stops after 10 pages when page 10 still has a Link, and says the list is cut", async () => {
     for (let n = 1; n <= 10; n += 1) page(n, [], true);
 
-    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: true, pages: 10 });
+    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: true, attempts: 10 });
     expect(sentPaths()).toHaveLength(10);
     expect(sentPaths().at(-1)).toBe(pathOf(10));
   });
@@ -117,7 +117,7 @@ describe("listAgents: well-formed pages", () => {
     for (let n = 1; n <= 9; n += 1) page(n, [], true);
     page(10, [], false);
 
-    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: false, pages: 10 });
+    expect(await listAgents(http)).toEqual({ ok: true, items: [], truncated: false, attempts: 10 });
     expect(sentPaths()).toHaveLength(10);
   });
 });

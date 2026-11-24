@@ -46,6 +46,13 @@
 //   - Pagination: `paginate` follows `Link: <url>; rel="next"`, each URL
 //     through `request` and so through the host check, up to the caller's cap.
 //     Its return value says whether a cap cut the list (`truncated`).
+//   - Attempts: `requestWithRetry`'s result says how many attempts it sent
+//     (`attempts`), and `paginate`'s return value sums them over its pages.
+//     An attempt is sent when `request` handed it to `fetch`, whatever came
+//     back (one cut in flight by a deadline included); one refused before
+//     that (URL, deadline, limiter) is not. `request` keeps the results it
+//     got through `fetch` in a private WeakSet, so a subclass's override that
+//     answers without calling it counts nothing, as it sends nothing.
 
 import { type Dispatcher, fetch, type Headers } from "undici";
 import { ConfigError } from "../config.js";
@@ -128,6 +135,16 @@ export type HttpResult =
   | { ok: true; status: number; headers: Headers; body: unknown }
   | { ok: false; error: FreshdeskError };
 
+/** `requestWithRetry`'s result: the last attempt's, and how many were sent. */
+export type RetryResult = HttpResult & { attempts: number };
+
+/** `paginate`'s return value. */
+export interface PageEnd {
+  truncated: boolean;
+  /** Attempts sent for all the pages, retries included. */
+  attempts: number;
+}
+
 /** A list request: always a GET, its URL built from the template. */
 export type PageRequest = Omit<HttpRequest, "method" | "body" | "url">;
 
@@ -153,6 +170,8 @@ export class HttpClient {
   readonly #authorization: string;
   readonly #dispatcher: Dispatcher;
   readonly #limiter: RateLimiter;
+  /** The results `request` got through `fetch`: each one an attempt sent. */
+  readonly #sent = new WeakSet<HttpResult>();
 
   constructor(options: HttpClientOptions) {
     if (!FRESHDESK_HOST.test(options.domain) && options.domain !== options.hostOverride) {
@@ -234,8 +253,8 @@ export class HttpClient {
       text = await response.text();
     } catch (cause) {
       log("network");
-      if (timeout.signal.aborted && left <= REQUEST_TIMEOUT_MS) return expired(method);
-      return { ok: false, error: networkError(cause) };
+      if (timeout.signal.aborted && left <= REQUEST_TIMEOUT_MS) return this.#mark(expired(method));
+      return this.#mark({ ok: false, error: networkError(cause) });
     } finally {
       clearTimeout(timer);
     }
@@ -251,10 +270,10 @@ export class HttpClient {
       }
     }
     if (status < 200 || status >= 300) {
-      return { ok: false, error: errorFromResponse(status, headers, body) };
+      return this.#mark({ ok: false, error: errorFromResponse(status, headers, body) });
     }
     if (!parsed) {
-      return {
+      return this.#mark({
         ok: false,
         error: {
           code: "server",
@@ -262,9 +281,9 @@ export class HttpClient {
           message: `Freshdesk sent a body that is not JSON (HTTP ${status}).`,
           retryable: false,
         },
-      };
+      });
     }
-    return { ok: true, status, headers, body };
+    return this.#mark({ ok: true, status, headers, body });
   }
 
   /**
@@ -275,24 +294,29 @@ export class HttpClient {
    * `callerDeadline` (epoch ms) is the caller's own, for an operation of
    * several calls. It only shortens: the call still ends within
    * TOTAL_DEADLINE_MS.
+   *
+   * `attempts` on the result is how many attempts were sent, the last one's
+   * included: 0 when none was (see the file's header).
    */
-  async requestWithRetry(request: HttpRequest, callerDeadline = Infinity): Promise<HttpResult> {
+  async requestWithRetry(request: HttpRequest, callerDeadline = Infinity): Promise<RetryResult> {
     const read = (request.method ?? "GET") === "GET";
     const deadline = Math.min(Date.now() + TOTAL_DEADLINE_MS, callerDeadline);
+    let attempts = 0;
     for (let attempt = 0; ; attempt += 1) {
       const result = await this.request(request, deadline);
-      if (result.ok) return result;
+      if (this.#sent.has(result)) attempts += 1;
+      if (result.ok) return { ...result, attempts };
       const { code, http_status, retryable } = result.error;
       // With no status the limiter refused the call: waiting is its business.
       const limited = code === "rate_limited" && http_status !== null;
       const transient = retryable && (code === "server" || code === "network");
       if (!read && transient) {
-        return { ok: false, error: { ...result.error, retryable: false } };
+        return { ok: false, error: { ...result.error, retryable: false }, attempts };
       }
-      if (attempt === MAX_RETRIES || !(limited || transient)) return result;
+      if (attempt === MAX_RETRIES || !(limited || transient)) return { ...result, attempts };
       const backoff = limited ? 0 : BACKOFF_MS * 2 ** attempt;
       // Written so that a deadline that is not a number starts no retry.
-      if (!(Date.now() + backoff < deadline)) return result;
+      if (!(Date.now() + backoff < deadline)) return { ...result, attempts };
       if (!limited) await sleep(backoff);
     }
   }
@@ -304,7 +328,8 @@ export class HttpClient {
    *
    * Returns `truncated`: true when a cap ended the list with more of it left,
    * a `Link` not followed or a page cut; false when the list ended, or a
-   * failed page did (the failure is the answer).
+   * failed page did (the failure is the answer). And `attempts`: the
+   * attempts sent for all the pages, retries and a failed page's included.
    *
    * `deadline` (epoch ms) is one for all the pages: each page's
    * `requestWithRetry` gets it, so a page it cuts, or one not asked for
@@ -314,7 +339,7 @@ export class HttpClient {
     request: PageRequest,
     cap: PageCap,
     deadline?: number,
-  ): AsyncGenerator<HttpResult, { truncated: boolean }, void> {
+  ): AsyncGenerator<HttpResult, PageEnd, void> {
     if (!isCount(cap.pages) || (cap.items !== undefined && !isCount(cap.items))) {
       throw new TypeError("A page cap and an item cap are whole numbers, zero or more.");
     }
@@ -327,23 +352,31 @@ export class HttpClient {
 
     let next: HttpRequest | undefined = first;
     let room = cap.items ?? Infinity;
+    let attempts = 0;
     for (let page = 0; page < cap.pages && room > 0 && next !== undefined; page += 1) {
-      const result = await this.requestWithRetry(next, deadline);
+      // A page is yielded as `request`'s result: its count stays here.
+      const { attempts: sent, ...result } = await this.requestWithRetry(next, deadline);
+      attempts += sent;
       if (!result.ok) {
         yield result;
-        return { truncated: false };
+        return { truncated: false, attempts };
       }
       const body: unknown = result.body;
       if (Array.isArray(body) && body.length > room) {
         yield { ...result, body: body.slice(0, room) };
-        return { truncated: true };
+        return { truncated: true, attempts };
       }
       yield result;
       if (Array.isArray(body)) room -= body.length;
       const link = /<([^>]*)>\s*;\s*rel="?next"?/.exec(result.headers.get("link") ?? "")?.[1];
       next = link === undefined ? undefined : { ...first, url: link };
     }
-    return { truncated: next !== undefined };
+    return { truncated: next !== undefined, attempts };
+  }
+
+  #mark(result: HttpResult): HttpResult {
+    this.#sent.add(result);
+    return result;
   }
 
   /** `undefined` when a parameter's value would change which resource is addressed. */

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   HttpClient,
   type HttpRequest,
@@ -6,6 +7,7 @@ import {
   type PageCap,
 } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
+import { listAll, PER_PAGE } from "../../src/client/resources/list-all.js";
 import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
 
 const DOMAIN = "acme.freshdesk.com";
@@ -360,7 +362,7 @@ describe("paginate: one deadline for all its pages", () => {
   /** Every page and the return value, the fake clock run forward as needed. */
   async function run(
     deadline?: number,
-  ): Promise<{ pages: HttpResult[]; truncated: boolean; ms: number }> {
+  ): Promise<{ pages: HttpResult[]; truncated: boolean; attempts: number; ms: number }> {
     const started = Date.now();
     const iterator = http.paginate(
       { path: "/tickets", query: { per_page: 2 } },
@@ -369,11 +371,12 @@ describe("paginate: one deadline for all its pages", () => {
     );
     const pages: HttpResult[] = [];
     let truncated: boolean | undefined;
+    let attempts = Number.NaN;
     void (async () => {
       for (;;) {
         const step = await iterator.next();
         if (step.done) {
-          truncated = step.value.truncated;
+          ({ truncated, attempts } = step.value);
           return;
         }
         pages.push(step.value);
@@ -383,7 +386,7 @@ describe("paginate: one deadline for all its pages", () => {
       await new Promise((resolve) => setImmediate(resolve));
       if (truncated === undefined) await vi.advanceTimersByTimeAsync(100);
     }
-    return { pages, truncated, ms: Date.now() - started };
+    return { pages, truncated, attempts, ms: Date.now() - started };
   }
 
   const PAGE_2 = `${ORIGIN}/api/v2/tickets?per_page=2&page=2`;
@@ -395,7 +398,7 @@ describe("paginate: one deadline for all its pages", () => {
     slowPage("/api/v2/tickets?per_page=2&page=2", [{ id: 2 }], 3000, next(PAGE_3));
     slowPage("/api/v2/tickets?per_page=2&page=3", [{ id: 3 }], 3000);
 
-    const { pages, truncated, ms } = await run(Date.now() + 5000);
+    const { pages, truncated, attempts, ms } = await run(Date.now() + 5000);
 
     expect(bodies(pages)).toEqual([[{ id: 1 }], "network"]);
     expect(pages[1]).toMatchObject({
@@ -405,6 +408,8 @@ describe("paginate: one deadline for all its pages", () => {
     expect(truncated).toBe(false);
     expect(ms).toBe(5000);
     expect(sentUrls()).toHaveLength(2);
+    // The page cut in flight was sent: it counts.
+    expect(attempts).toBe(2);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(sentUrls()).toHaveLength(2);
   });
@@ -427,18 +432,19 @@ describe("paginate: one deadline for all its pages", () => {
       ok: false,
       error: { code: "network", http_status: null, retryable: true },
     });
-    expect(end).toEqual({ done: true, value: { truncated: false } });
+    expect(end).toEqual({ done: true, value: { truncated: false, attempts: 1 } });
     expect(sentUrls()).toHaveLength(1);
   });
 
   it("sends nothing when the deadline has already passed", async () => {
     threePages();
 
-    const { pages, truncated } = await run(Date.now() - 1);
+    const { pages, truncated, attempts } = await run(Date.now() - 1);
 
     expect(bodies(pages)).toEqual(["network"]);
     expect(truncated).toBe(false);
     expect(sentUrls()).toHaveLength(0);
+    expect(attempts).toBe(0);
   });
 
   it("with none, each page keeps its own 30 s", async () => {
@@ -450,10 +456,96 @@ describe("paginate: one deadline for all its pages", () => {
     slowPage("/api/v2/tickets?per_page=2&page=3", [], 60_000);
     slowPage("/api/v2/tickets?per_page=2&page=3", [{ id: 3 }], 1500);
 
-    const { pages, truncated, ms } = await run();
+    const { pages, truncated, attempts, ms } = await run();
 
     expect(bodies(pages)).toEqual([[{ id: 1 }], [{ id: 2 }], [{ id: 3 }]]);
     expect(truncated).toBe(false);
     expect(ms).toBe(36_000);
+    // Each page's timed-out attempt was sent, and its retry.
+    expect(attempts).toBe(6);
+    expect(sentUrls()).toHaveLength(6);
+  });
+});
+
+describe("paginate, listAll: the attempts sent, retries included", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Runs the fake clock forward until `promise` settles. */
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    let value: { of: T } | undefined;
+    void promise.then((of) => {
+      value = { of };
+    });
+    while (value === undefined) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (value === undefined) await vi.advanceTimersByTimeAsync(100);
+    }
+    return value.of;
+  }
+
+  async function paginated(path = "/tickets", perPage = 2): Promise<number> {
+    const iterator = http.paginate({ path, query: { per_page: perPage } }, { pages: 10 });
+    for (;;) {
+      const step = await iterator.next();
+      if (step.done) return step.value.attempts;
+    }
+  }
+
+  const item = z.object({ id: z.number() });
+  const FIRST = `/api/v2/tickets?per_page=${PER_PAGE}`;
+
+  it("paginate: a page answered 503 then 200 is 2 attempts", async () => {
+    page("/api/v2/tickets?per_page=2", [], undefined, 503);
+    page("/api/v2/tickets?per_page=2", [{ id: 1 }]);
+
+    expect(await settle(paginated())).toBe(2);
+    expect(sentUrls()).toHaveLength(2);
+  });
+
+  it("listAll: a page answered 503 then 200 is 2 attempts", async () => {
+    page(FIRST, [], undefined, 503);
+    page(FIRST, [{ id: 1 }]);
+
+    const listed = await settle(listAll(http, "/tickets", item, "tickets"));
+
+    expect(listed).toEqual({ ok: true, items: [{ id: 1 }], truncated: false, attempts: 2 });
+    expect(sentUrls()).toHaveLength(2);
+  });
+
+  it("paginate: a page sent once is 1 attempt, three pages 3", async () => {
+    page("/api/v2/tickets?per_page=2", [{ id: 1 }]);
+    expect(await settle(paginated())).toBe(1);
+
+    threePages();
+    expect(await settle(paginated())).toBe(3);
+    expect(sentUrls()).toHaveLength(4);
+  });
+
+  it("listAll: a page sent once is 1 attempt", async () => {
+    page(FIRST, [{ id: 1 }]);
+
+    const listed = await settle(listAll(http, "/tickets", item, "tickets"));
+
+    expect(listed).toEqual({ ok: true, items: [{ id: 1 }], truncated: false, attempts: 1 });
+  });
+
+  it("paginate: a refused Link is not an attempt", async () => {
+    page("/api/v2/tickets?per_page=2", [{ id: 1 }], next("https://evil.example/api/v2/tickets"));
+
+    expect(await settle(paginated())).toBe(1);
+    expect(sentUrls()).toHaveLength(1);
+  });
+
+  it("paginate: a page cap of zero is 0 attempts", async () => {
+    threePages();
+    const iterator = http.paginate({ path: "/tickets" }, { pages: 0 });
+
+    expect(await iterator.next()).toEqual({ done: true, value: { truncated: true, attempts: 0 } });
   });
 });

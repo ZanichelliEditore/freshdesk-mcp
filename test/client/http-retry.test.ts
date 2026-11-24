@@ -52,9 +52,9 @@ function failure(result: HttpResult) {
 }
 
 /** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-async function settle(call: Promise<HttpResult>): Promise<{ result: HttpResult; ms: number }> {
+async function settle<T extends HttpResult>(call: Promise<T>): Promise<{ result: T; ms: number }> {
   const started = Date.now();
-  let result: HttpResult | undefined;
+  let result: T | undefined;
   void call.then((value) => {
     result = value;
   });
@@ -323,6 +323,69 @@ describe("requestWithRetry: writes on 429", () => {
 
     expect(failure(result)).toMatchObject({ code: "rate_limited", retry_after_s: 60 });
     expect(sent()).toHaveLength(1);
+  });
+});
+
+describe("requestWithRetry: attempts counts the attempts sent", () => {
+  it("is 1 for a request answered at once", async () => {
+    on("GET").reply(200, [], { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: true, attempts: 1 });
+  });
+
+  it("is 3 for 503, 503, then 200", async () => {
+    on("GET").reply(503, "").times(2);
+    on("GET").reply(200, [], { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: true, attempts: 3 });
+    expect(sent()).toHaveLength(3);
+  });
+
+  it("is 4 when every attempt fails", async () => {
+    on("GET").reply(503, "").times(4);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: false, attempts: 4 });
+    expect(sent()).toHaveLength(4);
+  });
+
+  it("does not count the limiter's refusal of the retry after a 429", async () => {
+    on("POST").reply(429, "");
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: false, attempts: 1, error: { code: "rate_limited" } });
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("counts an attempt cut in flight by the deadline", async () => {
+    on("GET").reply(200, [], { headers: JSON_TYPE }).delay(10_000);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }, Date.now() + 5000));
+
+    expect(result).toMatchObject({ ok: false, attempts: 1, error: { code: "network" } });
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("is 0 when the deadline has already passed", async () => {
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }, Date.now() - 1));
+
+    expect(result).toMatchObject({ ok: false, attempts: 0 });
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("is 0 for a URL off the configured host", async () => {
+    const { result } = await settle(
+      http.requestWithRetry({ path: "/tickets", url: "https://evil.example/api/v2/tickets" }),
+    );
+
+    expect(result).toMatchObject({ ok: false, attempts: 0, error: { code: "validation" } });
+    expect(sent()).toHaveLength(0);
   });
 });
 

@@ -263,16 +263,24 @@ describe("list_agents, list_groups: the cap", () => {
 
 describe("list_agents, list_groups: api_calls_used and retries", () => {
   it.each(NAMES)(
-    "%s: recorded limitation: a page retried after a 503 counts once in api_calls_used",
+    "%s: a page answered 503 then 200 makes api_calls_used the MockAgent count, 2",
     async (tool) => {
       page(tool, 1, { message: "busy" }, false, 503);
       page(tool, 1, TOOLS[tool].pages[1], false);
       const result = envelope(await callTool(await session(), tool, {}));
       expect(result.items).toHaveLength(1);
       expect(sent()).toBe(2);
-      expect(result.api_calls_used).toBe(1);
+      expect(result.api_calls_used).toBe(sent());
     },
   );
+
+  it.each(NAMES)("%s: the description and cost say retries are counted", async (name) => {
+    const tools = await listTools(await session());
+    const description = tools.find((listed) => listed.name === name)?.description ?? "";
+    expect(description).not.toMatch(/counts once|not counted|counts pages/);
+    expect(description).toContain("api_calls_used counts every request sent, retries included");
+    expect(description).toMatch(/Cost: .*plus one per retry/s);
+  });
 });
 
 describe("list_agents, list_groups: one 30 s deadline per call", () => {

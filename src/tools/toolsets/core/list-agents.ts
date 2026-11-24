@@ -12,9 +12,8 @@
 //     pages, `truncated: true` past them. It never gives a `next_cursor`, so
 //     its last position is 0; a cursor is still read first, before any
 //     request, so one from another call or past 0 sends nothing.
-//   - `api_calls_used` is the pages that came back (see `listAll`): a page
-//     that needed a retry counts once, though each attempt was a call. A
-//     recorded limitation, said in the description and the cost.
+//   - `api_calls_used` is every request sent for the list, retries included
+//     (`listAll`'s `attempts`), as the description and the cost say.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start, shared
 //     by every page (as the schema service's load): a page it cuts, or one
 //     not asked for because it has passed, fails the call.
@@ -40,7 +39,7 @@ export const listAgentsTool: Tool<typeof input> = {
   description: [
     "The help desk's agents, for assigning a ticket or notifying someone: each one's id, name and work email.",
     "The whole list comes in one response; a list longer than 1,000 agents is cut and says truncated: true.",
-    "api_calls_used counts the pages that came back: a page Freshdesk had to be asked for again counts once.",
+    "api_calls_used counts every request sent, retries included.",
     `Names are shown without HTML and cut at ${NAME_CAP} characters (ending with …).`,
   ].join(" "),
   input,
@@ -50,7 +49,7 @@ export const listAgentsTool: Tool<typeof input> = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  cost: "1 API call per 100 agents, at most 10, within 30 s; api_calls_used counts pages, so a page retried after an error counts once",
+  cost: "1 API call per 100 agents, at most 10, within 30 s, plus one per retry of a page after an error",
   customerText: false,
   async handler(args, context) {
     const call = { tool: "list_agents", args };
@@ -68,7 +67,7 @@ export const listAgentsTool: Tool<typeof input> = {
       value: listEnvelope(call, {
         items,
         truncated: listed.truncated,
-        api_calls_used: listed.pages,
+        api_calls_used: listed.attempts,
       }),
     };
   },

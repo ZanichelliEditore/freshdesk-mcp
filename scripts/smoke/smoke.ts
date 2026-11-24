@@ -31,6 +31,7 @@ import {
   type HttpRequest,
   type HttpResult,
   type PageCap,
+  type PageEnd,
   type PageRequest,
 } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
@@ -70,10 +71,10 @@ export class SmokeClient extends HttpClient {
     request: PageRequest,
     cap: PageCap,
     deadline?: number,
-  ): AsyncGenerator<HttpResult, { truncated: boolean }, void> {
+  ): AsyncGenerator<HttpResult, PageEnd, void> {
     if (!isGet((request as HttpRequest).method)) {
       yield NOT_GET;
-      return { truncated: false };
+      return { truncated: false, attempts: 0 };
     }
     return yield* super.paginate(request, cap, deadline);
   }
