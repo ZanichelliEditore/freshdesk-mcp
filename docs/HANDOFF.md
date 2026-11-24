@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T15:06:43+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `36bb6fc`
+  (`36bb6fce7b314fd7f9abadff8af6bb34cf691b26`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45410604953
+  (workflow `quality`, ran on `36bb6fc`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-033 `done (2026-11-24)`,
   `docs/tasks/T-033-client-canned.md` ("Done"). Commits `ec6a469`
