@@ -6,14 +6,13 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
-import { CLOSE, NAME_CAP, OPEN } from "../../../src/tools/format.js";
+import { CLOSE, NAME_CAP, OPEN, TEXT_CAP } from "../../../src/tools/format.js";
 import { listEnvelope } from "../../../src/tools/list.js";
 import {
   FOLDER_CAP,
   MAX_POSITION,
   PAGE_SIZE,
   RESPONSE_CAP,
-  TEXT_CAP,
 } from "../../../src/tools/toolsets/core/canned.js";
 import { DATA_NOT_INSTRUCTIONS } from "../../../src/tools/toolsets/index.js";
 import { cannedFolderPages, cannedFolderView, cannedResponseView } from "../../fixtures/canned.js";
@@ -133,7 +132,7 @@ interface Folder {
   id: number;
   name: string;
   personal: boolean | null;
-  responses: { id: number; title: string }[];
+  responses: { id: number; title: string; shared: null }[];
 }
 
 interface Envelope {
@@ -212,15 +211,15 @@ describe("list_canned_responses", () => {
           name: "Sprocket Replies",
           personal: false,
           responses: [
-            { id: 3601, title: "Sprocket on its way" },
-            { id: 3602, title: "Oil before fitting" },
+            { id: 3601, title: "Sprocket on its way", shared: null },
+            { id: 3602, title: "Oil before fitting", shared: null },
           ],
         },
         {
           id: 3502,
           name: "My Spanner Notes",
           personal: true,
-          responses: [{ id: 3603, title: "Spanner sizes" }],
+          responses: [{ id: 3603, title: "Spanner sizes", shared: null }],
         },
         { id: 3503, name: "Widget Returns", personal: false, responses: [] },
       ],
@@ -228,6 +227,21 @@ describe("list_canned_responses", () => {
       api_calls_used: 5,
     });
     expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("a listed response's shared is null, unknown until viewed, even in a folder with personal: false", async () => {
+    reply(FOLDERS, [cannedFolderPages[0][0]]);
+    reply(folderView(3501), cannedFolderView);
+    const [folder] = ok<Envelope>(await list()).items;
+    expect(folder.personal).toBe(false);
+    expect(folder.responses.map((response) => response.shared)).toEqual([null, null]);
+  });
+
+  it("the description says a listed response's sharing is unknown until viewed", async () => {
+    const tools = await listTools(await session());
+    expect(tools.find((tool) => tool.name === "list_canned_responses")?.description).toContain(
+      "A listed response's sharing is unknown until viewed (shared: null); a folder's personal: false does not make it shared.",
+    );
   });
 
   it("a folder's personal missing or unreadable is null", async () => {
@@ -377,14 +391,24 @@ describe("list_canned_responses", () => {
     expect(sent()).toBe(0);
   });
 
-  it("the folder list is expensive: below the reserve the next list is refused, nothing more sent", async () => {
+  it("the folder list is expensive: below the reserve the first folder view is refused, nothing more sent", async () => {
     reply(FOLDERS, cannedFolderPages[0], 200, LOW);
     const error = refusal(await list());
     expect(error.code).toBe("rate_limited");
     expect(sent()).toBe(1);
   });
 
-  it("a folder's list is expensive: below the reserve the next one is refused", async () => {
+  it("the folder list's pages are expensive: below the reserve page 2 is refused, nothing more sent", async () => {
+    reply(FOLDERS, cannedFolderPages[0], 200, {
+      ...LOW,
+      link: `<${ORIGIN}${FOLDERS}&page=2>; rel="next"`,
+    });
+    const error = refusal(await list());
+    expect(error.code).toBe("rate_limited");
+    expect(sent()).toBe(1);
+  });
+
+  it("the second folder view is expensive: below the reserve after the first it is refused", async () => {
     reply(FOLDERS, cannedFolderPages[0]);
     reply(folderView(3501), cannedFolderView, 200, LOW);
     const error = refusal(await list());

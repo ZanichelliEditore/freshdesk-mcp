@@ -6,7 +6,7 @@
 //     OD-7). A response's text (Freshdesk's plain-text `content`) loses its
 //     tag-shaped runs (TAG, as solutions.ts strips an article's) and nothing
 //     else: no entity is decoded and a lone `<` or `>` stays. Then it is
-//     wrapped in `<ticket_content>` and cut at TEXT_CAP with format.ts's
+//     wrapped in `<ticket_content>` and cut at format.ts's TEXT_CAP with its
 //     marker; the rest cannot be fetched, so the marker names no way to.
 //   - Personal and group-limited content is labelled, not dropped: a folder
 //     carries `personal` (true, false, or `null` when unknown), a viewed
@@ -15,8 +15,9 @@
 //     agents`. Every description says a personal or group-limited canned
 //     response belongs to its owner(s) and should not be reused as team
 //     guidance unless it is shared. A listed response has no visibility
-//     (canned.ts's folder view gives ids and titles only): its folder's
-//     `personal` is what the list says.
+//     (canned.ts's folder view gives ids and titles only), so it carries
+//     `shared: null`, unknown until viewed: a folder's `personal: false` does
+//     not make it shared.
 //   - `list_canned_responses`: the cursor is read first, before any request,
 //     with MAX_POSITION. Every call lists the folders again (`listAll`, 1
 //     request per 100) and keeps the first FOLDER_CAP; a position is a page of
@@ -38,15 +39,13 @@ import {
   listCannedFolders,
   listCannedResponses,
 } from "../../../client/resources/canned.js";
-import { NAME_CAP, plainName, untrusted } from "../../format.js";
+import { NAME_CAP, plainName, TEXT_CAP, untrusted } from "../../format.js";
 import { listEnvelope, readCursor } from "../../list.js";
 import type { Tool } from "../index.js";
 
 /** One call's requests end within this, all of them together. */
 const CALL_DEADLINE_MS = 30_000;
 
-/** Code points of a response's text returned; the rest is cut with the marker. */
-export const TEXT_CAP = 10_000;
 /** A tag-shaped run in a response's plain text: removed, nothing else. */
 const TAG = /<\/?[A-Za-z][^<>]*>/g;
 /** Folders returned a call, each with its responses read. */
@@ -84,7 +83,7 @@ interface ListedFolder {
   id: number;
   name: string;
   personal: boolean | null;
-  responses: { id: number; title: string }[];
+  responses: { id: number; title: string; shared: null }[];
 }
 
 const listInput = z.object({ cursor: z.string().optional() });
@@ -92,7 +91,8 @@ const listInput = z.object({ cursor: z.string().optional() });
 export const listCannedResponsesTool: Tool<typeof listInput> = {
   name: "list_canned_responses",
   description: [
-    "Canned response folders (for example Sprocket Replies), each with its id, name, personal (true when only its owner sees it, or null) and its responses' ids and titles (for example Sprocket on its way). No text: get_canned_response gives a response's text and visibility.",
+    "Canned response folders (for example Sprocket Replies), each with its id, name, personal (true when only its owner sees it, or null) and its responses' ids, titles (for example Sprocket on its way) and shared: null. No text: get_canned_response gives a response's text and visibility.",
+    "A listed response's sharing is unknown until viewed (shared: null); a folder's personal: false does not make it shared.",
     `The list gives ${PAGE_SIZE} folders a call, from the first ${FOLDER_CAP} folders only, each with the first ${RESPONSE_CAP} titles only: past either the list is cut and says truncated: true. While has_more is true, call again with next_cursor; every call lists the folders again.`,
     "Every request is sent as an expensive operation: paced (2 requests a second by default), and refused with rate_limited when the account's API budget is low (the call then fails). A call that cannot finish within 30 s fails as network.",
     OWNERS,
@@ -124,9 +124,11 @@ export const listCannedResponsesTool: Tool<typeof listInput> = {
         id: folder.id,
         name: plainName(folder.name),
         personal: folder.personal,
-        responses: got.responses
-          .slice(0, RESPONSE_CAP)
-          .map((response) => ({ id: response.id, title: plainName(response.title) })),
+        responses: got.responses.slice(0, RESPONSE_CAP).map((response) => ({
+          id: response.id,
+          title: plainName(response.title),
+          shared: null,
+        })),
       });
     }
     const more = start + PAGE_SIZE < kept.length;
