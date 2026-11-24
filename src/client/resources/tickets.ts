@@ -32,7 +32,8 @@
 //
 // Cost class: `cheap`, except a `listTickets` page whose caller gives
 // `expensive` (a scan: docs/architecture/ticket-queries.md, "Cost class for
-// the limiter").
+// the limiter"). A `listTickets` page that fails carries `attempts` too: the
+// requests sent for it, 0 when the limiter refused it before any.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -82,7 +83,7 @@ export interface ListTicketsOptions {
 
 export type ListTicketsResult =
   | { ok: true; tickets: Ticket[]; has_more: boolean; attempts: number }
-  | { ok: false; error: FreshdeskError };
+  | { ok: false; error: FreshdeskError; attempts?: number };
 
 /** The one include `getTicket` sends: see the file's header. */
 export type TicketInclude = "stats";
@@ -141,7 +142,11 @@ export async function listTickets(
       return { ok: true, tickets, has_more: truncated, attempts };
     }
     const result = step.value;
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // A failed page ends the iteration: its return value has the count.
+      const end = await pages.next();
+      return { ...result, attempts: end.done ? end.value.attempts : 0 };
+    }
     const parsed = ticket.array().safeParse(result.body);
     if (!parsed.success) return malformed("tickets", result.status);
     tickets = parsed.data;

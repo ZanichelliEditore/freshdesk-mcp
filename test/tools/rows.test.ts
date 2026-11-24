@@ -269,6 +269,36 @@ describe("ticketDetail", () => {
     expect(detail.fields.Description).toBe(`${OPEN}It squeaks${CLOSE}`);
   });
 
+  it("cuts every wrapped value, the description included, by the caller's options", () => {
+    const fields = [
+      ...(schemaFieldsPayload as TicketField[]),
+      {
+        id: 1020,
+        name: "description",
+        label: "Description",
+        type: "default_description",
+        default: true,
+      } as TicketField,
+    ];
+    const long = ticket({
+      description: `<p>${"d".repeat(12)}</p>`,
+      description_text: "d".repeat(12),
+      custom_fields: { ...ticket().custom_fields, cf_hobby: "h".repeat(11) },
+    });
+    const options = { cap: 10, rest: "ask again" };
+    const detail = ticketDetail(contextWith(), schemaWith({ fields }), long, options);
+    expect(detail.fields.Description).toBe(
+      `${OPEN}${"d".repeat(10)}${CLOSE}\n[… 2 more characters not shown; ask again]`,
+    );
+    expect(detail.fields.Hobby).toBe(
+      `${OPEN}${"h".repeat(10)}${CLOSE}\n[… 1 more characters not shown; ask again]`,
+    );
+    expect(detail.fields.Status).toBe("Open");
+    // Without options nothing this short is cut.
+    const whole = ticketDetail(contextWith(), schemaWith({ fields }), long);
+    expect(whole.fields.Description).toBe(`${OPEN}${"d".repeat(12)}${CLOSE}`);
+  });
+
   it("keys a later field with a used label by its API name, each value by its own type", () => {
     const fields: TicketField[] = [
       { id: 1, name: "cf_free", label: "Size", type: "custom_text", default: false },

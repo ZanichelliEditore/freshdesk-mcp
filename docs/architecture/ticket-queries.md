@@ -71,7 +71,7 @@ The two endpoints, in short:
 
 | Endpoint | Page | Cap | Calls per 100 tickets |
 |---|---|---|---|
-| `GET /tickets` (list) | 100 | 300 pages = 30,000 tickets | 1 (2 credits with `include=stats`, measured 2026-11-24) |
+| `GET /tickets` (list) | up to 100 | 300 pages = 30,000 tickets at 100 a page (`list_tickets` asks 30 a page without a scan: 9,000) | 1 (2 credits with `include=stats`, measured 2026-11-24) |
 | `GET /search/tickets` (search) | 30 | 10 pages = 300 results | 4 (`ceil(100 / 30)`) |
 | local filter on list pages | — | the list's 30,000, and the [scan bounds](#scan-bounds) | 1 per 100 tickets **scanned**, not matched |
 
@@ -89,8 +89,8 @@ The two endpoints, in short:
 | agent | search `agent_id:<id>` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | type | search `type:'<name>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | tag | search `tag:'<tag>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
-| `uncategorized` | local check of `custom_fields`: on the list pages alone, on the search results with other filters (see [below](#uncategorized)) | 30,000 / 300 | 1 per 100 scanned / 4 per 100 scanned | measured 2026-11-24 (a nested field is not searchable; both carry `custom_fields`) |
-| `updated_since` | list `updated_since=<ISO instant>` | 30,000 | 1 | documented, [List All Tickets](https://developers.freshdesk.com/api/#list_all_tickets); measured 2026-11-24 (lifts the 30-day window) |
+| `uncategorized` | local check of `custom_fields`: on the list pages alone, on the search results with other filters (see [below](#uncategorized)) | 30,000 (9,000 with `detail: true`, pages of 30) / 300 | 1 per 100 scanned (per 30 with `detail: true`) / 4 per 100 scanned | measured 2026-11-24 (a nested field is not searchable; both carry `custom_fields`) |
+| `updated_since` | list `updated_since=<ISO instant>`, 30 a page | 9,000 (300 pages of 30; T-027) | 4 | documented, [List All Tickets](https://developers.freshdesk.com/api/#list_all_tickets); measured 2026-11-24 (lifts the 30-day window) |
 | `created_between` | search `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'` (days, UTC), then `created_at`'s UTC day checked locally within from–to (T-043) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); with the local check, exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 
 Several filters at once: one search query, the conditions joined by `AND`
@@ -236,8 +236,9 @@ measured way to ask it (T-043 may add it then).
 Search refuses page 11 (400 `validation`, measured 2026-11-24), and `total`
 goes above 300 (measured 2026-11-24). A tool that lists (`list_tickets`,
 `search_tickets`, `triage_queue`, `find_similar_tickets`) returns what the
-10 pages hold with `truncated: true`, says the total is over 300 and how to
-narrow the query (a shorter `created_between`, one more filter). A tool
+10 pages hold with `truncated: true` in its envelope; that the total is
+over 300 and how to narrow the query (a shorter `created_between`, one more
+filter) is said in the tool's description, not in the result (T-027). A tool
 that needs every ticket (`count_tickets`, `export_tickets`) does not use
 search past 300: it scans the list endpoint, ordered (see `count_tickets`),
 within the [scan bounds](#scan-bounds), and says `truncated: true` if they
@@ -258,7 +259,14 @@ bound. Which one a scan runs under is open for T-036 and T-037.
 one 30 s deadline of the call, and so that the deadline does not cut a page
 it starts none once 15 s of it are spent; it also stops at 10 list pages a
 call (1,000 tickets read) or once it holds 30 rows, and gives `next_cursor`
-for the next list page. A failed page fails the call.
+for the next list page: at most 129 rows a call. With `detail: true` its
+pages are 30 tickets, so at most 59 tickets a call, each text value cut at
+1,000 code points. A failed page fails the call, with one exception: when
+at least one page was read and the limiter refuses a later one
+(`rate_limited` with no HTTP status), the call returns the rows kept so far
+with `next_cursor` at the refused page, so a retry resumes there. The list's
+page 300 is the last: when it links a next page or comes back full,
+`list_tickets` says `truncated: true`.
 
 ## Cost class for the limiter
 
@@ -335,4 +343,5 @@ bears on:
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
 | `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 | Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three | T-029 |
+| Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |

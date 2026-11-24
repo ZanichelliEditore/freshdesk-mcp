@@ -13,27 +13,42 @@
 //     endpoint without. Which source a call uses is known from its arguments
 //     alone (`SEARCH_FILTERS`, the filters `buildTicketQuery` turns into
 //     search conditions), so the bound is MAX_SEARCH_POSITION or
-//     MAX_LIST_POSITION and a cursor past it sends nothing.
+//     MAX_LIST_POSITION and a cursor past it sends nothing. Should the query
+//     built ever name the other source, the handler throws (the registry
+//     answers with its fixed internal error) and no ticket request is sent.
 //   - Search: one page a call. More exists while the page is not the last of
 //     the 10 and `total` reaches past it. `total` over the 300 results the 10
 //     pages hold is `truncated: true`, on every page of that search.
 //   - The list endpoint: one page of LIST_ROWS a call, more while Freshdesk
 //     links a next page. With `uncategorized` (alone or with `updated_since`)
-//     the call is a scan: pages of SCAN_PER_PAGE, each sent as `expensive`,
-//     read until the list ends, the rows kept reach LIST_ROWS, SCAN_PAGES
-//     pages are read, or SCAN_START_MS have passed since the call started (a
-//     slow page took about 8 s once: no page is started that the deadline
-//     would likely cut). The next call resumes at the next list page. A page
-//     at MAX_LIST_PAGE that still links a next one is `truncated: true`.
+//     the call is a scan: pages of SCAN_PER_PAGE (DETAIL_SCAN_PER_PAGE with
+//     `detail: true`), each sent as `expensive`, read until the list ends,
+//     the rows kept reach LIST_ROWS, SCAN_PAGES pages are read, or
+//     SCAN_START_MS have passed since the call started (a slow page took
+//     about 8 s once: no page is started that the deadline would likely
+//     cut). The next call resumes at the next list page. The page at
+//     MAX_LIST_PAGE is the last Freshdesk returns: when it links a next one,
+//     or comes back full (whether it carries a `Link` is documented, not
+//     measured), the list is `truncated: true`.
 //   - A short page is never passed off as the end: `has_more` and
 //     `next_cursor` come from the source (search's `total`, the list's
 //     `Link`), never from the number of rows left after the local checks. A
 //     call can so return fewer rows than a page, or none, with `has_more:
-//     true`; a scan can return up to LIST_ROWS - 1 + SCAN_PER_PAGE rows.
+//     true`; a scan can return up to SCAN_MAX_ROWS rows (DETAIL_SCAN_MAX_ROWS
+//     tickets with `detail: true`): one short of LIST_ROWS, then a whole page.
 //     `truncated` is the source's too: with a date filter the search counts
 //     the widened set, so it can be cut at 300 when fewer tickets match.
-//   - A failed request fails the call, a scan's later page included: no
-//     partial list.
+//   - `detail: true` is bounded: each wrapped value, the description
+//     included, is cut at DETAIL_VALUE_CAP code points with the marker
+//     (`get_ticket` returns the full text), and a scan reads the smaller page.
+//   - A failed request fails the call: no partial list. One exception: a
+//     scan that has read at least one page and whose next page the limiter
+//     refuses (`rate_limited` with no HTTP status) returns the rows kept so
+//     far, with `next_cursor` at the refused page, so a retry resumes there
+//     instead of reading the pages again. That page's own requests, if a
+//     retry of it was what the limiter refused (after a 5xx, or after a 429
+//     whose hold outlasts the limiter's wait), are counted. Any other failure
+//     of a later page (a 403, the network, the deadline) fails the call.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start, shared
 //     by every request.
 //   - `api_calls_used` is every request this call sent, retries included, and
@@ -58,6 +73,13 @@ const CALL_DEADLINE_MS = 30_000;
 export const LIST_ROWS = SEARCH_PER_PAGE;
 /** Tickets of one list page of a scan: the endpoint's largest page. */
 export const SCAN_PER_PAGE = 100;
+/** The same with `detail: true`, where each ticket is far larger. */
+export const DETAIL_SCAN_PER_PAGE = LIST_ROWS;
+/** The most rows a scan returns: one short of LIST_ROWS, then a whole page. */
+export const SCAN_MAX_ROWS = LIST_ROWS - 1 + SCAN_PER_PAGE;
+export const DETAIL_SCAN_MAX_ROWS = LIST_ROWS - 1 + DETAIL_SCAN_PER_PAGE;
+/** Code points of one text value of a ticket with `detail: true`. */
+export const DETAIL_VALUE_CAP = 1000;
 /** The most list pages one call scans. */
 export const SCAN_PAGES = 10;
 /** A scan starts no further page once this much of the call's deadline is spent. */
@@ -97,12 +119,12 @@ const input = z.object({
 export const listTicketsTool: Tool<typeof input> = {
   name: "list_tickets",
   description: [
-    "Tickets matching every filter given, as compact rows: id, subject, status, priority, category, last update, agent and group, by name. detail: true returns every field of each ticket by label instead (much larger).",
+    `Tickets matching every filter given, as compact rows: id, subject, status, priority, category, last update, agent and group, by name. detail: true returns every field of each ticket by label instead (much larger), each text cut at ${DETAIL_VALUE_CAP.toLocaleString("en-US")} characters, saying how many are not shown: get_ticket returns the full text.`,
     "Filters: status, priority, group and agent by name or id; type by name; tag (one tag, exact); uncategorized: true (a category field is empty); updated_since (an ISO 8601 date-time with a zone, such as 2026-01-02T03:04:05Z); created_between {from, to} (days as YYYY-MM-DD, UTC, both included). A filter that is not valid is refused with the valid names, and nothing is sent. For a custom field use search_tickets.",
     `With status, priority, group, agent, type, tag or created_between the list comes ${SEARCH_PER_PAGE} tickets a call from Freshdesk's search, which returns the first ${MAX_SEARCH_PAGE * SEARCH_PER_PAGE} matches only: past them the list is cut and says truncated: true (narrow it with one more filter or a shorter created_between), and a ticket changed in the last few minutes can be missing.`,
-    `Without any of those the list is the tickets created in the last 30 days, newest first, ${LIST_ROWS} a call; updated_since replaces that window with the tickets updated since then.`,
+    `Without any of those the list is the tickets created in the last 30 days, newest first, ${LIST_ROWS} a call; updated_since replaces that window with the tickets updated since then. That list reaches ${MAX_LIST_PAGE} calls (${(MAX_LIST_PAGE * LIST_ROWS).toLocaleString("en-US")} tickets): past them it is cut and says truncated: true (narrow it with a later updated_since or a filter).`,
     `uncategorized and the dates are checked on each ticket after Freshdesk answers, so a call can return fewer rows than a page, or none, and still not be the end: has_more says whether there is more, never the number of rows. While has_more is true, call again with the same arguments and next_cursor.`,
-    `uncategorized without status, priority, group, agent, type, tag or created_between reads the list ${SCAN_PER_PAGE} tickets a request, up to ${SCAN_PAGES} requests a call, until it has ${LIST_ROWS} rows; it counts as an expensive operation and is refused when the API budget is low.`,
+    `uncategorized without status, priority, group, agent, type, tag or created_between reads the list ${SCAN_PER_PAGE} tickets a request (${DETAIL_SCAN_PER_PAGE} with detail: true), up to ${SCAN_PAGES} requests a call, until it has ${LIST_ROWS} rows: a call returns at most ${SCAN_MAX_ROWS} rows, or ${DETAIL_SCAN_MAX_ROWS} tickets with detail: true. It counts as an expensive operation and is refused when the API budget is low; refused part-way, it returns what it has with next_cursor.`,
     "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
   input,
@@ -112,7 +134,7 @@ export const listTicketsTool: Tool<typeof input> = {
     idempotentHint: true,
     openWorldHint: true,
   },
-  cost: `1 API call; with uncategorized and none of status, priority, group, agent, type, tag or created_between, up to ${SCAN_PAGES} (1 per ${SCAN_PER_PAGE} tickets read); all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached`,
+  cost: `1 API call; with uncategorized and none of status, priority, group, agent, type, tag or created_between, up to ${SCAN_PAGES} (1 per ${SCAN_PER_PAGE} tickets read, per ${DETAIL_SCAN_PER_PAGE} with detail: true); all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached`,
   customerText: true,
   async handler(args, context) {
     const call = { tool: "list_tickets", args };
@@ -126,6 +148,11 @@ export const listTicketsTool: Tool<typeof input> = {
     const { schema } = loaded;
     const query = buildTicketQuery(context, schema, args);
     if (!query.ok) return query;
+    if (searched !== (query.endpoint === "search")) {
+      // The cursor's bound was chosen for the other source: fail closed.
+      throw new Error("list_tickets: SEARCH_FILTERS and buildTicketQuery disagree");
+    }
+    const detail = args.detail === true;
 
     let calls = loaded.attempts;
     const kept: Ticket[] = [];
@@ -142,22 +169,31 @@ export const listTicketsTool: Tool<typeof input> = {
       if (page < MAX_SEARCH_PAGE && page * SEARCH_PER_PAGE < found.total) next = page;
     } else {
       const scan = query.uncategorized !== undefined;
+      const first = page;
       const last = scan ? page + SCAN_PAGES - 1 : page;
+      const perPage = !scan ? LIST_ROWS : detail ? DETAIL_SCAN_PER_PAGE : SCAN_PER_PAGE;
       for (;;) {
         const listed = await listTickets(
           context.http,
-          { per_page: scan ? SCAN_PER_PAGE : LIST_ROWS, page, ...query.list },
+          { per_page: perPage, page, ...query.list },
           deadline,
           scan ? "expensive" : "cheap",
         );
-        if (!listed.ok) return listed;
-        calls += listed.attempts;
-        kept.push(...listed.tickets.filter((ticket) => matchesLocal(query, ticket)));
-        if (!listed.has_more) break;
-        if (page === MAX_LIST_PAGE) {
-          truncated = true;
+        if (!listed.ok) {
+          const { code, http_status } = listed.error;
+          if (page === first || code !== "rate_limited" || http_status !== null) return listed;
+          // The limiter refused a later page of a scan: keep what was read.
+          calls += listed.attempts ?? 0;
+          next = page - 1;
           break;
         }
+        calls += listed.attempts;
+        kept.push(...listed.tickets.filter((ticket) => matchesLocal(query, ticket)));
+        if (page === MAX_LIST_PAGE) {
+          truncated = listed.has_more || listed.tickets.length === perPage;
+          break;
+        }
+        if (!listed.has_more) break;
         if (page === last || kept.length >= LIST_ROWS || Date.now() - started >= SCAN_START_MS) {
           // The position of list page `page + 1`.
           next = page;
@@ -171,8 +207,11 @@ export const listTicketsTool: Tool<typeof input> = {
       ok: true,
       value: listEnvelope(call, {
         items: kept.map((ticket) =>
-          args.detail === true
-            ? ticketDetail(context, schema, ticket)
+          detail
+            ? ticketDetail(context, schema, ticket, {
+                cap: DETAIL_VALUE_CAP,
+                rest: "get_ticket returns the full text",
+              })
             : ticketRow(context, schema, ticket),
         ),
         ...(next === undefined ? {} : { next }),

@@ -272,6 +272,17 @@ describe("listTickets: the cost class", () => {
     expect(urls()).toHaveLength(1);
   });
 
+  it("a failed page says how many requests it took: 0 when the limiter refused it", async () => {
+    await drain();
+
+    const refusedPage = await listTickets(http, { page: 2 }, undefined, "expensive");
+
+    expect(refusedPage).toMatchObject({ ok: false, attempts: 0 });
+
+    reply(TICKETS, 400, { errors: [] });
+    expect(await listTickets(http, { page: 2 })).toMatchObject({ ok: false, attempts: 1 });
+  });
+
   it("given expensive above the reserve, the page is sent", async () => {
     reply(TICKETS, 200, ticketPage);
 

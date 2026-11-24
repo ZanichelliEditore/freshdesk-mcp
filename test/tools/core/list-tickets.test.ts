@@ -23,9 +23,13 @@ import { listEnvelope } from "../../../src/tools/list.js";
 import { ticketDetail, ticketRow } from "../../../src/tools/rows.js";
 import { buildTicketQuery, type TicketFilters } from "../../../src/tools/ticket-query.js";
 import {
+  DETAIL_SCAN_MAX_ROWS,
+  DETAIL_SCAN_PER_PAGE,
+  DETAIL_VALUE_CAP,
   LIST_ROWS,
   MAX_LIST_POSITION,
   MAX_SEARCH_POSITION,
+  SCAN_MAX_ROWS,
   SCAN_PAGES,
   SCAN_PER_PAGE,
   SCAN_START_MS,
@@ -161,8 +165,19 @@ async function cold(team: unknown = {}): Promise<Desk> {
   return { session: await open(server), context };
 }
 
-function queueSchema() {
-  reply(FIELDS, schemaFieldsPayload);
+const DESCRIPTION_FIELD = {
+  id: 1016,
+  name: "description",
+  label: "Description",
+  type: "default_description",
+  default: true,
+};
+
+/** How `detail: true` cuts a text value. */
+const DETAIL_CUT = { cap: DETAIL_VALUE_CAP, rest: "get_ticket returns the full text" };
+
+function queueSchema(fields: unknown = schemaFieldsPayload) {
+  reply(FIELDS, fields);
   reply(AGENTS, agentPages.flat());
   reply(GROUPS, groupPages.flat());
 }
@@ -171,9 +186,12 @@ function queueSchema() {
  * A session whose schema is cached, the MockAgent's count back at 0: what
  * follows counts the requests of `list_tickets` alone.
  */
-async function warm(team: unknown = {}): Promise<Desk & { schema: Schema }> {
+async function warm(
+  team: unknown = {},
+  fields: unknown = schemaFieldsPayload,
+): Promise<Desk & { schema: Schema }> {
   const desk = await cold(team);
-  queueSchema();
+  queueSchema(fields);
   const loaded = await desk.context.schema.get();
   if (!loaded.ok) throw new Error("the fixture schema did not load");
   mock.clearCallHistory();
@@ -244,6 +262,19 @@ describe("list_tickets: the listing", () => {
     expect(tool?.description).toContain("created in the last 30 days");
     expect(tool?.description).toContain("fewer rows");
     expect(tool?.description).toContain("has_more");
+  });
+
+  it("its description states the bounds of detail, of a scan and of the list", async () => {
+    const tools = await listTools((await cold()).session);
+    const description = tools.find((listed) => listed.name === TOOL)?.description;
+    expect(SCAN_MAX_ROWS).toBe(129);
+    expect(DETAIL_SCAN_MAX_ROWS).toBe(59);
+    expect(DETAIL_VALUE_CAP).toBe(1000);
+    expect(description).toContain("at most 129 rows, or 59 tickets with detail: true");
+    expect(description).toContain("each text cut at 1,000 characters");
+    expect(description).toContain("get_ticket returns the full text");
+    expect(description).toContain("300 calls (9,000 tickets)");
+    expect(description).toContain("returns what it has with next_cursor");
   });
 
   it("its last positions are its two sources' last pages", () => {
@@ -357,7 +388,7 @@ describe("list_tickets: detail", () => {
     const full = ticket(4301);
     reply(searchPath("status:2"), found([full]));
     const result = output(await callTool(session, TOOL, { status: 2, detail: true }));
-    expect(result.items).toEqual([asSent(ticketDetail(context, schema, full))]);
+    expect(result.items).toEqual([asSent(ticketDetail(context, schema, full, DETAIL_CUT))]);
     expect(result.items[0]).toMatchObject({
       id: 4301,
       fields: {
@@ -368,6 +399,34 @@ describe("list_tickets: detail", () => {
         Hobby: wrapped("Kite flying"),
       },
     });
+  });
+
+  it("a 10,000-character description comes back cut at DETAIL_VALUE_CAP, with the marker", async () => {
+    const { session } = await warm({}, [...schemaFieldsPayload, DESCRIPTION_FIELD]);
+    const long = "s".repeat(10_000);
+    const full = ticket(4301, {
+      description: `<div>${long}</div>`,
+      description_text: long,
+      custom_fields: { ...rawTicket.custom_fields, cf_hobby: "k".repeat(1001) },
+    });
+    reply(searchPath("status:2"), found([full]));
+    const result = output(await callTool(session, TOOL, { status: 2, detail: true }));
+    const fields = result.items[0]?.fields as Record<string, unknown>;
+    expect(fields.Description).toBe(
+      `${wrapped("s".repeat(1000))}\n[… 9000 more characters not shown; get_ticket returns the full text]`,
+    );
+    expect(fields.Hobby).toBe(
+      `${wrapped("k".repeat(1000))}\n[… 1 more characters not shown; get_ticket returns the full text]`,
+    );
+  });
+
+  it("a text value of exactly DETAIL_VALUE_CAP characters is whole", async () => {
+    const { session } = await warm();
+    const hobby = "k".repeat(DETAIL_VALUE_CAP);
+    const full = ticket(4301, { custom_fields: { ...rawTicket.custom_fields, cf_hobby: hobby } });
+    reply(searchPath("status:2"), found([full]));
+    const result = output(await callTool(session, TOOL, { status: 2, detail: true }));
+    expect((result.items[0]?.fields as Record<string, unknown>).Hobby).toBe(wrapped(hobby));
   });
 
   it("detail: false returns rows", async () => {
@@ -612,12 +671,105 @@ describe("list_tickets: the uncategorized scan", () => {
     }
   });
 
-  it("a failed page fails the call: no partial list", async () => {
+  it("a later page Freshdesk refuses fails the call: no partial list", async () => {
     const { session } = await warm();
     reply(page(1), [uncategorised(4301)], { next: true });
     reply(page(2), { code: "access_denied", message: "no" }, { status: 403 });
-    const error = refusal(await callTool(session, TOOL, { uncategorized: true }));
-    expect(error.code).toBe("forbidden");
+    const result = await callTool(session, TOOL, { uncategorized: true });
+    expect(refusal(result).code).toBe("forbidden");
+    expect(result.content[0].text).not.toContain("4301");
+    expect(sent()).toBe(2);
+  });
+
+  const LOW = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" };
+  const HIGH = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "90" };
+
+  it("a later page the limiter refuses: the rows so far, the cursor at that page, and the next call starts there", async () => {
+    const { session } = await warm();
+    const args = { uncategorized: true };
+    // Page 1's response says 10 of 100 calls are left: page 2 is refused unsent.
+    reply(page(1), [uncategorised(4301), ticket(4302)], { next: true, headers: LOW });
+    const first = output(await callTool(session, TOOL, args));
+    expect(first.items.map((item) => item.id)).toEqual([4301]);
+    expect(first.has_more).toBe(true);
+    expect(first.next_cursor).toBe(cursorFor(TOOL, args, 1));
+    expect(first).not.toHaveProperty("truncated");
+    expect(sent()).toBe(1);
+    expect(first.api_calls_used).toBe(sent());
+
+    // A cheap call's response restores the budget.
+    reply(searchPath("status:2"), found([]), { headers: HIGH });
+    output(await callTool(session, TOOL, { status: 2 }));
+    mock.clearCallHistory();
+    reply(page(2), [uncategorised(4401)]);
+    const second = output(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
+    expect(second.items.map((item) => item.id)).toEqual([4401]);
+    expect(second.has_more).toBe(false);
+    expect(paths()).toEqual([page(2)]);
+  });
+
+  it("a later page sent once, then refused by the limiter on its retry, is counted", async () => {
+    const { session } = await warm();
+    const args = { uncategorized: true };
+    reply(page(1), [uncategorised(4301)], { next: true });
+    reply(page(2), { message: "busy" }, { status: 503, headers: LOW });
+    const result = output(await callTool(session, TOOL, args));
+    expect(result.items.map((item) => item.id)).toEqual([4301]);
+    expect(result.next_cursor).toBe(cursorFor(TOOL, args, 1));
+    expect(sent()).toBe(2);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("the first page refused by the limiter fails the call", async () => {
+    const { session } = await warm();
+    reply(searchPath("status:2"), found([]), { headers: LOW });
+    output(await callTool(session, TOOL, { status: 2 }));
+    const cursor = cursorFor(TOOL, { uncategorized: true }, 4);
+    const error = refusal(await callTool(session, TOOL, { uncategorized: true, cursor }));
+    expect(error.code).toBe("rate_limited");
+    expect(sent()).toBe(1);
+  });
+
+  it("Freshdesk's 429 on a later page: the limiter holds the retry, so the rows so far come back, the 429 counted", async () => {
+    const { session } = await warm();
+    const args = { uncategorized: true };
+    reply(page(1), [uncategorised(4301)], { next: true });
+    reply(page(2), { message: "slow down" }, { status: 429, headers: { "retry-after": "60" } });
+    const result = output(await callTool(session, TOOL, args));
+    expect(result.items.map((item) => item.id)).toEqual([4301]);
+    expect(result.next_cursor).toBe(cursorFor(TOOL, args, 1));
+    expect(sent()).toBe(2);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("holding 29 rows it reads one more page: at most SCAN_MAX_ROWS rows", async () => {
+    const { session } = await warm();
+    reply(
+      page(1),
+      [...tickets(4301, LIST_ROWS - 1, uncategorised), ...tickets(4401, SCAN_PER_PAGE - 29)],
+      { next: true },
+    );
+    reply(page(2), tickets(4501, SCAN_PER_PAGE, uncategorised), { next: true });
+    const result = output(await callTool(session, TOOL, { uncategorized: true }));
+    expect(result.items).toHaveLength(SCAN_MAX_ROWS);
+    expect(result.has_more).toBe(true);
+    expect(sent()).toBe(2);
+  });
+
+  it("with detail: true it reads pages of 30: at most DETAIL_SCAN_MAX_ROWS tickets", async () => {
+    const { session } = await warm();
+    const args = { uncategorized: true, detail: true };
+    const small = (n: number) => listPath({ per_page: DETAIL_SCAN_PER_PAGE, page: n });
+    reply(small(1), [...tickets(4301, LIST_ROWS - 1, uncategorised), ticket(4401)], {
+      next: true,
+    });
+    reply(small(2), tickets(4501, DETAIL_SCAN_PER_PAGE, uncategorised), { next: true });
+    const result = output(await callTool(session, TOOL, args));
+    expect(DETAIL_SCAN_PER_PAGE).toBe(30);
+    expect(result.items).toHaveLength(DETAIL_SCAN_MAX_ROWS);
+    expect(result.items[0]).toHaveProperty("fields");
+    expect(result.next_cursor).toBe(cursorFor(TOOL, args, 2));
+    expect(paths()).toEqual([small(1), small(2)]);
   });
 });
 
@@ -718,6 +870,42 @@ describe("list_tickets: truncated", () => {
     expect(result.truncated).toBe(true);
     expect(result.has_more).toBe(false);
   });
+
+  it("a full last page with no Link is truncated too: the list and the scan", async () => {
+    const { session } = await warm();
+    reply(listPath({ per_page: LIST_ROWS, page: MAX_LIST_PAGE }), tickets(4301, LIST_ROWS));
+    const listed = output(
+      await callTool(session, TOOL, { cursor: cursorFor(TOOL, {}, MAX_LIST_POSITION) }),
+    );
+    expect(listed.items).toHaveLength(LIST_ROWS);
+    expect(listed.truncated).toBe(true);
+    expect(listed.has_more).toBe(false);
+
+    const args = { uncategorized: true };
+    reply(listPath({ per_page: SCAN_PER_PAGE, page: MAX_LIST_PAGE }), tickets(4401, SCAN_PER_PAGE));
+    const cursor = cursorFor(TOOL, args, MAX_LIST_POSITION);
+    const scanned = output(await callTool(session, TOOL, { ...args, cursor }));
+    expect(scanned.truncated).toBe(true);
+    expect(scanned.has_more).toBe(false);
+  });
+
+  it("a last page one short of full, with no Link, is the end: not truncated", async () => {
+    const { session } = await warm();
+    reply(listPath({ per_page: LIST_ROWS, page: MAX_LIST_PAGE }), tickets(4301, LIST_ROWS - 1));
+    const result = output(
+      await callTool(session, TOOL, { cursor: cursorFor(TOOL, {}, MAX_LIST_POSITION) }),
+    );
+    expect(result).not.toHaveProperty("truncated");
+    expect(result.has_more).toBe(false);
+  });
+
+  it("a full page before the last, with no Link, is the end: not truncated", async () => {
+    const { session } = await warm();
+    reply(listPath({ per_page: LIST_ROWS, page: 1 }), tickets(4301, LIST_ROWS));
+    const result = output(await callTool(session, TOOL, {}));
+    expect(result).not.toHaveProperty("truncated");
+    expect(result.has_more).toBe(false);
+  });
 });
 
 describe("list_tickets: the cursor", () => {
@@ -756,6 +944,23 @@ describe("list_tickets: the cursor", () => {
     const result = output(await callTool(session, TOOL, { ...args, cursor }));
     expect(result.items.map((item) => item.id)).toEqual([4301]);
     expect(result.api_calls_used).toBe(sent());
+  });
+
+  it.each([
+    ["status", { status: 2 }],
+    ["priority", { priority: 3 }],
+    ["group", { group: 703 }],
+    ["agent", { agent: 502 }],
+    ["type", { type: "Incident" }],
+    ["tag", { tag: "sprocket" }],
+    ["created_between", { created_between: { from: "2026-01-02", to: "2026-01-03" } }],
+  ])("%s is a search filter: a cursor at position 10 is refused, nothing sent", async (_, args) => {
+    expect(MAX_SEARCH_POSITION).toBe(9);
+    const cursor = cursorFor(TOOL, args, 10);
+    const error = refusal(await callTool((await cold()).session, TOOL, { ...args, cursor }));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("points past the last position");
+    expect(sent()).toBe(0);
   });
 
   it.each([

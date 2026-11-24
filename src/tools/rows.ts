@@ -23,7 +23,9 @@
 //     `null` (`+0100` included).
 //   - `ticketDetail`: `{id, updated, fields}`, `fields` every field
 //     `ticketOutput` gives, each value through `fieldValue` by its own
-//     field's type; the description as text (`bodyText`), wrapped.
+//     field's type; the description as text (`bodyText`), wrapped. A caller's
+//     `CutOptions` (a cap, how to fetch the rest) apply to every wrapped
+//     value, the description included; without them, format.ts's TEXT_CAP.
 //   - Keys of `category` and `fields`: the label through `plainName`; a key
 //     already used keys the later field `Label (api_name)`, and if that is
 //     taken too, `Label (api_name) (2)`, `(3)`, ...: no value is dropped.
@@ -32,7 +34,7 @@ import type { TicketField } from "../client/resources/ticket-fields.js";
 import type { Ticket } from "../client/resources/tickets.js";
 import type { Schema } from "../schema/index.js";
 import type { AppContext } from "./context.js";
-import { bodyText, fieldValue, plainName, untrusted } from "./format.js";
+import { bodyText, type CutOptions, fieldValue, plainName, untrusted } from "./format.js";
 
 /** Code points of a row's subject. */
 export const SUBJECT_CAP = 120;
@@ -157,15 +159,20 @@ export function ticketRow(ctx: RowContext, schema: Schema, ticket: Ticket): Tick
   };
 }
 
-export function ticketDetail(ctx: RowContext, schema: Schema, ticket: Ticket): TicketDetail {
+export function ticketDetail(
+  ctx: RowContext,
+  schema: Schema,
+  ticket: Ticket,
+  options?: CutOptions,
+): TicketDetail {
   const fields: Record<string, unknown> = {};
   for (const field of schema.fields) {
     const shown = outputOf(ctx, schema, field, ticket);
     if (!shown.found) continue;
     const value =
       field.type === "default_description"
-        ? bodyText(ticket.description_text, shown.value)
-        : fieldValue(field, shown.value);
+        ? bodyText(ticket.description_text, shown.value, options)
+        : fieldValue(field, shown.value, options);
     put(fields, field, value);
   }
   return { id: ticket.id, updated: isoUpdated(ticket.updated_at), fields };
