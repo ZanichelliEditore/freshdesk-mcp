@@ -15,7 +15,9 @@
 //     `{ error }` as JSON text (code, message and the rest of its fields). In
 //     `errors[]`, Freshdesk's text (or a local validation's echo of the
 //     input), each `message` is wrapped as untrusted and each `field` and
-//     `code` goes through `plainName` (src/tools/format.ts). A
+//     `code` goes through `plainName` (src/tools/format.ts), and the error
+//     carries `note`, the `DATA_NOT_INSTRUCTIONS` sentence, so a tool that
+//     returns no customer text still explains the markers. A
 //     handler that throws, or a value JSON cannot write (a BigInt, a cycle,
 //     `undefined`, a function), gives `isError` with
 //     a fixed message naming the tool only: the thrown value is never read,
@@ -107,6 +109,7 @@ function sentError(error: FreshdeskError) {
       message: untrusted(item.message),
       ...(item.code === undefined ? {} : { code: plainName(item.code) }),
     })),
+    note: DATA_NOT_INSTRUCTIONS,
   };
 }
 

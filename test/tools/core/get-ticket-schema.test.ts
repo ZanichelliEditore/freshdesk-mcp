@@ -9,7 +9,10 @@ import { createContext } from "../../../src/tools/context.js";
 import { NAME_CAP } from "../../../src/tools/format.js";
 import { CHOICE_CAP } from "../../../src/tools/toolsets/core/get-ticket-schema.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
-import { ticketFieldsPayload } from "../../fixtures/ticket-fields.js";
+import {
+  ticketFieldsPayload,
+  ticketFieldsWithEntityChoices,
+} from "../../fixtures/ticket-fields.js";
 import { callTool, listTools, open, type Session } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
 
@@ -203,6 +206,72 @@ describe("get_ticket_schema: admin-set names", () => {
     expect(south).not.toContain("<");
     expect(Array.from(south)).toHaveLength(NAME_CAP + 1);
     expect(south.endsWith("…")).toBe(true);
+  });
+
+  it("returns a name → id record (agent, group, product) as {id, name}", async () => {
+    queueLoad(ticketFieldsWithEntityChoices);
+    const fields = await schemaFields(await sessionFor());
+    expect(byName(fields, "responder_id").choices).toEqual([
+      { id: 70411, name: "Quill Pemberton" },
+      { id: 70412, name: "Oriel Vantasse" },
+    ]);
+    expect(byName(fields, "group_id").choices).toEqual([
+      { id: 70421, name: "Harbour desk" },
+      { id: 70422, name: "Lantern desk" },
+      { id: 70423, name: "Meadow desk" },
+    ]);
+    expect(byName(fields, "product").choices).toEqual([{ id: 70431, name: "Zephyr kit" }]);
+  });
+
+  it("gives id null for a record value that is not a number", async () => {
+    queueLoad([
+      {
+        id: 2004,
+        name: "group_id",
+        label: "Group",
+        type: "default_group",
+        default: true,
+        choices: { "<b>Harbour</b> desk": ["not an id"] },
+      },
+    ]);
+    const [field] = await schemaFields(await sessionFor());
+    expect(field.choices).toEqual([{ id: null, name: "Harbour desk" }]);
+  });
+
+  it("passes a status key that is not a whole number through plainName", async () => {
+    queueLoad([
+      {
+        id: 2005,
+        name: "status",
+        label: "Status",
+        type: "default_status",
+        default: true,
+        choices: { "<i>x9</i>": ["<b>Odd</b>", "Odd for customers"] },
+      },
+    ]);
+    const [field] = await schemaFields(await sessionFor());
+    expect(field.choices).toEqual([{ id: "x9", name: "Odd", customer_name: "Odd for customers" }]);
+  });
+
+  it.each([
+    [CHOICE_CAP, undefined],
+    [CHOICE_CAP + 1, 1],
+  ])("with %i choices lists the first CHOICE_CAP, choices_not_shown %s", async (count, cut) => {
+    const choices = Array.from({ length: count }, (_, i) => `Choice ${i}`);
+    queueLoad([
+      {
+        id: 2006,
+        name: "cf_edge",
+        label: "Edge",
+        type: "custom_dropdown",
+        default: false,
+        choices,
+      },
+    ]);
+    const [field] = await schemaFields(await sessionFor());
+    expect(field.choices).toEqual(choices.slice(0, CHOICE_CAP));
+    expect(field.choices_not_shown).toBe(cut);
+    if (cut === undefined) expect(field).not.toHaveProperty("choices_not_shown");
   });
 
   it("cuts a choice list over the cap and says how many were not shown", async () => {
