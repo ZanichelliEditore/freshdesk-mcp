@@ -174,7 +174,7 @@ const DESCRIPTION_FIELD = {
 };
 
 /** How `detail: true` cuts a text value. */
-const DETAIL_CUT = { cap: DETAIL_VALUE_CAP, rest: "get_ticket returns the full text" };
+const DETAIL_CUT = { cap: DETAIL_VALUE_CAP, rest: "get_ticket returns more of the text" };
 
 function queueSchema(fields: unknown = schemaFieldsPayload) {
   reply(FIELDS, fields);
@@ -272,7 +272,7 @@ describe("list_tickets: the listing", () => {
     expect(DETAIL_VALUE_CAP).toBe(1000);
     expect(description).toContain("at most 129 rows, or 59 tickets with detail: true");
     expect(description).toContain("each text cut at 1,000 characters");
-    expect(description).toContain("get_ticket returns the full text");
+    expect(description).toContain("get_ticket returns more of the text");
     expect(description).toContain("300 calls (9,000 tickets)");
     expect(description).toContain("returns what it has with next_cursor");
   });
@@ -413,10 +413,10 @@ describe("list_tickets: detail", () => {
     const result = output(await callTool(session, TOOL, { status: 2, detail: true }));
     const fields = result.items[0]?.fields as Record<string, unknown>;
     expect(fields.Description).toBe(
-      `${wrapped("s".repeat(1000))}\n[… 9000 more characters not shown; get_ticket returns the full text]`,
+      `${wrapped("s".repeat(1000))}\n[… 9000 more characters not shown; get_ticket returns more of the text]`,
     );
     expect(fields.Hobby).toBe(
-      `${wrapped("k".repeat(1000))}\n[… 1 more characters not shown; get_ticket returns the full text]`,
+      `${wrapped("k".repeat(1000))}\n[… 1 more characters not shown; get_ticket returns more of the text]`,
     );
   });
 

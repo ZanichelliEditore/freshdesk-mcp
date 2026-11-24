@@ -40,15 +40,18 @@
 //     the widened set, so it can be cut at 300 when fewer tickets match.
 //   - `detail: true` is bounded: each wrapped value, the description
 //     included, is cut at DETAIL_VALUE_CAP code points with the marker
-//     (`get_ticket` returns the full text), and a scan reads the smaller page.
+//     (`get_ticket` returns more of the text), and a scan reads the smaller page.
 //   - A failed request fails the call: no partial list. One exception: a
 //     scan that has read at least one page and whose next page the limiter
 //     refuses (`rate_limited` with no HTTP status) returns the rows kept so
 //     far, with `next_cursor` at the refused page, so a retry resumes there
 //     instead of reading the pages again. That page's own requests, if a
 //     retry of it was what the limiter refused (after a 5xx, or after a 429
-//     whose hold outlasts the limiter's wait), are counted. Any other failure
-//     of a later page (a 403, the network, the deadline) fails the call.
+//     whose hold outlasts the limiter's wait), are counted. A limiter wait
+//     that would reach the call's deadline is refused the same way
+//     (`rate_limited`, no status), so near the 30 s mark a later page takes
+//     this branch too. Any other failure of a later page fails the call: a
+//     403, or an attempt the deadline cuts in flight (`network`).
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start, shared
 //     by every request.
 //   - `api_calls_used` is every request this call sent, retries included, and
@@ -119,7 +122,7 @@ const input = z.object({
 export const listTicketsTool: Tool<typeof input> = {
   name: "list_tickets",
   description: [
-    `Tickets matching every filter given, as compact rows: id, subject, status, priority, category, last update, agent and group, by name. detail: true returns every field of each ticket by label instead (much larger), each text cut at ${DETAIL_VALUE_CAP.toLocaleString("en-US")} characters, saying how many are not shown: get_ticket returns the full text.`,
+    `Tickets matching every filter given, as compact rows: id, subject, status, priority, category, last update, agent and group, by name. detail: true returns every field of each ticket by label instead (much larger), each text cut at ${DETAIL_VALUE_CAP.toLocaleString("en-US")} characters, saying how many are not shown: get_ticket returns more of the text.`,
     "Filters: status, priority, group and agent by name or id; type by name; tag (one tag, exact); uncategorized: true (a category field is empty); updated_since (an ISO 8601 date-time with a zone, such as 2026-01-02T03:04:05Z); created_between {from, to} (days as YYYY-MM-DD, UTC, both included). A filter that is not valid is refused with the valid names, and nothing is sent. For a custom field use search_tickets.",
     `With status, priority, group, agent, type, tag or created_between the list comes ${SEARCH_PER_PAGE} tickets a call from Freshdesk's search, which returns the first ${MAX_SEARCH_PAGE * SEARCH_PER_PAGE} matches only: past them the list is cut and says truncated: true (narrow it with one more filter or a shorter created_between), and a ticket changed in the last few minutes can be missing.`,
     `Without any of those the list is the tickets created in the last 30 days, newest first, ${LIST_ROWS} a call; updated_since replaces that window with the tickets updated since then. That list reaches ${MAX_LIST_PAGE} calls (${(MAX_LIST_PAGE * LIST_ROWS).toLocaleString("en-US")} tickets): past them it is cut and says truncated: true (narrow it with a later updated_since or a filter).`,
@@ -210,7 +213,7 @@ export const listTicketsTool: Tool<typeof input> = {
           detail
             ? ticketDetail(context, schema, ticket, {
                 cap: DETAIL_VALUE_CAP,
-                rest: "get_ticket returns the full text",
+                rest: "get_ticket returns more of the text",
               })
             : ticketRow(context, schema, ticket),
         ),

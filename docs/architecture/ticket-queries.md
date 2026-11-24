@@ -71,7 +71,7 @@ The two endpoints, in short:
 
 | Endpoint | Page | Cap | Calls per 100 tickets |
 |---|---|---|---|
-| `GET /tickets` (list) | up to 100 | 300 pages = 30,000 tickets at 100 a page (`list_tickets` asks 30 a page without a scan: 9,000) | 1 (2 credits with `include=stats`, measured 2026-11-24) |
+| `GET /tickets` (list) | 100 | 300 pages = 30,000 tickets (`list_tickets` without a scan asks 30 a page: 9,000) | 1 (2 credits with `include=stats`, measured 2026-11-24; `list_tickets` at 30 a page: 4) |
 | `GET /search/tickets` (search) | 30 | 10 pages = 300 results | 4 (`ceil(100 / 30)`) |
 | local filter on list pages | — | the list's 30,000, and the [scan bounds](#scan-bounds) | 1 per 100 tickets **scanned**, not matched |
 
@@ -264,7 +264,11 @@ pages are 30 tickets, so at most 59 tickets a call, each text value cut at
 1,000 code points. A failed page fails the call, with one exception: when
 at least one page was read and the limiter refuses a later one
 (`rate_limited` with no HTTP status), the call returns the rows kept so far
-with `next_cursor` at the refused page, so a retry resumes there. The list's
+with `next_cursor` at the refused page, so a retry resumes there. A limiter
+wait that would reach the call's deadline is refused that way too, so near
+the 30 s mark a later page takes the partial-return branch; only an attempt
+cut in flight (`network`), or Freshdesk's own refusal such as a 403, fails
+the call. The list's
 page 300 is the last: when it links a next page or comes back full,
 `list_tickets` says `truncated: true`.
 
