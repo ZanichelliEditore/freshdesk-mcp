@@ -4,72 +4,70 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T11:51:32+01:00`
-- **Describes commit:** `0b830e0`
-  (`0b830e0878bfb5dcfc7ac531b1374e316e506a66`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45378860640
-  (workflow `quality`, ran on `0b830e0`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T12:13:46+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-056 `done (2026-11-24)`,
-  `docs/tasks/T-056-schema-load-attempts.md` ("Done"). Commits `4b3c105`
-  (status), `2a56dc9` (build), `e09fd24` (review Lows, done), and the
-  handoff commit (scoped round recorded, parked items).
-  `SchemaService.get()` reports the requests its load sent to the call
-  that started it (0 from the cache or when joining); results are handed
-  out frozen; `get_ticket`'s `api_calls_used` now equals the requests
-  sent on a cold schema too (T-026's recorded limitation is gone). Built
-  by a builder agent under the orchestrator (owner's instruction of
-  2026-11-23).
+- **Current task:** T-027 `done (2026-11-24)`,
+  `docs/tasks/T-027-list-tickets.md` ("Done"). Commits `c79e6e7`
+  (status), `3cfe98a` (build), `eccf62f` (full-round fixes), `0fa9032`
+  (wording, task file, parked items). `list_tickets`: the nine filters
+  through `buildTicketQuery`, search (30 a page, 10 pages) or the list
+  endpoint (30 a page, 300 pages), `matchesLocal` on every row,
+  `detail: true` cut at 1,000 per value, the `uncategorized` scan
+  (`expensive`, bounded, resumable). Built by a builder agent under the
+  orchestrator (owner's instruction of 2026-11-23).
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-027**
-  (`list_tickets`). Its acceptance should also show a ticket on the
-  widened boundary day absent from the output (it must call
-  `matchesLocal`; HANDOFF at `46c8af8`).
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-028**
+  (`search_tickets`), then T-029, T-030.
   - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`).
   - **The owner**, Dependabot PRs (unchanged; T-044 "Done").
 
-- **Read before anything else:** PLAN row T-027 and its task file;
-  `docs/architecture/ticket-queries.md`.
+- **Read before anything else:** PLAN row T-028 and its task file;
+  `docs/architecture/ticket-queries.md` ("Parameters": `searchTickets`
+  refuses `"` and `\`).
 
 - **Reviews:**
-  - **Full round** on `29a34ff..2a56dc9`, R1 = `2a56dc9`. The four quotes
-    matched for all three; no Bash calls. compliance: Wireframes `none`.
-    security: 1 Low (the starter's result wrapper unfrozen), 1 info.
-    code-reviewer: 4 Low. The orchestrator checked that only
-    `get-ticket.ts` and `get-ticket-schema.ts` call `schema.get()`. Fixed
-    in `e09fd24` (results frozen, direct tests, overview sentence).
-  - **Scoped round** on `2a56dc9..e09fd24` (the freeze changed a
-    mechanism). The four quotes matched for all three; no Bash calls.
-    List A empty for all three; compliance `none`. Lists B parked, entry
-    `e09fd24`.
+  - **Full round** on `c9c232c..3cfe98a`, R1 = `3cfe98a`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security:
+    1 Medium (`detail: true` unbounded in size), 2 Low. code-reviewer:
+    3 Medium (`SEARCH_FILTERS` unpinned; the list cap silent and the docs
+    stale; a scan's later-page failure discarding rows), 3 Low; one
+    read-only `git grep`, said so. Fixed in `eccf62f`.
+  - **Scoped round** on `3cfe98a..eccf62f`. The four quotes matched for all
+    three; no Bash calls. List A empty for all three; compliance `none`.
+    Lists B parked, entry `eccf62f`; wording fixed in `0fa9032`.
+    **Orchestrator's acceptance amendments** (owner's delegation): the
+    boundary-day clause (before the build) and "`detail: true` … each text
+    value cut at 1,000 code points" (after the review).
 
 - **Proposed plan changes:** none new. T-055 `proposed (2026-11-24)`
-  (search date boundary; size before T-036). T-027/T-036 boundary-day
-  line and the T-036/T-037 cost argument: HANDOFF at `46c8af8`,
-  `8c90427`. T-041 can be sized. Carried: T-052, T-049
-  `proposed (2026-11-23)`.
+  (search date boundary; size before T-036). T-036 boundary-day line and
+  the T-036/T-037 cost argument on `searchTickets` (`listTickets` has it
+  since T-027): HANDOFF at `46c8af8`, `8c90427`. T-041 can be sized.
+  Carried: T-052, T-049 `proposed (2026-11-23)`.
 
 - **Open doubts (owner):**
-  - **T-056:** a schema load started by `get_ticket_schema`, by a
-    `get_ticket` call that then fails, or a failed load, is reported by no
-    call's `api_calls_used` (the limiter still sees every request).
-  - **T-026 and earlier:** see HANDOFF at `e8c3120`, `46c8af8`,
-    `c7e4b3c`, `26e6101`, `8c90427`, `fe4c24c` (T-022 confirms),
-    `c79a23b`, `ae9da29`, `fcca38f`, `65be293`, `f286c82`, `470124f`,
-    `876ec68`, `20f4b2f`, `d20c83b`.
+  - **T-027:** a real 429 on a later scan page returns the partial list
+    (the limiter's hold refuses the retry); `detail` has no whole-response
+    bound; whether list page 300 carries a `Link` is unmeasured. See the
+    task file.
+  - **T-056, T-026 and earlier:** see HANDOFF at `0b830e0`, `e8c3120`,
+    `46c8af8`, `c7e4b3c`, `26e6101`, `8c90427`, `fe4c24c` (T-022
+    confirms), `c79a23b`, `ae9da29`, `fcca38f`, `65be293`, `f286c82`,
+    `470124f`, `876ec68`, `20f4b2f`, `d20c83b`.
 
-- **Dead ends:** none this task. From before: see HANDOFF at `fe4c24c`,
-  `ae9da29`, `876ec68`.
+- **Dead ends:** T-027: expecting a 429 on a later scan page to fail the
+  call (it reaches the tool as a limiter refusal). From before: see
+  HANDOFF at `fe4c24c`, `ae9da29`, `876ec68`.
 
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), from the
-  builder's run on `e09fd24`:
+  builder's run on `0fa9032`'s tree:
   - ruff "All checks passed!";
   - prettier "All matched files use Prettier code style!";
-  - eslint, `tsc --noEmit`, `npm run build` and both gitleaks scans
-    passed with the exit 0 (their lines not captured);
-  - vitest "Test Files 26 passed (26)", "Tests 1778 passed (1778)";
-  - `tools/checks` "Ran 54 tests", OK.
+  - eslint, `tsc --noEmit`, `npm run build` passed;
+  - vitest "Test Files 27 passed (27)", "Tests 1859 passed (1859)";
+  - `tools/checks` "Ran 54 tests", OK;
+  - both gitleaks scans passed.
