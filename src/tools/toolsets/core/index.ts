@@ -7,6 +7,7 @@ import { listAgentsTool } from "./list-agents.js";
 import { listGroupsTool } from "./list-groups.js";
 import { listTicketsTool } from "./list-tickets.js";
 import { searchTicketsTool } from "./search-tickets.js";
+import { triageQueueTool } from "./triage-queue.js";
 
 export const CORE_TOOLS: readonly Tool[] = Object.freeze([
   getTicketSchema,
@@ -15,4 +16,5 @@ export const CORE_TOOLS: readonly Tool[] = Object.freeze([
   getTicketTool,
   listTicketsTool,
   searchTicketsTool,
+  triageQueueTool,
 ]);

@@ -399,6 +399,53 @@ describe("getTicket", () => {
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
 
+  describe("cost class", () => {
+    /** One answered request that leaves the budget below the reserve. */
+    async function drain() {
+      mock
+        .get(ORIGIN)
+        .intercept({ path: VIEW, method: "GET" })
+        .reply(200, ticketView, {
+          headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+        });
+      ok(await getTicket(http, 4101));
+    }
+
+    it("is cheap unless given: a view is sent below the reserve", async () => {
+      await drain();
+      reply(VIEW, 200, ticketView);
+
+      ok(await getTicket(http, 4101));
+
+      expect(urls()).toHaveLength(2);
+    });
+
+    it("given expensive, the view goes to the limiter as expensive: refused below the reserve", async () => {
+      await drain();
+
+      const refusedView = await getTicket(http, 4101, ["stats"], undefined, "expensive");
+
+      expect(failure(refusedView).code).toBe("rate_limited");
+      expect(refusedView).toMatchObject({ ok: false, attempts: 0 });
+      expect(urls()).toHaveLength(1);
+    });
+
+    it("given expensive above the reserve, the view is sent", async () => {
+      reply(VIEW, 200, ticketView);
+
+      ok(await getTicket(http, 4101, ["stats"], undefined, "expensive"));
+
+      expect(onlyQuery()).toEqual({ include: "stats" });
+    });
+  });
+
+  it("a failed view says how many requests it took", async () => {
+    reply("/api/v2/tickets/4999", 404, { message: CANARY });
+
+    expect(await getTicket(http, 4999)).toMatchObject({ ok: false, attempts: 1 });
+    expect(await getTicket(http, 0)).not.toHaveProperty("attempts");
+  });
+
   it("refuses a malformed ticket as server, with no body text", async () => {
     reply(VIEW, 200, { ...ticketView, id: null, description_text: CANARY });
 

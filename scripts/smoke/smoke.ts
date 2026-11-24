@@ -513,7 +513,23 @@ export async function runProbes(
   const ticketId = isRecord(firstTicket) ? positiveId(firstTicket.id) : undefined;
   if (ticketId === undefined) {
     out("probe conversations_per_page_100: skipped (no ticket in the last 30 days)");
+    out("probe view_include_stats: skipped (no ticket in the last 30 days)");
   } else {
+    // One ticket's view with include=stats: the 8 keys the list carries? (T-029)
+    const viewed = await http.requestWithRetry({
+      path: "/tickets/{id}",
+      params: { id: ticketId },
+      query: { include: "stats" },
+    });
+    if (!viewed.ok) {
+      out(`probe view_include_stats: ${failure(viewed.error)}`);
+    } else if (!isRecord(viewed.body)) {
+      out(`probe view_include_stats: not a ticket, credits ${credits(viewed.headers)}`);
+    } else {
+      out(
+        `probe view_include_stats: stats ${keysPresent(viewed.body.stats, STATS_KEYS)}, credits ${credits(viewed.headers)}`,
+      );
+    }
     await probe(
       http,
       "conversations_per_page_100",

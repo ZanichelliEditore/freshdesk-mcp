@@ -9,6 +9,7 @@
 //   - `getTicket`: `GET /tickets/{id}`, with `include=stats` when asked. No
 //     other include: a requester's or a company's data comes from T-025's
 //     contact and company reads, which drop what no tool should return.
+//     `stats` is passed through unchecked: its reader checks it.
 //   - `listConversations`: every page of `GET /tickets/{id}/conversations`,
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`.
 //
@@ -30,10 +31,12 @@
 // API calls. `deadline` (epoch ms, optional) is the caller's: see
 // `requestWithRetry` and `paginate`.
 //
-// Cost class: `cheap`, except a `listTickets` page whose caller gives
-// `expensive` (a scan: docs/architecture/ticket-queries.md, "Cost class for
-// the limiter"). A `listTickets` page that fails carries `attempts` too: the
-// requests sent for it, 0 when the limiter refused it before any.
+// Cost class: `cheap`, except a `listTickets` page or a `getTicket` view
+// whose caller gives `expensive` (a scan, or `triage_queue`'s view per row:
+// docs/architecture/ticket-queries.md, "Cost class for the limiter"). A
+// `listTickets` page or a `getTicket` view that fails after its values were
+// accepted carries `attempts` too: the requests sent for it, 0 when the
+// limiter refused it before any.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -89,7 +92,8 @@ export type ListTicketsResult =
 export type TicketInclude = "stats";
 
 export type TicketResult =
-  { ok: true; ticket: Ticket; attempts: number } | { ok: false; error: FreshdeskError };
+  | { ok: true; ticket: Ticket; attempts: number }
+  | { ok: false; error: FreshdeskError; attempts?: number };
 
 export type ConversationsResult = ListResult<Conversation>;
 
@@ -158,6 +162,7 @@ export async function getTicket(
   id: number,
   include: readonly TicketInclude[] = [],
   deadline?: number,
+  cost?: CostClass,
 ): Promise<TicketResult> {
   if (!isPositiveInt(id)) return refused("id");
   if (!include.every((name) => name === "stats")) return refused("include");
@@ -166,10 +171,11 @@ export async function getTicket(
       path: "/tickets/{id}",
       params: { id },
       ...(include.length === 0 ? {} : { query: { include: include.join(",") } }),
+      ...(cost === undefined ? {} : { cost }),
     },
     deadline,
   );
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
   const parsed = ticket.safeParse(result.body);
   if (!parsed.success) return malformed("a ticket", result.status);
   return { ok: true, ticket: parsed.data, attempts: result.attempts };

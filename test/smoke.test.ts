@@ -517,6 +517,9 @@ function healthy(path: string): Route {
     return { status: 200, body: { total: 412, results: tickets }, headers: credits };
   }
   if (path.includes("/conversations")) return { status: 200, body: [], headers: credits };
+  if (/^\/api\/v2\/tickets\/\d+\?/.test(path)) {
+    return { status: 200, body: tickets[0], headers: credits };
+  }
   return { status: 200, body: tickets, headers: credits };
 }
 
@@ -551,6 +554,9 @@ describe("runProbes: what they ask and print", () => {
     expect(lines).toContain(
       "probe list_include_stats: 2 items, next no, stats first_responded_at yes, agent_responded_at yes, requester_responded_at yes, status_updated_at no, pending_since no, resolved_at yes, closed_at yes, reopened_at no, credits 3",
     );
+    expect(lines).toContain(
+      "probe view_include_stats: stats first_responded_at yes, agent_responded_at yes, requester_responded_at yes, status_updated_at no, pending_since no, resolved_at yes, closed_at yes, reopened_at no, credits 3",
+    );
     expect(lines).toContain("probe search_cap_page_1: total >300, 2 items, credits 1");
     expect(lines).toContain("probe search_cap_page_11: fail validation");
     expect(lines).toContain(
@@ -575,6 +581,9 @@ describe("runProbes: what they ask and print", () => {
     expect(has("updated_since=2025-11-24T12%3A00%3A00Z")).toBe(true);
     expect(has("requester_id=80455&updated_since=2000-01-01T00%3A00%3A00Z")).toBe(true);
     expect(has("/api/v2/tickets/90311/conversations?per_page=100")).toBe(true);
+    expect(sentPaths.filter((path) => path === "/api/v2/tickets/90311?include=stats")).toHaveLength(
+      1,
+    );
     // The nested field's last level, then its top, asked as empty.
     expect(has(encodeURIComponent('"cf_model:null"').replace(/%20/g, "+"))).toBe(true);
     expect(has(encodeURIComponent('"cf_kit:null"').replace(/%20/g, "+"))).toBe(true);
@@ -658,7 +667,29 @@ describe("runProbes: failures", () => {
     expect(lines).toContain(
       "probe conversations_per_page_100: skipped (no ticket in the last 30 days)",
     );
+    expect(lines).toContain("probe view_include_stats: skipped (no ticket in the last 30 days)");
     expect(paths().some((path) => path.includes("requester_id"))).toBe(false);
+    expect(paths().some((path) => /\/tickets\/\d/.test(path))).toBe(false);
+  });
+
+  it.each([
+    ["a failure prints its code", { status: 404, body: { message: CANARY } }, "fail not_found"],
+    [
+      "a body that is no ticket says so",
+      { status: 200, body: [CANARY] },
+      "not a ticket, credits ?",
+    ],
+    [
+      "a ticket without stats is no for every key",
+      { status: 200, body: { id: 90311, subject: CANARY } },
+      "stats first_responded_at no, agent_responded_at no, requester_responded_at no, status_updated_at no, pending_since no, resolved_at no, closed_at no, reopened_at no, credits ?",
+    ],
+  ])("the one-ticket view: %s", async (_, route, line) => {
+    const { lines, out } = await probes((path) =>
+      /^\/api\/v2\/tickets\/\d+\?/.test(path) ? route : healthy(path),
+    );
+    expect(lines).toContain(`probe view_include_stats: ${line}`);
+    expect(out).not.toContain(CANARY);
   });
 
   it("with no nested field, the null probes are skipped", async () => {

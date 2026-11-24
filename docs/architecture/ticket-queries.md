@@ -118,6 +118,20 @@ rows is 31 requests, about 61 credits (1 for the search, 2 per view). With
 them `triage_queue` is **`expensive`**; T-029 may leave them out of the
 default and fetch them only on request, and states the bound either way.
 
+T-029's choice (2026-11-24): on request only. Without `reply_signals: true`
+a call is the search page alone (1 request, `cheap`) and its rows carry no
+reply key. With it, one view per returned row, one after another, each sent
+as `expensive` (`getTicket`'s cost argument): at most 1 + 30 = 31 requests a
+call, about 61 credits, retries apart; at the default pacing of 2 a second a
+full page takes about 15 s of the call's one 30 s deadline. The search
+request itself stays `cheap` (`searchTickets` has no cost argument yet), so
+below the reserve such a call spends 1 request before the first view is
+refused. A `stats` key that is absent or not in its expected form makes the
+signals that need it `null`; a view answered 404 leaves that row's three
+signals `null`; any other failed view fails the call. A result whose status
+is neither 2 nor 3 is dropped locally. A ticket in a custom status is not in
+the queue.
+
 Rejected: the list with `include=stats` and a local status filter. The list
 cannot be asked for open tickets, so it would have to scan every ticket
 updated since the oldest open one's last update; an open ticket can sit
@@ -285,7 +299,9 @@ number of pages. A request with `include=stats` costs 2 credits (measured
 
 `searchTickets` sends every request as `cheap` (T-024). `listTickets`
 (T-023) does too unless its caller gives the optional cost argument (T-027,
-2026-11-24: `list_tickets` gives `expensive` for its `uncategorized` scan).
+2026-11-24: `list_tickets` gives `expensive` for its `uncategorized` scan),
+and so does `getTicket` (T-029, 2026-11-24: `triage_queue` gives `expensive`
+for its view per row).
 T-036 and T-037 must give it for their scans and add the same argument to
 `searchTickets`, so the pages of `count_tickets` and `export_tickets` go to
 the limiter as `expensive`.
@@ -346,6 +362,6 @@ bears on:
 |---|---|---|
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
 | `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
-| Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three | T-029 |
+| Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three. The probe `view_include_stats` asks it (T-029, 2026-11-24), not run yet. If the view lacks `requester_responded_at` or `agent_responded_at`, `triage_queue`'s reply signals come back `null` (unknown), never a guess | T-029 |
 | Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |
