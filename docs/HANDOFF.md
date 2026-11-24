@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T11:51:32+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `0b830e0`
+  (`0b830e0878bfb5dcfc7ac531b1374e316e506a66`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45378860640
+  (workflow `quality`, ran on `0b830e0`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-056 `done (2026-11-24)`,
   `docs/tasks/T-056-schema-load-attempts.md` ("Done"). Commits `4b3c105`
