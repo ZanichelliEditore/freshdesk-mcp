@@ -246,9 +246,10 @@ unchanged.
 
 Note (2026-11-24, T-038): the same file may also run one npm command,
 `npm pack --dry-run --json --ignore-scripts --offline`, in a directory
-under `os.tmpdir()`, with an env of `PATH` and `HOME` only: it writes no
-tarball, runs no lifecycle script and asks no registry. The decision is
-unchanged.
+under `os.tmpdir()`, with an env of `PATH` and a `HOME`, npm cache and
+npm config paths under `os.tmpdir()`: it reads no `~/.npmrc`, writes no
+tarball and nothing outside the temporary directories, runs no lifecycle
+script and asks no registry. The decision is unchanged.
 
 ## Appendix: check scripts
 

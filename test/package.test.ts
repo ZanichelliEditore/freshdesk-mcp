@@ -4,9 +4,11 @@
 //
 // One build, under os.tmpdir(): src/ compiled with tsconfig.build.json
 // (test/support/cli-process.ts), then the repository copied beside it
-// (without .git, node_modules, dist, .claude, .env files and docs/private,
-// which holds real account values), plus a planted docs/private/ file, so
-// the pack sees test/, its fixtures, scripts/ and docs/ as a clone does.
+// (without .git, node_modules, .claude, the root dist, and, at any depth,
+// .env* files and docs/private, which holds real account values), plus a
+// planted docs/private/ file, so the pack sees test/, its fixtures, scripts/
+// and docs/ as a clone does. npm's HOME and cache are a second temporary
+// directory.
 
 import {
   cpSync,
@@ -56,10 +58,17 @@ const TOP_LEVEL = new Set(["README.md", "LICENSE", "package.json"]);
 const EXAMPLE = "examples/team-config.example.json";
 const PLANTED = "docs/private/planted.txt";
 
-/** Root entries (and paths) a clone has that the copy leaves out. */
-const NOT_COPIED = new Set([".git", "node_modules", "dist", ".claude", ".env", ".env.local"]);
+/** Path segments the copy leaves out at any depth. */
+const NOT_COPIED = new Set([".git", "node_modules", ".claude"]);
+
+/** Whether the copy takes `rel` (a `/`-separated path relative to the repository). */
+function copied(rel: string): boolean {
+  if (rel === "dist" || /(^|\/)docs\/private$/.test(rel)) return false;
+  return rel.split("/").every((segment) => !NOT_COPIED.has(segment) && !segment.startsWith(".env"));
+}
 
 let dir: string;
+let npmHome: string;
 let packed: string[];
 let packName: string;
 
@@ -75,20 +84,20 @@ beforeAll(() => {
   buildCli(dir);
   cpSync(ROOT, dir, {
     recursive: true,
-    filter: (source) => {
-      const rel = relative(ROOT, source).split(sep).join("/");
-      return !NOT_COPIED.has(rel.split("/")[0]!) && rel !== "docs/private";
-    },
+    filter: (source) => copied(relative(ROOT, source).split(sep).join("/")),
   });
   mkdirSync(join(dir, "docs", "private"), { recursive: true });
   writeFileSync(join(dir, PLANTED), "planted by test/package.test.ts\n");
-  const [result] = packDryRun(dir) as [{ name: string; files: { path: string }[] }];
+  npmHome = mkdtempSync(join(tmpdir(), "freshdesk-mcp-npm-home-"));
+  const [result] = packDryRun(dir, npmHome) as [{ name: string; files: { path: string }[] }];
   packed = result.files.map((file) => file.path);
   packName = result.name;
 }, 120_000);
 
 afterAll(() => {
-  if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+  for (const path of [dir, npmHome]) {
+    if (path !== undefined) rmSync(path, { recursive: true, force: true });
+  }
 });
 
 describe("the package", () => {
@@ -109,11 +118,11 @@ describe("the package", () => {
 
   it("packs nothing under docs/ (docs/private/ included), test/ (fixtures included) or scripts/", () => {
     // The copy has them all, so the pack is what leaves them out.
-    const copied = walk(dir);
+    const inCopy = walk(dir);
     for (const path of [PLANTED, "test/package.test.ts", "scripts/smoke/cli.ts"]) {
-      expect(copied).toContain(path);
+      expect(inCopy).toContain(path);
     }
-    expect(copied.some((path) => path.startsWith("test/fixtures/"))).toBe(true);
+    expect(inCopy.some((path) => path.startsWith("test/fixtures/"))).toBe(true);
     for (const prefix of ["docs/", "docs/private/", "test/", "test/fixtures/", "scripts/"]) {
       expect(packed.filter((path) => path.startsWith(prefix))).toEqual([]);
     }
@@ -122,6 +131,8 @@ describe("the package", () => {
   it("ships a dist/ compiled from src/ only, with no source map embedding sources", () => {
     const built = walk(join(dir, "dist"));
     expect(built.length).toBeGreaterThan(0);
+    // No source maps at all today; the sourcesContent guard below is for the day they appear.
+    expect(built.filter((file) => file.endsWith(".map"))).toEqual([]);
     const sources = new Set(walk(join(ROOT, "src")));
     for (const file of built) {
       // dist/a/b.js (or .d.ts, .js.map) comes from src/a/b.ts and nothing else.
@@ -140,6 +151,9 @@ describe("the package", () => {
 
   it("has a bin whose --version prints package.json's version, the User-Agent's too", () => {
     expect(pkg.bin).toEqual({ "freshdesk-mcp": "dist/cli.js" });
+    // npx runs the bin as a file, so the build must keep the shebang.
+    const [first] = readFileSync(join(dir, "dist", "cli.js"), "utf8").split("\n");
+    expect(first).toBe("#!/usr/bin/env node");
     const run = runBuiltCli(dir, {}, ["--version"]);
     expect(run).toEqual({ status: 0, stdout: `${pkg.version}\n`, stderr: "" });
     expect(USER_AGENT).toBe(`freshdesk-mcp/${run.stdout.trim()}`);

@@ -6,8 +6,9 @@
 // and no host override: an env carrying either is refused before anything
 // is spawned, so the process can never reach Freshdesk. And it runs one npm
 // command (T-038): `npm pack --dry-run --json` in a directory under
-// os.tmpdir(), offline, with no lifecycle scripts and an env of PATH and
-// HOME only.
+// os.tmpdir(), offline, with no lifecycle scripts, and an env of PATH and a
+// HOME, npm cache and global config under os.tmpdir() too, so it reads no
+// ~/.npmrc (no token) and writes nothing outside the temporary directories.
 import { execFileSync, spawnSync } from "node:child_process";
 import { realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -79,18 +80,23 @@ export function runBuiltCli(
 }
 
 /**
- * `npm pack --dry-run --json` in `dir` (under os.tmpdir()), parsed: what npm
- * would put in the tarball, written nowhere. `--ignore-scripts` so no
- * lifecycle script (a `prepack` build, say) runs: the test checks the build
- * it made itself, and stays fast. `--offline` so npm asks no registry.
+ * `npm pack --dry-run --json` in `dir`, parsed: what npm would put in the
+ * tarball. `--dry-run` writes no tarball; npm's cache and logs go to `home`,
+ * which is also its HOME, so no ~/.npmrc is read. Both must be under
+ * os.tmpdir(). `--ignore-scripts` so no lifecycle script (a `prepack` build,
+ * say) runs: the test checks the build it made itself, and stays fast.
+ * `--offline` so npm asks no registry.
  */
-export function packDryRun(dir: string): unknown {
+export function packDryRun(dir: string, home: string): unknown {
   const out = underTmp(dir);
-  const env: Record<string, string> = {};
-  for (const name of ["PATH", "HOME"]) {
-    const value = process.env[name];
-    if (value !== undefined) env[name] = value;
-  }
+  const npmHome = underTmp(home);
+  const env: Record<string, string> = {
+    HOME: npmHome,
+    npm_config_cache: join(npmHome, "cache"),
+    npm_config_globalconfig: join(npmHome, "npmrc-global"),
+    npm_config_userconfig: join(npmHome, "npmrc"),
+  };
+  if (process.env.PATH !== undefined) env.PATH = process.env.PATH;
   const json = execFileSync(
     "npm",
     ["pack", "--dry-run", "--json", "--ignore-scripts", "--offline"],

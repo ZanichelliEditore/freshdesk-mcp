@@ -14,6 +14,10 @@ Requires Node.js 22.19 or later.
 npx -y @zanichelli/freshdesk-mcp
 ```
 
+The process holds your API key: pin a version you have chosen
+(`npx -y @zanichelli/freshdesk-mcp@<version>`) rather than run whatever is
+latest.
+
 > **Not yet published.** `@zanichelli/freshdesk-mcp` is not on npm yet. Until it is, run the
 > server from a clone:
 >
@@ -35,7 +39,7 @@ wrong, and otherwise serves MCP on stdin/stdout.
 ```bash
 claude mcp add freshdesk \
   -e FRESHDESK_DOMAIN=example.freshdesk.com \
-  -e FRESHDESK_API_KEY=your-api-key \
+  -e FRESHDESK_API_KEY="$FRESHDESK_API_KEY" \
   -- npx -y @zanichelli/freshdesk-mcp
 ```
 
@@ -59,7 +63,8 @@ Or in a project's `.mcp.json` (keep the key out of version control):
 
 ### Claude Desktop
 
-In `claude_desktop_config.json`:
+In `claude_desktop_config.json`. The file holds the key in plain text: do not
+share or commit it.
 
 ```json
 {
@@ -81,11 +86,11 @@ In `claude_desktop_config.json`:
 
 | Variable                  | Required | What                                                                                                                                                                         |
 | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FRESHDESK_DOMAIN`        | yes      | Your Freshdesk host, `<name>.freshdesk.com` (no `https://`, no path).                                                                                                        |
-| `FRESHDESK_API_KEY`       | yes      | Your own API key (Freshdesk: profile settings, "View API key"). It is sent only to the configured host, over HTTPS.                                                          |
+| `FRESHDESK_DOMAIN` | yes | Your Freshdesk host, `<name>.freshdesk.com` (no `https://`, no path), or the same host as `FRESHDESK_HOST_OVERRIDE`. The key is sent to this one host only, over HTTPS. |
+| `FRESHDESK_API_KEY` | yes | Your own API key (Freshdesk: profile settings, "View API key"). |
 | `FRESHDESK_MCP_CONFIG`    | no       | Path of the team config file (below). Unset: the defaults.                                                                                                                   |
 | `FRESHDESK_EXPORT_DIR`    | no       | The directory `export_tickets` writes to (see [Exports](#exports)). Unset: `export_tickets` is refused and says how to set it; every other tool works.                       |
-| `FRESHDESK_HOST_OVERRIDE` | no       | One exact hostname the key may be sent to besides `<name>.freshdesk.com`, when `FRESHDESK_DOMAIN` is not a `freshdesk.com` host. Personal on purpose: the team file cannot set it. |
+| `FRESHDESK_HOST_OVERRIDE` | no | For a custom domain that is not `<name>.freshdesk.com`: set it and `FRESHDESK_DOMAIN` to the same host. It does not add a second host: the key still goes to `FRESHDESK_DOMAIN` only. Personal on purpose: the team file cannot set it. |
 
 ## Team config
 
@@ -112,7 +117,7 @@ message naming the key, never the value.
 
 ## Tools
 
-The `core` toolset reads only. Each tool's description states what one call
+The `core` toolset reads only from Freshdesk (`export_tickets` writes a local file). Each tool's description states what one call
 costs in Freshdesk API calls, which count against your account's rate limit:
 
 - `get_ticket_schema` — 0 API calls while the schema is cached (limits.schema_ttl_s, default 1 h); a cold load is 1 call for the ticket fields plus 1 per 100 agents and 1 per 100 groups, at least 3, within 30 s.
