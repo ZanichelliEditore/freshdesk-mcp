@@ -4,75 +4,68 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T16:45:35+01:00`
-- **Describes commit:** `f1dde79`
-  (`f1dde79ade9e0354853c61e8b638712406336e49`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45429412843
-  (workflow `quality`, ran on `f1dde79`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-24T20:41:58+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-037 `done (2026-11-24)`, `export_tickets`,
-  `docs/tasks/T-037-export-tickets.md` ("Done", "Security review").
-  Commits `a37a289` (status), `a62188a` (JSONL, file rules, budget),
-  `7afc903` (CSV, conversations), `45b21c1` (full-round fixes: resolved
-  directory, directory identity checks, deadline cut, planted-file tests),
-  `60c475e` (lists B parked, done). The project's first file write:
-  `FRESHDESK_EXPORT_DIR` (personal env); `export_dir` refused in the team
-  file. Built by a builder agent under the orchestrator (owner's
-  instruction of 2026-11-23).
+- **Current task:** T-038 `done (2026-11-24)`, package runnable with
+  `npx`, README, `docs/tasks/T-038-npx-package.md` ("Done"). Commits
+  `3dd9a63` (status), `82ab7a6` (npx package, `--version`, README),
+  `03561f8` (full-round fixes: shebang and no-map checks, npm home in tmp,
+  README host and key), `5e2547c` (lists B parked, done). Built by a
+  builder agent under the orchestrator (owner's instruction of
+  2026-11-23).
+  - **Scope-ownership evidence (acceptance clause, checked here):** on
+    2026-11-24 the project owner confirmed that the organisation owns the
+    `@zanichelli` npm scope.
+  - **Handoff check:** `package.json` still has `"private": true`
+    (line 4); T-045 removes it.
+  - **CI green on the commit:** the CI line above, filled by the stamp.
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-038** (package
-  runnable with `npx`, README).
-  - **Fact for T-038 (scope ownership):** on 2026-11-24 the project owner
-    confirmed that the organisation owns the `@zanichelli` npm scope.
-    `package.json` keeps `private: true` (T-045 removes it).
-  - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`);
-    Dependabot PRs (T-044 "Done").
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-039** (smoke
+  over the `core` tools; M1 acceptance; needs the owner's smoke run, which
+  the orchestrator may run on the owner's authorisation of 2026-11-23,
+  GET only).
+  - **The owner, before T-045:** confirm the publisher is a member of the
+    `@zanichelli` scope (role only); choose a license (no `LICENSE`, no
+    `license` field).
+  - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`).
 
-- **Read before anything else:** PLAN row T-038 and its task file; the
-  T-037 task file's Open doubts (the README must say the export file holds
-  customer text unwrapped).
+- **Read before anything else:** PLAN row T-039 and
+  `docs/tasks/T-039-m1-smoke.md`; `scripts/smoke/`.
 
 - **Reviews:**
-  - **Full round** on `d46df76..7afc903`, R1 = `7afc903`. The four quotes
-    matched for all three. compliance: Wireframes `none`.
-    security-reviewer: 1 Medium (a trailing `/` on a symlinked export
-    directory passed the check), 2 Low, 3 info. code-reviewer: 3 Medium
-    (the same; no test could fail on `link`→`rename` or dropped `O_EXCL`;
-    a deadline abort lost the whole export), 5 Low. `/security-review`
-    (owner-mandated, OD-5): no finding at confidence ≥ 8. Fixed, parked or
-    dismissed in `45b21c1` (task file "Security review").
-  - **Scoped round** on `7afc903..45b21c1`. The four quotes matched for
-    all three; list A empty for all three. Lists B (5 security, 7 code,
-    two shared) parked in `docs/improvements.md`, entry `45b21c1`. The
-    orchestrator re-ran `make quality` on `60c475e` (exit 0).
+  - **Full round** on `cff5d24..82ab7a6`, R1 = `82ab7a6`. The four quotes
+    matched for all three. compliance: Wireframes `none`. code-reviewer: 3
+    Medium (shebang untested; README's `FRESHDESK_HOST_OVERRIDE` text
+    wrong; the Gate's publisher half unrecorded), 3 Low, info.
+    security-reviewer: 1 Medium (a pack from a working tree ships a stale
+    `dist/`, parked for T-045), 2 Low, 1 info. Fixed in `03561f8` or parked
+    (`docs/improvements.md`, entry `82ab7a6`).
+  - **Scoped round** on `82ab7a6..03561f8`. The four quotes matched for
+    all three; list A empty for all three. Lists B parked, entry
+    `03561f8`. The code-reviewer made one Bash call (`ls -a` of the repo
+    root, no write), against rule 8; its findings are unaffected. The
+    orchestrator re-ran `make quality` on `5e2547c` (exit 0).
 
 - **Proposed plan changes:** none new. Still `proposed`: T-041 (can be
   sized), T-052, T-049.
 
 - **Open doubts (owner):**
+  - **T-038:** publisher membership of the scope; license; T-045 must
+    publish from a fresh CI build (task file "Open doubts").
   - **T-037, needs your decision:** one call exports about 4,000 tickets,
-    or about 40 with their threads (the 30 s call deadline, default
-    pacing). SPEC §7.2's example (2,000 tickets with conversations) cannot
-    run in one call. Other doubts (no hard links on FAT/exFAT, no CSV BOM
-    for Excel) are in the task file.
-  - **T-036:** see its task file's Open doubts.
-  - **Earlier, still open for you:** `uncategorised_fields` any-empty rule
-    (T-022, HANDOFF at `fe4c24c`); `find_similar_tickets` shows other
-    customers' tickets (T-030, HANDOFF at `cae6a52`); the orchestrator's
-    acceptance amendments (T-021, T-026, T-027, T-043; PLAN re-plan notes);
-    `updated_at`'s day rule not measured (T-055, HANDOFF at `41de8bc`).
-  - **Other tasks:** see HANDOFF at `41de8bc`.
+    or about 40 with their threads (30 s call deadline); SPEC §7.2's
+    2,000-with-conversations example does not fit one call.
+  - **Earlier, still open for you:** see HANDOFF at `f1dde79` and
+    `41de8bc`.
 
-- **Dead ends:** see the T-037 task file ("Dead ends": a timing assertion
-  on the export deadline test; no test can catch dropping `O_NOFOLLOW`
-  alone).
+- **Dead ends:** none this task.
 
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `60c475e`:
-  - vitest "Test Files 38 passed (38)", "Tests 2486 passed (2486)";
+  orchestrator on `5e2547c`:
+  - vitest "Test Files 39 passed (39)", "Tests 2495 passed (2495)";
   - `tools/checks` "Ran 54 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
