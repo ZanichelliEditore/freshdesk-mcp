@@ -37,7 +37,7 @@
 //     true`; a scan can return up to SCAN_MAX_ROWS rows (DETAIL_SCAN_MAX_ROWS
 //     tickets with `detail: true`): one short of LIST_ROWS, then a whole page.
 //     `truncated` is the source's too: with `updated_since` the search counts
-//     its whole UTC day, so it can be cut at 300 when fewer tickets match.
+//     its widened days, so it can be cut at 300 when fewer tickets match.
 //   - `detail: true` is bounded: each wrapped value, the description
 //     included, is cut at DETAIL_VALUE_CAP code points with the marker
 //     (`get_ticket` returns more of the text), and a scan reads the smaller page.

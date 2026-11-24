@@ -18,14 +18,15 @@
 //     `created_between` are search conditions, joined by ` AND ` in that
 //     order (`status:2`, `group_id:<id>`, `type:'<name>'`, `tag:'<tag>'`,
 //     `created_at:>'<from>' AND created_at:<'<to>'`); `updated_since`
-//     joins them as `updated_at:>'<its UTC day>'`. Search's `>` and `<`
-//     keep the day given and compare UTC days (measured 2026-11-24, T-055;
-//     `updated_at` assumed the same, not measured), so the dates are not
-//     widened. Both are also returned as local checks (`created_between`,
-//     `updated_since` on the result, which callers must apply with
-//     `matchesLocal`): the instant of `updated_since` within its day needs
-//     one; the `created_between` one is a guard that drops nothing the
-//     measured search returns.
+//     joins them as `updated_at:>'<its UTC day − 1>'`. On `created_at`,
+//     search's `>` and `<` keep the day given and compare UTC days
+//     (measured 2026-11-24, T-055), so `created_between` is exact, not
+//     widened. `updated_at` was not measured, so its day stays widened by
+//     one until it is. Both are also returned as local checks
+//     (`created_between`, `updated_since` on the result, which callers must
+//     apply with `matchesLocal`): the `updated_since` one drops the widened
+//     day and the time before the instant; the `created_between` one is a
+//     guard that drops nothing the measured search returns.
 //     With no search condition the list endpoint serves the call,
 //     `updated_since` as its parameter (a UTC instant to the second), no
 //     local date check. No filter: the list with no parameter.
@@ -318,6 +319,13 @@ function utcDay(year: number, month: number, day: number): number | undefined {
     : undefined;
 }
 
+const DAY_MS = 86_400_000;
+
+/** The UTC day before the instant `value`, as YYYY-MM-DD. */
+function dayBefore(value: string): string {
+  return new Date(Date.parse(value.slice(0, 10)) - DAY_MS).toISOString().slice(0, 10);
+}
+
 function isDay(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = DAY.exec(value);
@@ -471,7 +479,8 @@ export function buildTicketQuery(
 
   const searched = conditions.length > 0;
   if (searched && updatedSince !== undefined) {
-    conditions.push(`updated_at:>'${updatedSince.slice(0, 10)}'`);
+    // Widened a day: updated_at's boundary was not measured (T-055).
+    conditions.push(`updated_at:>'${dayBefore(updatedSince)}'`);
   }
   const query = conditions.join(" AND ");
   if (problems.length === 0 && `"${query}"`.length > MAX_QUERY_LENGTH) {

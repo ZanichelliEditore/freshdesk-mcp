@@ -267,18 +267,18 @@ describe("buildTicketQuery: the nine filters", () => {
     ).toEqual({
       ok: true,
       endpoint: "search",
-      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-03'",
+      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-02'",
       uncategorized: [{ field: "cf_kit", key: "cf_model", custom: true }],
       updated_since: "2026-01-03T01:30:00Z",
     });
   });
 
-  it("with a search filter, updated_since is its UTC day in the query and the instant checked locally", () => {
+  it("with a search filter, updated_since is a day earlier in the query (updated_at not measured, T-055) and the instant checked locally", () => {
     const result = build({ status: "Open", updated_since: "2026-01-01T10:00:00Z" });
     expect(result).toEqual({
       ok: true,
       endpoint: "search",
-      query: "status:2 AND updated_at:>'2026-01-01'",
+      query: "status:2 AND updated_at:>'2025-12-31'",
       updated_since: "2026-01-01T10:00:00Z",
     });
     if (!result.ok) throw new Error("expected ok");

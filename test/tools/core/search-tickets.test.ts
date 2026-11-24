@@ -228,6 +228,10 @@ describe("search_tickets: the listing", () => {
     expect(description).toContain('no double quote (") and no backslash (\\)');
     expect(description).toContain(`${MAX_QUERY_LENGTH - 2} characters`);
     expect(description).toContain("has_more");
+    // T-055, measured 2026-11-24: the day given is kept, and it is the UTC day.
+    expect(description).toContain("keep the day given (inclusive)");
+    expect(description).toContain("the day is the UTC day");
+    expect(description).not.toMatch(/widen/i);
   });
 
   it("its input schema has no zod default or transform", () => {

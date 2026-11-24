@@ -68,9 +68,9 @@ green.
 *Filled at `/handoff`:*
 
 ## Done
-- Commits: `4f466de` (status), `31428d7` (probes), and the close commit
-  `T-055: measured boundary (inclusive, UTC day), exact date queries,
-  done`. Built by a builder agent under the orchestrator (owner's
+- Commits: `4f466de` (status), `31428d7` (probes), `8ed5436` (measured
+  boundary, exact date queries), and `T-055: full review fixes: ...`
+  (this round's commit). Built by a builder agent under the orchestrator (owner's
   instruction of 2026-11-23); the orchestrator ran the probes.
 - Probes: `make smoke-date-probes` (`runDateProbes` in
   `scripts/smoke/smoke.ts`, cli `--dates`); tests in
@@ -82,15 +82,25 @@ green.
   `probe date_verdict: 1 of 8 readings predict all 15 totals: > inclusive,
   < inclusive, UTC day`. Recorded in `docs/architecture/ticket-queries.md`
   ("Date boundary"); the Open row is closed.
-- `src/tools/ticket-query.ts`: no widening. `created_between` is
-  `created_at:>'<from>' AND created_at:<'<to>'`; `updated_since` beside a
-  search filter is `updated_at:>'<its UTC day>'`, the instant still checked
-  locally. Tests: `test/tools/ticket-query.test.ts::created_between keeps
+- Acceptance, "a ticket at each measured boundary is returned and one
+  outside is not": met by the measurement itself (the search keeps day D
+  on both sides, UTC); the unit test below is a regression pin of the
+  query and of the local guard, not the proof.
+- `src/tools/ticket-query.ts`: `created_between` is exact,
+  `created_at:>'<from>' AND created_at:<'<to>'`. `updated_since` beside a
+  search filter keeps its one-day widening, `updated_at:>'<UTC day − 1>'`,
+  with the instant checked locally: `updated_at` was not measured (full
+  review, 2026-11-24). `search_tickets`' description states the measured
+  rule instead of "widen the range by a day". Tests: `test/tools/ticket-query.test.ts::created_between keeps
   00:00:00Z on from and 23:59:59Z on to, not the second either side
   (T-055)`, `::created_between is a search of exactly its days (inclusive,
   UTC; T-055), the days also checked locally`, `::with a search filter,
-  updated_since is its UTC day in the query and the instant checked
-  locally`; `test/tools/core/list-tickets.test.ts::created_between: the
+  updated_since is a day earlier in the query (updated_at not measured,
+  T-055) and the instant checked locally`;
+  `test/tools/core/search-tickets.test.ts::its description names the
+  300-result cap, no full text and how the query is written`;
+  `test/smoke.test.ts::runDateProbes > names the one reading a search
+  under %j agrees with` (all eight readings); `test/tools/core/list-tickets.test.ts::created_between: the
   search asks exactly the days; a ticket outside them is still absent`.
 - Choices: the `created_between` local check is kept as a guard (it drops
   nothing the measured search returns; keeping it is the smaller change and
@@ -99,24 +109,24 @@ green.
   of them is likely to hold a ticket near midnight.
 - **Outside "Files expected to change":** `Makefile`,
   `scripts/smoke/cli.ts` (the target), `docs/architecture/overview.md`,
-  `src/tools/toolsets/core/list-tickets.ts` (comments only) and
-  `test/tools/core/list-tickets.test.ts` (query strings).
+  `src/tools/toolsets/core/list-tickets.ts` (comments only),
+  `test/tools/core/list-tickets.test.ts` (query strings),
+  `src/tools/toolsets/core/search-tickets.ts` (description) and its test,
+  `docs/improvements.md`.
 
 ## Dead ends
 none
 
 ## Open doubts
 - `updated_at`'s day operators are assumed to behave as `created_at`'s
-  (inclusive, UTC day); not measured.
+  (inclusive, UTC day) but were not measured: `updated_since` stays widened
+  by a day, checked locally, until they are.
 - The date probes assume Europe/Rome when the account's zone cannot be read
   or resolved; on 2026-11-24 it was read and resolved, so the fallback was
   not used.
-- Not changed, outside this task's scope: `find_similar_tickets` still
-  widens its own `updated_at` day by one
-  (`src/tools/toolsets/core/find-similar-tickets.ts`, harmless: an
-  over-fetch checked locally), and `search_tickets`' description still
-  tells the model to "widen the range by a day"
-  (`src/tools/toolsets/core/search-tickets.ts`), now unnecessary.
+- `find_similar_tickets` still widens its own `updated_at` day by one
+  (harmless, an over-fetch checked locally): parked in
+  `docs/improvements.md`, entry `8ed5436`.
 
 ## Context pressure
 ok

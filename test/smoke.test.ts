@@ -1004,12 +1004,14 @@ describe("runDateProbes", () => {
     expect(lines.at(-1)).toBe("date probes: done");
   });
 
-  it.each<DateReading>([
-    { gt: "exclusive", lt: "exclusive", day: "UTC" },
-    { gt: "inclusive", lt: "exclusive", day: "zone" },
-    { gt: "exclusive", lt: "inclusive", day: "UTC" },
-    { gt: "inclusive", lt: "inclusive", day: "zone" },
-  ])("names the one reading a search under %j agrees with", async (reading) => {
+  // All eight, the measured one (inclusive, inclusive, UTC) among them.
+  it.each<DateReading>(
+    (["exclusive", "inclusive"] as const).flatMap((gt) =>
+      (["exclusive", "inclusive"] as const).flatMap((lt) =>
+        (["UTC", "zone"] as const).map((day) => ({ gt, lt, day })),
+      ),
+    ),
+  )("names the one reading a search under %j agrees with", async (reading) => {
     const { lines } = await dateProbes(dateAccount(reading));
     const day = `${reading.day} day`;
     expect(lines).toContain(

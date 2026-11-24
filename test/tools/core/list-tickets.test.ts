@@ -495,7 +495,7 @@ describe("list_tickets: the local checks (matchesLocal)", () => {
     const { session } = await warm();
     const args = { tag: "sprocket", updated_since: "2026-01-02T12:00:00Z" };
     reply(
-      searchPath("tag:'sprocket' AND updated_at:>'2026-01-02'"),
+      searchPath("tag:'sprocket' AND updated_at:>'2026-01-01'"),
       found([
         ticket(4301, { updated_at: "2026-01-01T18:00:00Z" }),
         ticket(4302, { updated_at: "2026-01-02T11:59:59Z" }),

@@ -97,8 +97,9 @@ The two endpoints, in short:
 
 Several filters at once: one search query, the conditions joined by `AND`
 (spaces sent as `+`, measured 2026-11-24). `updated_since` with any search
-filter becomes `updated_at:>'<its UTC day>'` in the query (day
-granularity; the day is kept, see [Date boundary](#date-boundary)) and
+filter becomes `updated_at:>'<its UTC day − 1>'` in the query (day
+granularity, widened a day: `updated_at` was not measured, see
+[Date boundary](#date-boundary)) and
 `updated_at` ≥ the instant checked locally on the results (T-043, T-055); alone, it is the list endpoint, exact. `GET /tickets` refuses a `status` parameter
 (measured 2026-11-24) and documents none for priority, group, agent, type
 or tag: a field filter is search, or local.
@@ -399,20 +400,23 @@ containing `'`, `"`, `\` or a control or format character (`\p{Cc}`,
 `\p{Cf}`) is a `validation` error and no query is built. Freshdesk
 documents no escape inside single quotes, so a quote could end the value
 and add a clause; ` OR ` inside the quotes stays one value. The two date
-filters of a search are not widened (T-055, 2026-11-24): `created_between`
-asks exactly its days, `updated_since` its UTC day. Both are also checked
-locally (`matchesLocal` in `src/tools/ticket-query.ts`): `updated_since`
-needs it for the time within its day; for `created_between` it is a guard
-that drops nothing the measured search returns.
+filters of a search (T-055, 2026-11-24): `created_between` asks exactly its
+days, measured; `updated_since` asks `updated_at:>'<its UTC day − 1>'`,
+widened a day because `updated_at`'s boundary was not measured. Both are
+also checked locally (`matchesLocal` in `src/tools/ticket-query.ts`):
+`updated_since` needs it for the widened day and the time before the
+instant; for `created_between` it is a guard that drops nothing the
+measured search returns.
 
 What the local check costs. With `updated_since` beside a search filter,
-the search returns that whole UTC day, so its 300-result cap and its
-`total` count tickets updated earlier that day too: a page can yield fewer
-rows than it fetched, and `total` is not the filter's count. This bears on
-T-027's `truncated` and on T-036's counts (never `total` for a search with
-`updated_since`). For `created_between` alone, `total` is the filter's
-count. Every caller of `buildTicketQuery` must apply `matchesLocal` to each
-returned ticket.
+the search returns the day before and the whole UTC day of the instant, so
+its 300-result cap and its `total` count tickets updated before the
+instant too: a page can yield fewer rows than it fetched, and `total` is
+not the filter's count. This bears on T-027's `truncated` and on T-036's
+counts (never `total` for a search with `updated_since`). For
+`created_between` without `updated_since`, `total` is the filter's count
+when its `total` ≤ 300. Every caller of `buildTicketQuery` must apply
+`matchesLocal` to each returned ticket.
 
 ### Date boundary
 
@@ -427,9 +431,10 @@ predicting all 15 totals: `> inclusive, < inclusive, UTC day`. So:
   are both exactly day D.
 - The day is the UTC day, not the account's time-zone day.
 - `count_tickets` and `export_tickets` (T-036, T-037) count exactly from
-  `created_at:>'<from>' AND created_at:<'<to>'`.
-- `updated_at` is assumed to follow the same rule (the same date operators);
-  it was not measured.
+  `created_at:>'<from>' AND created_at:<'<to>'` when its `total` ≤ 300.
+- `updated_at` probably follows the same rule (the same date operators),
+  but it was not measured: `updated_since` keeps its one-day widening and
+  the local instant check until it is.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s stats signals; the view carries
