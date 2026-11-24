@@ -35,7 +35,8 @@ import type { FreshdeskError } from "../errors.js";
 import type { HttpClient } from "../http.js";
 import { listAll, type ListResult, PER_PAGE } from "./list-all.js";
 
-const ticket = z.looseObject({
+/** A ticket as a list, a view and a search result carry it. */
+export const ticket = z.looseObject({
   id: z.number().int(),
   subject: z.string(),
   status: z.number().int(),
