@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-24)
 - **Depends on:** T-016
 - **Created:** 2026-11-23
 - **Gates:** The owner's run of T-016's schema report, before the start
