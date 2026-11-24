@@ -270,9 +270,12 @@ describe("readCursor: the tool's maximum position", () => {
     expect(readCursor(withCursor(CALL, cursorFor(CALL, 1)), 0).ok).toBe(false);
   });
 
-  it.each([-1, 1.5, Number.NaN, Infinity])("a maximum of %s throws", (max) => {
-    expect(() => readCursor(CALL, max)).toThrow(TypeError);
-  });
+  it.each([-1, 1.5, Number.NaN, Infinity, "100" as unknown as number])(
+    "a maximum of %o throws",
+    (max) => {
+      expect(() => readCursor(CALL, max)).toThrow(TypeError);
+    },
+  );
 
   it("no maximum does not type-check, and through a cast throws", () => {
     const at101 = withCursor(CALL, cursorFor(CALL, 101));

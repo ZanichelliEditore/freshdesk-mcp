@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-24)
+- **Status:** done (2026-11-24)
 - **Depends on:** T-018
 - **Created:** 2026-11-23
 
@@ -52,18 +52,40 @@ position 0 only, an invalid maximum throwing) pass;
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- Commits: `eb0b3df` (status), `ce26fd1` (build), and the closing commit
+  `T-053: done; numeric-string bound case, task file` (2026-11-24).
+- `src/tools/list.ts`: `readCursor(call, maxPosition: number)`; the guard
+  throws a `TypeError` on a missing bound.
+- Tests, `test/tools/list.test.ts`:
+  - `readCursor: the tool's maximum position > no maximum does not
+    type-check, and through a cast throws` (the `@ts-expect-error` case,
+    the cast with no bound and with `undefined`, with and without a
+    cursor);
+  - `readCursor: the tool's maximum position > the maximum is accepted,
+    one above it refused`, `> a maximum of 0 accepts no cursor and
+    position 0 only`, `> a maximum of %o throws` (now with `"100"`
+    through a cast, the security reviewer's Low);
+  - `fakeTool` passes its own `MAX_POSITION = 100`.
+- Red before the change: the vitest case above failed ("expected function
+  to throw an error, but it didn't"), and `tsc` failed with `TS2578:
+  Unused '@ts-expect-error' directive` at `test/tools/list.test.ts:279`.
+- `docs/architecture/overview.md` shows `readCursor(call, maxPosition)`.
+- Reviews: full round on `56f53c0..ce26fd1`, all three clean
+  (compliance: Wireframes `none`); no scoped round.
+- `make quality` exit 0: vitest 17 files, 1313 tests; `tools/checks`
+  54 tests OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The bound is only as tight as each tool passes: `readCursor` checks
+  that one is given, not that it is right.
+- The tests' `ANY = Number.MAX_SAFE_INTEGER` is a test stand-in and must
+  not be copied by a tool; T-021 onward pass a named constant.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+low
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: done.
