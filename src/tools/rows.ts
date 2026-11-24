@@ -8,19 +8,25 @@
 //     (stripped of HTML, capped, not wrapped); an id it cannot name is said
 //     so by `ticketOutput` (an agent missing from a truncated list "not
 //     loaded"). A field the schema lacks, or the team hides, leaves its key
-//     out; an unassigned agent or group is `null`.
-//   - `category`: `{label: value}` for the team's `uncategorised_fields`
-//     (matched by label or API name, trimmed, NFC, any case), else for the
-//     first nested field (SPEC §10's category field). The label goes through
-//     `plainName`, the value through `fieldValue`: a validated choice path is
-//     plain, anything else wrapped.
+//     out (status, priority, agent, group and each category field alike);
+//     the subject is always shown: `hidden` is not guaranteed in rows (SPEC
+//     §7.3). An unassigned agent or group is `null`.
+//   - `category` reuses the uncategorised definition (SPEC §10), so the
+//     ticket queries read the same setting the same way: `{label: value}`
+//     for the fields the team's `uncategorised_fields` names (by label or API
+//     name, trimmed, NFC, any case; a name of a nested field's level selects
+//     that nested field, shown as its usual path), else for the first nested
+//     field. The label goes through `plainName`, the value through
+//     `fieldValue`: a validated choice path is plain, anything else wrapped.
 //   - `updated`: the ticket's `updated_at` as a UTC ISO 8601 instant when it
-//     is an ISO 8601 date-time with a zone, else `null`.
+//     is a valid ISO 8601 date-time with a zone of `Z` or `±HH:MM`, else
+//     `null` (`+0100` included).
 //   - `ticketDetail`: `{id, updated, fields}`, `fields` every field
-//     `ticketOutput` gives, keyed by its label through `plainName` (a label
-//     already used keys the later field `Label (api_name)`), each value
-//     through `fieldValue` by its own field's type; the description as text
-//     (`bodyText`), wrapped.
+//     `ticketOutput` gives, each value through `fieldValue` by its own
+//     field's type; the description as text (`bodyText`), wrapped.
+//   - Keys of `category` and `fields`: the label through `plainName`; a key
+//     already used keys the later field `Label (api_name)`, and if that is
+//     taken too, `Label (api_name) (2)`, `(3)`, ...: no value is dropped.
 
 import type { TicketField } from "../client/resources/ticket-fields.js";
 import type { Ticket } from "../client/resources/tickets.js";
@@ -59,7 +65,7 @@ const ROW_TYPES = {
 } as const;
 
 const ISO_WITH_ZONE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function fold(text: string): string {
   return text.normalize("NFC").trim().toLowerCase();
@@ -90,11 +96,28 @@ function categoryFields(ctx: RowContext, schema: Schema): readonly TicketField[]
     return nested ? [nested] : [];
   }
   const keys = new Set(listed.map(fold));
-  return schema.fields.filter((field) => keys.has(fold(field.label)) || keys.has(fold(field.name)));
+  const named = (...names: string[]) => names.some((name) => keys.has(fold(name)));
+  return schema.fields.filter(
+    (field) =>
+      named(field.label, field.name) ||
+      (field.type === "nested_field" &&
+        (field.nested_ticket_fields ?? []).some((level) => named(level.label, level.name))),
+  );
 }
 
-/** Defined, not assigned: a key `__proto__` stays an own key. */
-function put(out: Record<string, unknown>, key: string, value: unknown): void {
+/**
+ * Under the field's cleaned label, or `Label (api_name)` when that is used,
+ * then a counter: no value is dropped. Defined, not assigned: a key
+ * `__proto__` stays an own key.
+ */
+function put(out: Record<string, unknown>, field: TicketField, value: unknown): void {
+  const label = plainName(field.label);
+  let key = label;
+  if (Object.hasOwn(out, key)) {
+    const base = `${label} (${plainName(field.name)})`;
+    key = base;
+    for (let n = 2; Object.hasOwn(out, key); n++) key = `${base} (${n})`;
+  }
   Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
@@ -108,7 +131,7 @@ export function ticketRow(ctx: RowContext, schema: Schema, ticket: Ticket): Tick
   const category: Record<string, unknown> = {};
   for (const field of categoryFields(ctx, schema)) {
     const shown = outputOf(ctx, schema, field, ticket);
-    if (shown.found) put(category, plainName(field.label), fieldValue(field, shown.value));
+    if (shown.found) put(category, field, fieldValue(field, shown.value));
   }
   return {
     id: ticket.id,
@@ -130,13 +153,11 @@ export function ticketDetail(ctx: RowContext, schema: Schema, ticket: Ticket): T
   for (const field of schema.fields) {
     const shown = outputOf(ctx, schema, field, ticket);
     if (!shown.found) continue;
-    const label = plainName(field.label);
-    const key = Object.hasOwn(fields, label) ? `${label} (${plainName(field.name)})` : label;
     const value =
       field.type === "default_description"
         ? bodyText(ticket.description_text, shown.value)
         : fieldValue(field, shown.value);
-    put(fields, key, value);
+    put(fields, field, value);
   }
   return { id: ticket.id, updated: isoUpdated(ticket.updated_at), fields };
 }

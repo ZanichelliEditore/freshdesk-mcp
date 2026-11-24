@@ -167,6 +167,46 @@ describe("ticketRow", () => {
     expect(row.category).toEqual({ Colour: "Teal", Shelf: "North > Bottom" });
   });
 
+  it.each([
+    ["API name", "cf_tier"],
+    ["label", "tier"],
+  ])(
+    "selects a nested field when uncategorised_fields lists one of its levels by %s",
+    (_how, key) => {
+      const row = ticketRow(contextWith({ uncategorised_fields: [key] }), schemaWith(), ticket());
+      expect(row.category).toEqual({ Shelf: "North > Bottom" });
+    },
+  );
+
+  it("keys a later category field whose label cleans to a used one by its API name", () => {
+    const row = ticketRow(
+      contextWith({ uncategorised_fields: ["cf_colour", "cf_shelf"] }),
+      schemaWith({ fields: fieldsWithLabel("cf_colour", "<b>Shelf</b>") }),
+      ticket(),
+    );
+    expect(row.category).toEqual({ Shelf: "Teal", "Shelf (cf_shelf)": "North > Bottom" });
+  });
+
+  it("drops no category value when the fallback key is itself taken", () => {
+    const labels: Record<string, string> = {
+      cf_colour: "Shelf",
+      cf_kit: "Shelf (cf_shelf)",
+    };
+    const fields = (schemaFieldsPayload as TicketField[]).map((field) =>
+      Object.hasOwn(labels, field.name) ? { ...field, label: labels[field.name] } : field,
+    );
+    const row = ticketRow(
+      contextWith({ uncategorised_fields: ["cf_colour", "cf_kit", "cf_shelf"] }),
+      schemaWith({ fields }),
+      ticket(),
+    );
+    expect(row.category).toEqual({
+      Shelf: "Teal",
+      "Shelf (cf_shelf)": "Gadgets > Sprockets > Blue sprocket",
+      "Shelf (cf_shelf) (2)": "North > Bottom",
+    });
+  });
+
   it("has an empty category with no nested field and no team list", () => {
     const fields = (schemaFieldsPayload as TicketField[]).filter(
       (field) => field.type !== "nested_field",
@@ -180,6 +220,8 @@ describe("ticketRow", () => {
     ["not a date", "soon"],
     ["a number", 1_767_350_000],
     ["absent", undefined],
+    ["month 13", "2026-13-01T00:00:00Z"],
+    ["an offset without a colon", "2026-01-02T12:30:00+0100"],
   ])("gives updated null for %s", (_label, updated_at) => {
     const row = ticketRow(contextWith(), schemaWith(), ticket({ updated_at }));
     expect(row.updated).toBeNull();
@@ -245,6 +287,41 @@ describe("ticketDetail", () => {
       ticket({ custom_fields: { cf_free: "Big", cf_size: "Big" } }),
     );
     expect(detail.fields).toEqual({ Size: `${OPEN}Big${CLOSE}`, "Size (cf_size)": "Big" });
+  });
+
+  it("keys a field whose label cleans to a used one by its API name", () => {
+    const fields: TicketField[] = [
+      { id: 1, name: "cf_free", label: "<b>Size</b>", type: "custom_text", default: false },
+      { id: 2, name: "cf_size", label: "Size", type: "custom_text", default: false },
+    ];
+    const detail = ticketDetail(
+      contextWith(),
+      schemaWith({ fields }),
+      ticket({ custom_fields: { cf_free: "A", cf_size: "B" } }),
+    );
+    expect(detail.fields).toEqual({
+      Size: `${OPEN}A${CLOSE}`,
+      "Size (cf_size)": `${OPEN}B${CLOSE}`,
+    });
+  });
+
+  it("drops no value when the fallback key is a label already used", () => {
+    const fields: TicketField[] = [
+      { id: 1, name: "cf_first", label: "Size", type: "custom_text", default: false },
+      { id: 2, name: "cf_literal", label: "Size (cf_size)", type: "custom_text", default: false },
+      { id: 3, name: "cf_size", label: "Size", type: "custom_text", default: false },
+    ];
+    const detail = ticketDetail(
+      contextWith(),
+      schemaWith({ fields }),
+      ticket({ custom_fields: { cf_first: "A", cf_literal: "B", cf_size: "C" } }),
+    );
+    expect(Object.values(detail.fields)).toEqual([
+      `${OPEN}A${CLOSE}`,
+      `${OPEN}B${CLOSE}`,
+      `${OPEN}C${CLOSE}`,
+    ]);
+    expect(detail.fields["Size (cf_size)"]).toBe(`${OPEN}B${CLOSE}`);
   });
 
   it("strips an HTML tag from a field label used as a key", () => {
