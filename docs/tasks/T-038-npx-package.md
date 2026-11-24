@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-24)
 - **Depends on:** T-021, T-026, T-027, T-028, T-029, T-030, T-032, T-034, T-036, T-037
 - **Created:** 2026-11-23
 - **Gates:** Evidence that the `@zanichelli` npm scope is owned by the
