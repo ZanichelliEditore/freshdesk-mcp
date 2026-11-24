@@ -65,6 +65,18 @@ function change(index: number, edit: (field: Record<string, unknown>) => void) {
 }
 
 describe("listTicketFields: a well-formed payload", () => {
+  it("reports the requests it sent: 1, and 2 after a retried 503", async () => {
+    reply(200, ticketFieldsPayload);
+    expect(await listTicketFields(http)).toMatchObject({ ok: true, attempts: 1 });
+
+    reply(503, { message: "busy" });
+    reply(200, ticketFieldsPayload);
+    const retried = await listTicketFields(http);
+    expect(retried).toMatchObject({ ok: true, attempts: 2 });
+    expect(Object.keys(retried).sort()).toEqual(["attempts", "fields", "ok"]);
+    expect(mock.getCallHistory()?.calls()).toHaveLength(3);
+  });
+
   it("sends one GET to /ticket_fields and yields every field's label in order", async () => {
     reply(200, ticketFieldsPayload);
 

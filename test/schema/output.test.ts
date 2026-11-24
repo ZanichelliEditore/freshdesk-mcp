@@ -463,6 +463,55 @@ describe("SchemaService: the requests a load sent", () => {
     expect(schemaOf(joined)).toBe(schemaOf(started));
   });
 
+  it("hands out frozen results: the starter cannot swap the schema a joiner or a later call gets", async () => {
+    queueLoad();
+    const service = new SchemaService(http, TTL_S);
+    const pending = [service.get(), service.get()] as const;
+    const started = await pending[0];
+    const loaded = schemaOf(started);
+    const other: Schema = {
+      fields: [],
+      agents: { names: new Map(), truncated: false },
+      groups: { names: new Map(), truncated: false },
+    };
+
+    for (const [name, value] of [
+      ["schema", other],
+      ["attempts", 99],
+      ["ok", false],
+    ] as const) {
+      expect(() => {
+        (started as unknown as Record<string, unknown>)[name] = value;
+      }).toThrow(TypeError);
+    }
+
+    const joined = await pending[1];
+    const cached = await service.get();
+    expect(schemaOf(joined)).toBe(loaded);
+    expect(schemaOf(cached)).toBe(loaded);
+    expect(loaded.agents.names.size).toBe(3);
+    for (const result of [started, joined, cached]) expect(Object.isFrozen(result)).toBe(true);
+    expect(() => {
+      (cached as unknown as Record<string, unknown>).schema = other;
+    }).toThrow(TypeError);
+    expect(schemaOf(await service.get())).toBe(loaded);
+  });
+
+  it("hands out a failed load's result frozen, its error too", async () => {
+    reply(FIELDS, { message: "denied" }, undefined, 403);
+    const service = new SchemaService(http, TTL_S);
+
+    const [failed, joined] = await Promise.all([service.get(), service.get()]);
+
+    if (failed.ok) throw new Error("expected an error");
+    expect(Object.isFrozen(failed)).toBe(true);
+    expect(Object.isFrozen(failed.error)).toBe(true);
+    expect(() => {
+      (failed.error as { code: string }).code = "not_found";
+    }).toThrow(TypeError);
+    expect(joined).toMatchObject({ ok: false, error: { code: "forbidden" } });
+  });
+
   it("reports the requests of each load: a load after the TTL counts again", async () => {
     queueLoad();
     const service = new SchemaService(http, TTL_S);

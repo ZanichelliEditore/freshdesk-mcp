@@ -330,6 +330,17 @@ describe("get_ticket_schema: the cache", () => {
     expect(second).toEqual(first);
   });
 
+  it("returns {fields} and nothing else, on a cold load and from the cache", async () => {
+    queueLoad();
+    const session = await sessionFor();
+    for (const count of [3, 3]) {
+      const result = await callTool(session, TOOL, {});
+      const value = JSON.parse(result.content[0].text) as Record<string, unknown>;
+      expect(Object.keys(value)).toEqual(["fields"]);
+      expect(sent()).toBe(count);
+    }
+  });
+
   it("returns a failed load's error code as isError, and the next call loads again", async () => {
     reply(FIELDS, { message: "nope" }, 403);
     const session = await sessionFor();

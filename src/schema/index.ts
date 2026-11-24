@@ -23,6 +23,9 @@
 //     served from the cache, or joining a load in flight, gets 0, so a load's
 //     requests are counted once whoever reports them. A failed load reports
 //     none, as the lists it reads report none on failure.
+//   - Every result handed out is frozen, a failed one with its error: the
+//     load's result is shared with the calls that joined it, so the call
+//     that started it cannot swap the schema or the error they get.
 //   - Of an agent only the id and the name are kept: the contact's personal
 //     data (email, phone) is dropped here.
 //   - `truncated` is carried from the list: an id missing from a truncated
@@ -133,14 +136,18 @@ export class SchemaService {
   get(): Promise<SchemaResult> {
     const age = this.#cached ? Date.now() - this.#cached.loadedAt : -1;
     if (this.#cached && age >= 0 && age < this.#ttlS * 1000) {
-      return Promise.resolve({ ok: true, schema: this.#cached.schema, attempts: 0 });
+      return Promise.resolve(Object.freeze({ ok: true, schema: this.#cached.schema, attempts: 0 }));
     }
     if (this.#inFlight) {
-      return this.#inFlight.then((result) => (result.ok ? { ...result, attempts: 0 } : result));
+      return this.#inFlight.then((result) =>
+        result.ok ? Object.freeze({ ...result, attempts: 0 }) : result,
+      );
     }
-    this.#inFlight = this.#load().finally(() => {
-      this.#inFlight = undefined;
-    });
+    this.#inFlight = this.#load()
+      .then(deepFreeze)
+      .finally(() => {
+        this.#inFlight = undefined;
+      });
     return this.#inFlight;
   }
 
