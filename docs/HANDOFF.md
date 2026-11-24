@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T09:29:58+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `fcca38f`
+  (`fcca38f54faadf59415013ab5e485c9fff1bfb32`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45356744333
+  (workflow `quality`, ran on `fcca38f`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-021 `done (2026-11-24)`,
   `docs/tasks/T-021-list-agents-groups.md` ("Done"). Commits `c5e255d`
