@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T14:02:31+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `f1fee04`
+  (`f1fee043ebca559d28a9871e1085faac4277722d`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45399489473
+  (workflow `quality`, ran on `f1fee04`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-029 `done (2026-11-24)`,
   `docs/tasks/T-029-triage-queue.md` ("Done"). Commits `12b376c`
