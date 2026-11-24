@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-24T14:57:05+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `4d37b3e`
+  (`4d37b3e0a2ac41348f579af9d52ed859913312fb`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45408860003
+  (workflow `quality`, ran on `4d37b3e`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-032 `done (2026-11-24)`,
   `docs/tasks/T-032-kb-tools.md` ("Done"). Commits `cc44f2a` (status),
