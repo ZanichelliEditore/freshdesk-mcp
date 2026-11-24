@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M1
-- **Status:** doing (2026-11-24)
+- **Status:** done (2026-11-24)
 - **Depends on:** T-016
 - **Created:** 2026-11-23
 - **Gates:** The owner's run of T-016's schema report, before the start
@@ -68,13 +68,50 @@ and the tasks it blocks are named; `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+- Commits: `e408ca8` (status), `0ab246f` (draft from the docs, probes,
+  tests), the close commit `T-022: measured rows, open items, task file`
+  (measured rows, this file).
+- `docs/architecture/ticket-queries.md`: one row per filter of the five
+  tools and `get_ticket`'s recent tickets, each `documented` with its URL
+  or `measured 2026-11-24`; `uncategorized` (local check of
+  `custom_fields`: search refuses `<nested level>:null`), past 300 results,
+  cost classes, the parameters of `listTickets` (requester filter
+  `requester_id`, always with `updated_since`) and `searchTickets`; "Open"
+  lists what remains and the tasks it bears on.
+- Probes: `runProbes` in `scripts/smoke/smoke.ts`, `make smoke-probes`
+  (`cli.ts --probes`). Run against the real account by the orchestrator on
+  2026-11-24 (owner's authorisation): exit 0, 16 GETs, 10 answered 200, 6
+  answered 400; output kept in `docs/private/`, only shapes copied.
+- Tests: `test/smoke.test.ts` `runProbes: what they ask and print` (one
+  line per probe, GET only, the queries asked, no fixture value / domain /
+  key in stdout or stderr), `runProbes: failures` (error code only, 401,
+  not JSON, not a list, skipped probes, an unfit field name not sent),
+  `main: the probes mode`. The leak test was seen failing with a probe
+  line made to print a ticket (reverted).
+- Acceptance: every line met; the requester row is `documented` (the probe
+  was inconclusive, so `updated_since` is always sent with it).
 
 ## Dead ends
-none
+- Asking `uncategorized` by search: `<nested top>:null`,
+  `<nested last level>:null` and the same within 30 days are each a 400
+  `validation` (2026-11-24).
+- `include=stats` on search (400) and a `status` parameter on the list
+  (400): no single call gives open tickets with their stats.
 
 ## Open doubts
-none
+- `GET /tickets/{id}?include=stats` is assumed to carry the 8 `stats` keys
+  measured on the list (T-029).
+- Whether `requester_id` alone lifts the 30-day window is unknown (the
+  probe's requester had one ticket); moot while `updated_since` is sent.
+- One deep `updated_since` page took about 8 s, near the 10 s per-attempt
+  cut-off (T-027, T-036, T-037).
+- Choice to confirm: with `uncategorised_fields` set, a ticket with **any**
+  listed field empty is uncategorised.
+- The doc pages disagree on an include's cost (+2 on List All Tickets, +1
+  on View a Ticket); measured +1 on the list.
 
 ## Context pressure
+Low: one builder session over two phases; no file dumped whole.
 
 ## Next action
+none: done. T-023 and T-024 are unblocked.
