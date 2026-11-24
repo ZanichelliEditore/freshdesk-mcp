@@ -54,8 +54,10 @@
 //   - `truncated: true` beside the counts when the source was cut: the scan
 //     stopped at the budget, at MAX_LIST_PAGE (it links a next page or comes
 //     back full), or at SCAN_START_MS; or a later page the limiter refused
-//     (`rate_limited` with no HTTP status). Any other failed request fails
-//     the call: no partial count.
+//     (`rate_limited` with no HTTP status), or one aborted at the call's
+//     deadline (`network` once it is reached; T-037 review, 2026-11-24).
+//     Any other failed request, and a failed probe, fails the call: no
+//     partial count.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start. No
 //     page is started after SCAN_START_MS, so an attempt (10 s) is not cut
 //     in flight by the deadline.
@@ -292,9 +294,16 @@ function createdDay(ticket: Ticket | undefined): string | undefined {
   return Number.isNaN(time) ? undefined : new Date(time).toISOString().slice(0, 10);
 }
 
-/** A later page the limiter refused before sending (no HTTP status): the source is cut, not failed. */
-export function limiterRefusal(error: FreshdeskError): boolean {
-  return error.code === "rate_limited" && error.http_status === null;
+/**
+ * A later request that cuts the source rather than failing the call: one the
+ * limiter refused before sending (`rate_limited`, no HTTP status), or one
+ * aborted once the call's deadline was reached (`network`, at or past it).
+ */
+export function isCut(error: FreshdeskError, deadline: number): boolean {
+  return (
+    (error.code === "rate_limited" && error.http_status === null) ||
+    (error.code === "network" && Date.now() >= deadline)
+  );
 }
 
 function calls(n: number): string {
@@ -392,7 +401,7 @@ export async function readPeriod(
       }
       const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
       if (!found.ok) {
-        if (!limiterRefusal(found.error)) return found;
+        if (!isCut(found.error, deadline)) return found;
         meter.used += found.attempts ?? 0;
         meter.requests += found.attempts ?? 0;
         truncated = true;
@@ -436,7 +445,7 @@ export async function readPeriod(
       "expensive",
     );
     if (!listed.ok) {
-      if (!limiterRefusal(listed.error)) return listed;
+      if (!isCut(listed.error, deadline)) return listed;
       meter.used += listed.attempts ?? 0;
       meter.requests += listed.attempts ?? 0;
       truncated = true;

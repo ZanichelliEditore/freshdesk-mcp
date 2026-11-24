@@ -72,6 +72,45 @@ MockAgent count; over budget without `confirm` is refused;
 key; the `/security-review` findings are resolved or dismissed in the task
 file; `make quality` green.
 
+## Security review
+
+Full round on `d46df76..7afc903` (2026-11-24): `/security-review`
+(owner-mandated) and `security-reviewer`; fixes in the full-review-fixes
+commit after `7afc903`.
+
+`/security-review`: no finding at or above 8/10. Below the threshold:
+
+- The `node:fs/promises` allow-list width (every core tool, not
+  `export-tickets.ts` alone): parked in `docs/improvements.md`
+  (`7afc903`, single-file place); `overview.md` now says "allowed in core
+  tools; `export-tickets.ts` the only importer today".
+- Full-width formula characters (＝ ＋ － ＠, 3/10): parked in
+  `docs/improvements.md` (`7afc903`).
+
+`security-reviewer`:
+
+1. A trailing `/` or `/.` on `FRESHDESK_EXPORT_DIR` made `lstat` follow a
+   symlinked directory (same as code M1): fixed, `lstat` and `join` work on
+   `path.resolve(dir)` after the `isAbsolute` check on the raw value; tests
+   for `<link>/`, `<link>/.` (refused) and `<dir>/` (accepted).
+2. The directory swapped between the check and the write: fixed, its device
+   and inode are kept and it is `lstat`ed again before `open`, before the
+   rows are written and before `link`; any change refuses with a fixed
+   message. Tests: swapped during the read, and before the temporary file
+   is created. Accepted residual: a swap after the last check and before
+   `open` or `link` (node:fs has no openat); and after a detected swap no
+   path reaches the temporary file, so it is left where the directory went,
+   empty (truncated through its handle when the rows were written).
+3. The allow-list width (same as code L3): the core-tools place is kept;
+   the single-file place is parked.
+4. `taken()` read any `lstat` error as "free": fixed, only ENOENT is free,
+   any other error refuses (test: a directory that is not searchable).
+5. `O_NOFOLLOW ?? 0` unexplained: fixed, one-line comment (no such flag on
+   Windows; `O_EXCL` alone never follows a link).
+6. The result carries the file's `path`: dismissed, the acceptance requires
+   it ("the result has path, row count and `api_calls_used`"), and it is the
+   owner's own directory plus a generated name, no ticket text.
+
 ---
 *Filled at `/handoff`:*
 

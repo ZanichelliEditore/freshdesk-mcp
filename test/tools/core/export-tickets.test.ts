@@ -1,10 +1,13 @@
 import {
+  chmodSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -732,5 +735,226 @@ describe("export_tickets: the conversations option", () => {
     expect(written.truncated).toBe(true);
     expect(sent()).toBe(4);
     expect(ms).toBeLessThan(30_000);
+  });
+});
+
+/** One reply that runs `act` first, then answers 200 with `body`. */
+function replyAfter(path: string, body: unknown, act: () => void) {
+  mock
+    .get(ORIGIN)
+    .intercept({ path, method: "GET" })
+    .reply(() => {
+      act();
+      return { statusCode: 200, data: body as object, responseOptions: { headers: JSON_TYPE } };
+    });
+}
+
+describe("export_tickets: full review fixes (R1)", () => {
+  it.each([
+    ["a trailing /", (link: string) => `${link}/`],
+    ["a trailing /.", (link: string) => `${link}/.`],
+  ])("a symlink to a directory written with %s is refused", async (_what, spell) => {
+    const link = join(root, `link-${++count}`);
+    symlinkSync(out, link);
+    const { session } = await cold(FAST, spell(link));
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("symlink");
+    expect(sent()).toBe(0);
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  it("a plain directory written with a trailing / is accepted: the file is in it", async () => {
+    const { session } = await warm(FAST, `${out}/`);
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301)]));
+    const result = output(await callTool(session, TOOL, jsonl()));
+    expect(dirname(result.path)).toBe(out);
+    expect(readdirSync(out)).toEqual([basename(result.path)]);
+  });
+
+  it("the directory swapped for a symlink during the read: refused, nothing in the new target, the moved temporary file empty", async () => {
+    const { session } = await warm();
+    const moved = join(root, `moved-${++count}`);
+    const elsewhere = join(root, `elsewhere-${++count}`);
+    mkdirSync(elsewhere);
+    replyAfter(searchPath(PERIOD_QUERY), found([ticket(4301)]), () => {
+      renameSync(out, moved);
+      symlinkSync(elsewhere, out);
+    });
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("FRESHDESK_EXPORT_DIR changed while the call ran");
+    expect(error.message).toContain("used 1 API call");
+    expect(readdirSync(elsewhere)).toEqual([]);
+    // No path reaches the moved directory any more (no openat): its temporary file stays, empty.
+    const left = readdirSync(moved);
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatch(/^\.freshdesk-tickets-.*\.jsonl\.tmp$/);
+    expect(statSync(join(moved, left[0]!)).size).toBe(0);
+  });
+
+  it("the directory swapped for a symlink before the temporary file is created: refused, nothing created anywhere", async () => {
+    const { session } = await cold();
+    const moved = join(root, `moved-${++count}`);
+    const elsewhere = join(root, `elsewhere-${++count}`);
+    mkdirSync(elsewhere);
+    replyAfter(FIELDS, schemaFieldsPayload, () => {
+      renameSync(out, moved);
+      symlinkSync(elsewhere, out);
+    });
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.message).toContain("FRESHDESK_EXPORT_DIR changed while the call ran");
+    expect(readdirSync(elsewhere)).toEqual([]);
+    expect(readdirSync(moved)).toEqual([]);
+    expect(sent()).toBe(3);
+  });
+
+  it("a file planted at the final name during the read: refused, the planted file untouched, no temporary file left", async () => {
+    const { session } = await warm();
+    let final = "";
+    replyAfter(searchPath(PERIOD_QUERY), found([ticket(4301)]), () => {
+      final = readdirSync(out)[0]!.slice(1, -".tmp".length);
+      writeFileSync(join(out, final), "planted");
+    });
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("could not be put under its name");
+    expect(error.message).toContain("used 1 API call");
+    expect(readdirSync(out)).toEqual([final]);
+    expect(readFileSync(join(out, final), "utf8")).toBe("planted");
+  });
+
+  it("a symlink planted at the temporary name before it is created: refused, the link and its target untouched", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-04T05:06:07.089Z"));
+    const { session } = await cold();
+    const temp = ".freshdesk-tickets-20260304T050607089Z.jsonl.tmp";
+    const target = join(root, `target-${++count}`);
+    replyAfter(FIELDS, schemaFieldsPayload, () => symlinkSync(target, join(out, temp)));
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("temporary file could not be created");
+    expect(error.message).toContain("used 3 API calls");
+    expect(sent()).toBe(3);
+    expect(readdirSync(out)).toEqual([temp]);
+    expect(readlinkSync(join(out, temp))).toBe(target);
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it("a file planted at the temporary name before it is created: refused, the planted file untouched", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-04T05:06:07.089Z"));
+    const { session } = await cold();
+    const temp = ".freshdesk-tickets-20260304T050607089Z.jsonl.tmp";
+    replyAfter(FIELDS, schemaFieldsPayload, () => writeFileSync(join(out, temp), "planted"));
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.message).toContain("temporary file could not be created");
+    expect(readdirSync(out)).toEqual([temp]);
+    expect(readFileSync(join(out, temp), "utf8")).toBe("planted");
+  });
+
+  it("a name that cannot be checked (the directory not searchable) is refused, not taken as free", async () => {
+    const { session } = await warm();
+    chmodSync(out, 0o666);
+    try {
+      const error = refusal(await callTool(session, TOOL, jsonl()));
+      expect(error.code).toBe("validation");
+      expect(error.message).toContain("could not be checked");
+      expect(sent()).toBe(0);
+    } finally {
+      chmodSync(out, 0o755);
+    }
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  it("a later search page aborted at the call's deadline is a cut: the rows read, truncated: true", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45)).delay(40_000);
+    }
+    // No timing asserted: the file steps are real I/O, which the settle loop counts as fake time.
+    const { result } = await settle(callTool(session, TOOL, jsonl()));
+    const written = output(result);
+    expect(written.rows).toBe(30);
+    expect(written.truncated).toBe(true);
+    expect(written.api_calls_used).toBe(sent());
+
+    expect(readdirSync(out)).toEqual([basename(written.path)]);
+  });
+
+  it("a thread aborted at the call's deadline is a cut: its ticket not written, the rows before it kept", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    reply(threadPath(4301), conversationPages[0]);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      reply(threadPath(4302), conversationPages[1]).delay(40_000);
+    }
+    const { result } = await settle(callTool(session, TOOL, jsonl({ conversations: true })));
+    const written = output(result);
+    expect(lines(written.path)).toEqual([
+      { ...row(4301), conversations: thread(conversationPages[0]) },
+    ]);
+    expect(written.truncated).toBe(true);
+    expect(written.api_calls_used).toBe(sent());
+  });
+
+  /** 4301's thread on 11 linked pages of one entry: the 10-page cap cuts it. */
+  function longThread() {
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301)]));
+    for (let page = 1; page <= 10; page++) {
+      const path = page === 1 ? threadPath(4301) : `${threadPath(4301)}&page=${page}`;
+      mock
+        .get(ORIGIN)
+        .intercept({ path, method: "GET" })
+        .reply(200, conversationPages[1], {
+          headers: {
+            ...JSON_TYPE,
+            link: `<${ORIGIN}/api/v2/tickets/4301/conversations?per_page=100&page=${page + 1}>; rel="next"`,
+          },
+        });
+    }
+  }
+
+  it("JSONL: a thread past 10 pages is cut and its row says conversations_truncated: true", async () => {
+    const { session } = await warm();
+    longThread();
+    const result = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    const [only] = lines(result.path) as {
+      conversations: unknown[];
+      conversations_truncated?: boolean;
+    }[];
+    expect(only!.conversations).toHaveLength(10);
+    expect(only!.conversations_truncated).toBe(true);
+    expect(result.api_calls_used).toBe(11);
+    expect(sent()).toBe(11);
+  });
+
+  it("CSV: a thread past 10 pages adds a conversations_truncated column, true on its row", async () => {
+    const { session } = await warm(FAST, out, FORMULA_FIELDS);
+    longThread();
+    const result = output(
+      await callTool(session, TOOL, jsonl({ format: "csv", conversations: true })),
+    );
+    const [header, first] = readFileSync(result.path, "utf8").split("\r\n");
+    expect(header).toBe(
+      "id,created_at,updated_at,Subject,Status,conversations,conversations_truncated",
+    );
+    expect(first!.endsWith(",true")).toBe(true);
+  });
+
+  it("the description says conversations_truncated", async () => {
+    const tools = await listTools((await cold()).session);
+    expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
+      "conversations_truncated: true",
+    );
   });
 });

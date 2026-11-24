@@ -910,6 +910,23 @@ describe("count_tickets: api_calls_used", () => {
 });
 
 describe("count_tickets: one 30 s deadline per call", () => {
+  it("a later search page aborted at the deadline is a cut: the counts so far, truncated: true", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45)).delay(40_000);
+    }
+    const { result, ms } = await settle(
+      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    const counted = output(result);
+    expect(counted.total).toBe(30);
+    expect(counted.truncated).toBe(true);
+    expect(counted.api_calls_used).toBe(sent());
+    expect(ms).toBeLessThanOrEqual(30_100);
+  });
+
   it("slow requests end the call at 30 s as network, with no request after", async () => {
     const { session } = await cold();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });

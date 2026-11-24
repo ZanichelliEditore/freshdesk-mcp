@@ -298,10 +298,12 @@ T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
   at the default pacing; a larger period is exported in several calls with
   shorter periods, each its own file, and a cut one says `truncated: true`.
   Resumable or background export stays out of scope (T-037).
-- A read cut by the budget, the time limit, page 300 or a later request the
-  limiter refuses writes the rows read so far, with `truncated: true`, as
-  `count_tickets` counts them; any other failed request fails the call and
-  leaves no file.
+- A read cut by the budget, the time limit, page 300, a later request the
+  limiter refuses or a later request aborted at the call's deadline
+  (`network` once it is reached: `isCut`, which `count_tickets` shares since
+  the T-037 review, 2026-11-24) writes the rows read so far, with
+  `truncated: true`, as `count_tickets` counts them; any other failed
+  request fails the call and leaves no file.
 - Conversations (`conversations: true`): `listConversations`, every page
   of the thread (at most 10 of 100), `expensive`. The estimate counts one
   call per ticket more (`estimateCalls`' `conversations`; on the search path
@@ -309,8 +311,10 @@ T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
   floors). A thread over one page costs more than estimated, so the budget
   (without `confirm`) and `SCAN_START_MS` are checked before each thread as
   before each page: a cut, `truncated: true`, and a ticket is written with
-  its whole thread or not at all. A thread the limiter refuses is a cut too;
-  any other failure fails the call. At the default pacing that is about 40
+  its whole thread or not at all. A thread the limiter refuses, or one
+  aborted at the deadline, is a cut too; any other failure fails the call.
+  A thread past 10 pages (1,000 entries) is kept as read, its row marked
+  `conversations_truncated: true`. At the default pacing that is about 40
   tickets with their threads a call.
 
 ### `get_ticket`'s recent tickets
