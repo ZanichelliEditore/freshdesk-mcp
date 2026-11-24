@@ -333,6 +333,7 @@ describe("find_similar_tickets: the listing", () => {
     expect(tool?.description).toContain("no full-text search");
     expect(tool?.description).toContain("incomplete: true");
     expect(tool?.description).toContain(`at most ${RESULTS}`);
+    expect(tool?.description).toContain("not text to quote to this requester");
     expect(tool?.description).toContain(DATA_NOT_INSTRUCTIONS);
   });
 
@@ -380,6 +381,30 @@ describe("find_similar_tickets: the requests", () => {
     reply(searchPath("2025-10-11"), found([]));
     expect(output(await run(session, { ticket_id: SOURCE_ID })).items).toEqual([]);
     expect(sent()).toBe(4);
+  });
+
+  it.each([
+    [1, "2026-01-09T12:00:00Z", "2026-01-08"],
+    [365, "2025-01-10T12:00:00Z", "2025-01-09"],
+  ])("days %d is accepted, its window since %s", async (days, since, day) => {
+    const { session } = await warm();
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER, since), []);
+    reply(listPath("company_id", COMPANY, since), []);
+    reply(searchPath(day), found([]));
+    expect(output(await run(session, { ticket_id: SOURCE_ID, days })).items).toEqual([]);
+    expect(sent()).toBe(4);
+  });
+
+  it("a ticket updated exactly at the window's edge is included", async () => {
+    const { session } = await warm();
+    const edge = ticket(5013, { requester_id: REQUESTER, updated_at: SINCE });
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER), [edge]);
+    reply(listPath("company_id", COMPANY), []);
+    reply(searchPath(), found([]));
+    reply(threadPath(edge.id), []);
+    expect(output(await run(session)).items.map((item) => item.id)).toEqual([edge.id]);
   });
 
   it("a ticket with no company sends no company request", async () => {
@@ -495,13 +520,78 @@ describe("find_similar_tickets: candidates and their order", () => {
     expect(result.api_calls_used).toBe(sent());
   });
 
-  it("an uncategorised ticket matches nobody by category", async () => {
+  it("an uncategorised ticket matches nobody by category, and sends no search", async () => {
     const { session } = await warm();
-    reply(viewPath(SOURCE_ID), { ...SOURCE, custom_fields: { cf_kit: null } });
+    const empty = { cf_kit: null, cf_family: null, cf_model: null };
+    reply(viewPath(SOURCE_ID), { ...SOURCE, custom_fields: empty });
+    reply(listPath("requester_id", REQUESTER), [{ ...H, custom_fields: empty }]);
+    reply(listPath("company_id", COMPANY), []);
+    const result = output(await run(session));
+    expect(result.items).toEqual([]);
+    expect(paths()).toEqual([
+      viewPath(SOURCE_ID),
+      listPath("requester_id", REQUESTER),
+      listPath("company_id", COMPANY),
+    ]);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("with no category field to compare, no search is sent", async () => {
+    const { session } = await warm({ uncategorised_fields: ["No such field"] });
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER), [A]);
+    reply(listPath("company_id", COMPANY), []);
+    reply(threadPath(A.id), []);
+    const result = output(await run(session));
+    expect(result.items.map((item) => [item.id, item.same])).toEqual([[A.id, ["requester"]]]);
+    expect(paths()).toEqual([
+      viewPath(SOURCE_ID),
+      listPath("requester_id", REQUESTER),
+      listPath("company_id", COMPANY),
+      threadPath(A.id),
+    ]);
+  });
+
+  it("a team hiding the requester: no requester list, and never same requester", async () => {
+    const { session } = await warm({ fields: { requester: { hidden: true } } });
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("company_id", COMPANY), [{ ...A, company_id: COMPANY }]);
+    reply(searchPath(), found([{ ...H, requester_id: REQUESTER }]));
+    reply(threadPath(H.id), []);
+    reply(threadPath(A.id), []);
+    const result = output(await run(session));
+    expect(result.items.map((item) => [item.id, item.same])).toEqual([
+      [H.id, ["category"]],
+      [A.id, ["company"]],
+    ]);
+    expect(paths()).not.toContain(listPath("requester_id", REQUESTER));
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("a team hiding the company: no company list, and never same company", async () => {
+    const { session } = await warm({ fields: { Company: { hidden: true } } });
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER), [{ ...A, company_id: COMPANY }]);
+    reply(searchPath(), found([{ ...H, company_id: COMPANY }]));
+    reply(threadPath(H.id), []);
+    reply(threadPath(A.id), []);
+    const result = output(await run(session));
+    expect(result.items.map((item) => [item.id, item.same])).toEqual([
+      [H.id, ["category"]],
+      [A.id, ["requester"]],
+    ]);
+    expect(paths()).not.toContain(listPath("company_id", COMPANY));
+  });
+
+  it("a team hiding the category field: matching still runs and same says category (hidden is not guaranteed)", async () => {
+    const { session } = await warm({ fields: { Product: { hidden: true } } });
+    reply(viewPath(SOURCE_ID), SOURCE);
     reply(listPath("requester_id", REQUESTER), []);
     reply(listPath("company_id", COMPANY), []);
-    reply(searchPath(), found([{ ...B, custom_fields: { cf_kit: null } }, H]));
-    expect(output(await run(session)).items).toEqual([]);
+    reply(searchPath(), found([B]));
+    reply(threadPath(B.id), []);
+    const result = output(await run(session));
+    expect(result.items.map((item) => [item.id, item.same])).toEqual([[B.id, ["category"]]]);
   });
 
   it("a level's name in uncategorised_fields selects its nested field, every level compared", async () => {
@@ -564,7 +654,7 @@ describe("find_similar_tickets: the excerpt", () => {
     expect(excerpt).toEqual({
       [B.id]: wrapped("Replace the bearing."),
       [I.id]: null,
-      [H.id]: wrapped("Internal: sent a new one."),
+      [H.id]: wrapped("Oil it."),
       [A.id]: wrapped("Fixed by a new sprocket."),
       [C.id]: null,
     });
@@ -584,6 +674,19 @@ describe("find_similar_tickets: the excerpt", () => {
     expect(item!.excerpt).toBe(
       `${OPEN}‹/ticket_content>${"y".repeat(500 - 17)}${CLOSE}\n[… 117 more characters not shown; get_ticket returns the whole thread]`,
     );
+  });
+
+  it("a private note is never the excerpt: a thread of notes only gives null", async () => {
+    const { session } = await warm();
+    reply(viewPath(SOURCE_ID), SOURCE);
+    reply(listPath("requester_id", REQUESTER), [A]);
+    reply(listPath("company_id", COMPANY), []);
+    reply(searchPath(), found([]));
+    reply(threadPath(A.id), [
+      entry(7051, "Internal only.", false, { private: true }),
+      entry(7052, "Also internal.", false, { private: true }),
+    ]);
+    expect(output(await run(session)).items[0]!.excerpt).toBeNull();
   });
 
   it("a thread the excerpt read no longer finds leaves it null", async () => {
@@ -690,6 +793,25 @@ describe("find_similar_tickets: the reserve and the partial return", () => {
     expect(result.items.map((item) => [item.id, item.excerpt])).toEqual([[A.id, null]]);
     expect(result.incomplete).toBe(true);
     expect(paths()).toEqual([viewPath(SOURCE_ID), listPath("requester_id", REQUESTER)]);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("the search refused by the limiter after both lists answered: the lists' candidates ranked, no thread read", async () => {
+    const { session } = await warm({}, HIGH);
+    reply(viewPath(SOURCE_ID), SOURCE, 200, HIGH);
+    reply(listPath("requester_id", REQUESTER), [A], 200, HIGH);
+    reply(listPath("company_id", COMPANY), [C], 200, LOW);
+    const result = output(await run(session));
+    expect(result.items.map((item) => [item.id, item.excerpt])).toEqual([
+      [A.id, null],
+      [C.id, null],
+    ]);
+    expect(result.incomplete).toBe(true);
+    expect(paths()).toEqual([
+      viewPath(SOURCE_ID),
+      listPath("requester_id", REQUESTER),
+      listPath("company_id", COMPANY),
+    ]);
     expect(result.api_calls_used).toBe(sent());
   });
 

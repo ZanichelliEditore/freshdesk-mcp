@@ -14,7 +14,8 @@
 //     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`.
 //   - `listConversationPage`: its first page alone (the oldest 100), and
 //     whether another exists; for a caller bounded to one request a ticket
-//     (`find_similar_tickets`' excerpt, T-030).
+//     (`find_similar_tickets`' excerpt, T-030). Its failures, a malformed
+//     page included, carry `attempts`.
 //
 // A ticket needs a whole-number `id`, `requester_id`, `status` and
 // `priority`, a string `subject` and a `custom_fields` object; a conversation
@@ -231,7 +232,14 @@ export async function listConversationPage(
       return { ...result, attempts: end.done ? end.value.attempts : 0 };
     }
     const parsed = conversation.array().safeParse(result.body);
-    if (!parsed.success) return malformed("conversations", result.status);
+    if (!parsed.success) {
+      // One page asked for: the next step ends the iteration with the count.
+      const end = await pages.next();
+      return {
+        ...malformed("conversations", result.status),
+        attempts: end.done ? end.value.attempts : 0,
+      };
+    }
     conversations = parsed.data;
   }
 }

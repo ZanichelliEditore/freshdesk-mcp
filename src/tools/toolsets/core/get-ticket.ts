@@ -102,8 +102,11 @@ const SHORT_CAP = 300;
 const PLAIN_EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$/;
 
 /** The team keys that hide the requester or the company when the schema lacks the field. */
-const REQUESTER = { type: "default_requester", keys: ["requester", "requester_id"] } as const;
-const COMPANY = { type: "default_company", keys: ["company", "company_id"] } as const;
+export const REQUESTER = {
+  type: "default_requester",
+  keys: ["requester", "requester_id"],
+} as const;
+export const COMPANY = { type: "default_company", keys: ["company", "company_id"] } as const;
 
 const input = z.object({
   ticket_id: z.number().int().positive(),
@@ -117,9 +120,10 @@ type Failure = Extract<ToolResult, { ok: false }>;
  * Whether the team shows the requester or the company. With the field in the
  * schema, what `ticketOutput` does with it (label, API name and ticket key
  * alike). Without it, fail closed: hidden when a hidden team key is one of
- * the field's usual names, compared as `ticketOutput` compares.
+ * the field's usual names, compared as `ticketOutput` compares. Shared with
+ * `find_similar_tickets`.
  */
-function shows(
+export function shows(
   context: AppContext,
   schema: Schema,
   { type, keys }: typeof REQUESTER | typeof COMPANY,

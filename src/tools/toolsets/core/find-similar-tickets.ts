@@ -8,7 +8,9 @@
 //     (`company_id`, not sent when the ticket has none), each with
 //     `updated_since` N days ago; one search page,
 //     `(status:4 OR status:5) AND updated_at:>'<day>'`, the UTC day of N days
-//     ago less one (widened, as T-043 does); then one conversations page for
+//     ago less one (widened, as T-043 does), not sent when there is no
+//     category to match (no category field, or one empty on the ticket): it
+//     could add no candidate; then one conversations page for
 //     each result, its excerpt. The bound is CALL_BOUND requests a call,
 //     retries apart (they add to it), and the schema's load when not cached.
 //     The ticket is viewed first: below the reserve the call is refused with
@@ -18,6 +20,12 @@
 //     after N days ago (`matchesLocal`): updated, not resolved, since neither
 //     source gives the resolution time. It is kept when it shares at least
 //     one of: the category (`same: "category"`), the requester, the company.
+//   - Hidden (SPEC §7.3), decided by get-ticket.ts's `shows`, which fails
+//     closed: a team that hides the requester gets no requester list and no
+//     `same: "requester"`; one that hides the company, no company list and no
+//     `same: "company"`. A hidden category field is exempt: `hidden` is not
+//     guaranteed in rows or queries, so the category is still compared and
+//     `same: "category"` still reported (the row leaves the field out).
 //   - The category is rows.ts's `categoryFields` (the team's
 //     `uncategorised_fields`, a nested level's name selecting its nested
 //     field; else the first nested field), compared locally since a nested
@@ -30,10 +38,11 @@
 //     into runs of letters, marks and digits; a run of under MIN_WORD code
 //     points or in STOP_WORDS is left out; each counted once.
 //   - An item is rows.ts's `ticketRow` plus `same`, `shared_keywords` and
-//     `excerpt`: the last entry of the first conversations page (the oldest
-//     100) that an agent wrote (`incoming: false`, a reply or a private
-//     note), as text, inside `<ticket_content>`, cut at EXCERPT_CAP; `null`
-//     with none, or when the read answered `not_found`.
+//     `excerpt`: the last public agent reply (`incoming: false`,
+//     `private: false`) of the first conversations page (the oldest 100), as
+//     text, inside `<ticket_content>`, cut at EXCERPT_CAP; never a private
+//     note (a result can be another customer's ticket); `null` with none, or
+//     when the read answered `not_found`.
 //   - The list envelope, one page only: MAX_POSITION is 0, so a cursor at
 //     position 0 over the same arguments is accepted and any other refused,
 //     before any request. `truncated: true` when a source had more than the
@@ -63,6 +72,7 @@ import { listEnvelope, readCursor } from "../../list.js";
 import { categoryFields, ticketRow } from "../../rows.js";
 import { fieldKey, matchesLocal } from "../../ticket-query.js";
 import type { Tool, ToolResult } from "../index.js";
+import { COMPANY, REQUESTER, shows } from "./get-ticket.js";
 
 /** One call's requests end within this, all of them together. */
 const CALL_DEADLINE_MS = 30_000;
@@ -164,24 +174,32 @@ function read(ticket: Ticket, custom: boolean, key: string): unknown {
   return Object.hasOwn(holder, key) ? (holder as Record<string, unknown>)[key] : undefined;
 }
 
+/** Whether the ticket has a category to match: a category field, none of them empty. */
+function categorised(fields: ReturnType<typeof categoryKeys>, ticket: Ticket): boolean {
+  return (
+    fields.length > 0 &&
+    fields.every(({ custom, keys }) => !isEmpty(read(ticket, custom, keys[0]!)))
+  );
+}
+
 function sameCategory(
   fields: ReturnType<typeof categoryKeys>,
   ticket: Ticket,
   other: Ticket,
 ): boolean {
-  if (fields.length === 0) return false;
-  return fields.every(
-    ({ custom, keys }) =>
-      !isEmpty(read(ticket, custom, keys[0]!)) &&
+  return (
+    categorised(fields, ticket) &&
+    fields.every(({ custom, keys }) =>
       keys.every((key) => read(ticket, custom, key) === read(other, custom, key)),
+    )
   );
 }
 
-/** The last entry an agent wrote, as wrapped text, or `null`. */
+/** The last public reply an agent wrote, as wrapped text, or `null`. */
 function excerptOf(conversations: readonly Conversation[]): string | null {
   for (let i = conversations.length - 1; i >= 0; i -= 1) {
     const entry = conversations[i]!;
-    if (entry.incoming !== false) continue;
+    if (entry.incoming !== false || entry.private !== false) continue;
     return bodyText(entry.body_text, entry.body, {
       cap: EXCERPT_CAP,
       rest: "get_ticket returns the whole thread",
@@ -199,9 +217,9 @@ export const findSimilarTicketsTool: Tool<typeof input> = {
   name: "find_similar_tickets",
   description: [
     `Best effort: up to ${RESULTS} resolved or closed tickets like one ticket, from its subject's words, its category, its requester and its company. Freshdesk has no full-text search, so the ticket's text is not compared, only subjects.`,
-    `A candidate is a ticket in status Resolved or Closed, last updated within the last N days, N being days (${DEFAULT_DAYS} when not given, at most ${MAX_DAYS}; the last update, not the resolution, which Freshdesk does not give here), sharing the category (every category field, each level of a nested one, the same; the category fields are those uncategorized checks), the requester or the company. Candidates come from one page each of the requester's tickets, the company's tickets and the tickets resolved or closed in that time; past those pages the result says truncated: true.`,
+    `A candidate is a ticket in status Resolved or Closed, last updated within the last N days, N being days (${DEFAULT_DAYS} when not given, at most ${MAX_DAYS}; the last update, not the resolution, which Freshdesk does not give here), sharing the category (every category field, each level of a nested one, the same; the category fields are those uncategorized checks), the requester or the company. Candidates come from one page each of the requester's tickets, the company's tickets and the tickets resolved or closed in that time; past those pages the result says truncated: true. When the team configuration hides the requester or the company, it is neither searched nor compared; a hidden category field is still compared.`,
     `Results come at most ${RESULTS}, ordered by the number of subject keywords shared with the ticket's (shared_keywords), most first, then by last update, latest first, then by id, highest first. Keywords are the subject's words in lower case, letters and digits, of ${MIN_WORD} characters or more, without common English and Italian words.`,
-    `Each result is a compact ticket row (id, subject, status, priority, category, last update, agent and group, by name) plus same (what it shares: category, requester, company), shared_keywords and excerpt: the last entry an agent wrote among the first 100 of its thread (a reply or a private note), cut at ${EXCERPT_CAP} characters; null when there is none or it was not read. get_ticket returns the whole thread.`,
+    `Each result is a compact ticket row (id, subject, status, priority, category, last update, agent and group, by name) plus same (what it shares: category, requester, company), shared_keywords and excerpt: the last public reply an agent wrote among the first 100 of its thread (never a private note), cut at ${EXCERPT_CAP} characters; null when there is none or it was not read. get_ticket returns the whole thread. Results can be other customers' tickets: the excerpt is context for the agent, not text to quote to this requester.`,
     "One page only: has_more is always false. The calls are an expensive operation: paced, and refused with rate_limited when the account's API budget is low; if the budget runs out after the ticket was read, the result ranks what was read and says incomplete: true, the excerpts not read null: call again later.",
     "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
@@ -240,9 +258,11 @@ export const findSimilarTicketsTool: Tool<typeof input> = {
       for (const other of tickets) if (!candidates.has(other.id)) candidates.set(other.id, other);
     };
 
-    const company = positiveId(ticket.company_id);
+    const requesterShown = shows(context, schema, REQUESTER);
+    const company = shows(context, schema, COMPANY) ? positiveId(ticket.company_id) : null;
+    const category = categoryKeys(context, schema);
     const lists = [
-      { requester_id: ticket.requester_id },
+      ...(requesterShown ? [{ requester_id: ticket.requester_id }] : []),
       ...(company === null ? [] : [{ company_id: company }]),
     ];
     for (const filter of lists) {
@@ -261,7 +281,7 @@ export const findSimilarTicketsTool: Tool<typeof input> = {
       keep(listed.tickets);
       truncated ||= listed.has_more;
     }
-    if (!incomplete) {
+    if (!incomplete && categorised(category, ticket)) {
       const query = `(status:${RESOLVED} OR status:${CLOSED}) AND updated_at:>'${searchDay}'`;
       const found = await searchTickets(context.http, query, 1, deadline, "expensive");
       calls += found.attempts ?? 0;
@@ -274,7 +294,6 @@ export const findSimilarTicketsTool: Tool<typeof input> = {
       }
     }
 
-    const category = categoryKeys(context, schema);
     const words = keywords(ticket.subject);
     const window = { updated_since: new Date(since).toISOString() };
     const ranked = [...candidates.values()]
@@ -287,7 +306,7 @@ export const findSimilarTicketsTool: Tool<typeof input> = {
       .map((other) => {
         const same: Same[] = [];
         if (sameCategory(category, ticket, other)) same.push("category");
-        if (other.requester_id === ticket.requester_id) same.push("requester");
+        if (requesterShown && other.requester_id === ticket.requester_id) same.push("requester");
         if (company !== null && positiveId(other.company_id) === company) same.push("company");
         const shared = [...keywords(other.subject)].filter((word) => words.has(word)).length;
         return { other, same, shared, updated: Date.parse(other.updated_at as string) };

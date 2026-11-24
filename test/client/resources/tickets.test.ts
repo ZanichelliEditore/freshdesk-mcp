@@ -588,4 +588,11 @@ describe("listConversationPage", () => {
     });
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
+
+  it("a malformed page says how many requests it took", async () => {
+    reply(THREAD, 503, {});
+    reply(THREAD, 200, [{ id: CANARY }]);
+
+    expect(await listConversationPage(http, 4101)).toMatchObject({ ok: false, attempts: 2 });
+  });
 });

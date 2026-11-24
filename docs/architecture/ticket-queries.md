@@ -215,13 +215,23 @@ T-030's choices (2026-11-24, `src/tools/toolsets/core/find-similar-tickets.ts`):
 - One page of each source: the requester's list and the company's list
   (100 each, `updated_since=<N days ago>`), the search (30, its day widened
   by one and `updated_at` checked locally with `matchesLocal`). A source
-  with more than that page makes the result `truncated: true`.
+  with more than that page makes the result `truncated: true`. The search
+  is not sent when there is no category to match (no category field, or
+  one empty on the ticket): it could add no candidate (full review,
+  2026-11-24).
+- Hidden fields, as `get_ticket` decides them (its `shows`, failing
+  closed): a team that hides the requester gets no requester list and no
+  `same: "requester"`; one that hides the company, no company list and no
+  `same: "company"`. A hidden category field is exempt (SPEC §7.3:
+  `hidden` is not guaranteed in rows or queries): the category is still
+  compared and `same: "category"` still reported.
 - Ranked by subject keywords shared (lower case, NFC, runs of letters,
   marks and digits of 3 code points or more, a short English and Italian
   stop-word list left out), then the last update, then the id; the top 5
   returned. The excerpt is one `GET /tickets/{id}/conversations?per_page=100`
-  per result (its first page, the oldest 100): the last entry an agent
-  wrote.
+  per result (its first page, the oldest 100): the last public reply an
+  agent wrote (`incoming: false`, `private: false`), never a private note,
+  since a result can be another customer's ticket.
 - **Bound: 9 requests a call** (the view, two lists, one search page, five
   thread pages), retries apart, plus the schema's load when not cached;
   every one `expensive`, the view first, so below the reserve nothing is
