@@ -20,6 +20,8 @@ import { type AppContext, createContext } from "../../../src/tools/context.js";
 import { LIST_PAGE_SIZE } from "../../../src/tools/toolsets/core/count-tickets.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../../fixtures/schema.js";
+import { ticketFieldsPayload } from "../../fixtures/ticket-fields.js";
+import { conversationPages } from "../../fixtures/tickets.js";
 import {
   type CallResult,
   callTool,
@@ -176,16 +178,20 @@ async function cold(team: unknown = FAST, exportDir: string | null = out): Promi
   return { session: await open(server), context };
 }
 
-function queueSchema() {
-  reply(FIELDS, schemaFieldsPayload);
+function queueSchema(fields: unknown[] = schemaFieldsPayload) {
+  reply(FIELDS, fields);
   reply(AGENTS, agentPages.flat());
   reply(GROUPS, groupPages.flat());
 }
 
 /** A session whose schema is cached, the MockAgent's count back at 0. */
-async function warm(team: unknown = FAST, exportDir: string | null = out): Promise<Desk> {
+async function warm(
+  team: unknown = FAST,
+  exportDir: string | null = out,
+  fields?: unknown[],
+): Promise<Desk> {
   const desk = await cold(team, exportDir);
-  queueSchema();
+  queueSchema(fields);
   const loaded = await desk.context.schema.get();
   if (!loaded.ok) throw new Error("the fixture schema did not load");
   mock.clearCallHistory();
@@ -223,6 +229,20 @@ function lines(path: string): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
+/** Runs the fake clock forward until the call settles; returns the fake ms it took. */
+async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
+  const started = Date.now();
+  let result: CallResult | undefined;
+  void call.then((value) => {
+    result = value;
+  });
+  while (result === undefined) {
+    await new Promise((resolve) => setImmediate(resolve));
+    if (result === undefined) await vi.advanceTimersByTimeAsync(100);
+  }
+  return { result, ms: Date.now() - started };
+}
+
 const jsonl = (over: Record<string, unknown> = {}) => ({
   format: "jsonl",
   created_between: PERIOD,
@@ -245,6 +265,10 @@ describe("export_tickets: the listing", () => {
     expect(description).toContain("confirm: true");
     expect(description).toContain("truncated: true");
     expect(description).toContain("api_calls_used");
+    expect(description).toContain('"csv"');
+    expect(description).toContain("prefixed with ' so a spreadsheet does not run it");
+    expect(description).toContain("conversations: true adds each ticket's thread");
+    expect(description).toContain("one more API call per ticket");
   });
 
   it("its input schema has no zod default or transform", () => {
@@ -489,5 +513,224 @@ describe("export_tickets: the budget", () => {
     expect(error.code).toBe("rate_limited");
     expect(sent()).toBe(0);
     expect(readdirSync(out)).toEqual([]);
+  });
+});
+
+function threadPath(id: number): string {
+  return `/api/v2/tickets/${id}/conversations?per_page=100`;
+}
+
+/** A ticket's thread in the file: what each entry keeps. */
+function thread(entries: (typeof conversationPages)[number]) {
+  return entries.map((entry) => ({
+    id: entry.id,
+    created_at: entry.created_at,
+    user_id: entry.user_id,
+    incoming: entry.incoming,
+    private: entry.private,
+    body_text: entry.body_text,
+  }));
+}
+
+/** Subject and status, and six custom text fields whose labels start as a formula would. */
+const FORMULA_FIELDS = [
+  ticketFieldsPayload[0],
+  ticketFieldsPayload[1],
+  { id: 1101, name: "cf_eq", label: "=Eq", type: "custom_text", default: false },
+  { id: 1102, name: "cf_plus", label: "+Plus", type: "custom_text", default: false },
+  { id: 1103, name: "cf_minus", label: "-Minus", type: "custom_text", default: false },
+  { id: 1104, name: "cf_at", label: "@At", type: "custom_text", default: false },
+  { id: 1105, name: "cf_tab", label: "\tTab", type: "custom_text", default: false },
+  { id: 1106, name: "cf_cr", label: "\rCr", type: "custom_text", default: false },
+];
+
+/** A ticket whose subject has a quote and a newline, and whose six fields start as formulas. */
+const formulaTicket = ticket(4301, {
+  subject: 'He said "hi"\nbye',
+  custom_fields: {
+    cf_eq: "=1+1",
+    cf_plus: "+1",
+    cf_minus: "-1",
+    cf_at: "@SUM(A1)",
+    cf_tab: "\tx",
+    cf_cr: "\rx",
+  },
+});
+
+const HEADER = "id,created_at,updated_at,Subject,Status,'=Eq,'+Plus,'-Minus,'@At,'\tTab,\"'\rCr\"";
+const FORMULA_ROW =
+  '4301,2026-01-02T10:00:00Z,2026-01-02T11:30:00Z,"He said ""hi""\nbye",Open,\'=1+1,\'+1,\'-1,\'@SUM(A1),\'\tx,"\'\rx"';
+
+describe("export_tickets: CSV", () => {
+  it("writes a header and the fixture rows with labels, every cell escaped (asserted bytes)", async () => {
+    const { session } = await warm(FAST, out, FORMULA_FIELDS);
+    reply(searchPath(PERIOD_QUERY), found([formulaTicket]));
+    const result = output(await callTool(session, TOOL, jsonl({ format: "csv" })));
+    expect(basename(result.path)).toMatch(/^freshdesk-tickets-\d{8}T\d{9}Z\.csv$/);
+    expect(dirname(result.path)).toBe(out);
+    expect(statSync(result.path).mode & 0o777).toBe(0o600);
+    expect(readFileSync(result.path, "utf8")).toBe(`${HEADER}\r\n${FORMULA_ROW}\r\n`);
+    expect(result.rows).toBe(1);
+    expect(result.api_calls_used).toBe(sent());
+  });
+
+  it("the full fixture schema: labels and names resolved, a field a ticket lacks empty", async () => {
+    const { session } = await warm();
+    const bare = ticket(4302, { custom_fields: { cf_colour: "Amber" } });
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), bare]));
+    const result = output(await callTool(session, TOOL, jsonl({ format: "csv" })));
+    expect(readFileSync(result.path, "utf8")).toBe(
+      [
+        "id,created_at,updated_at,Subject,Status,Priority,Colour,Product,Source,Agent,Group,Type,Shelf,Requester,Company,Catalogue,Hobby,Notes",
+        "4301,2026-01-02T10:00:00Z,2026-01-02T11:30:00Z,Sprocket report 4301,Open,High,Teal,Gadgets > Sprockets > Blue sprocket,Portal,Juniper Vantablack,Spanner Desk,Incident,North > Bottom,9001,8001,7001,Kite flying,",
+        "4302,2026-01-02T10:00:00Z,2026-01-02T11:30:00Z,Sprocket report 4302,Open,High,Amber,,Portal,Juniper Vantablack,Spanner Desk,Incident,,9001,8001,7001,,",
+        "",
+      ].join("\r\n"),
+    );
+  });
+
+  it("no ticket: the header alone", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found([]));
+    const result = output(await callTool(session, TOOL, jsonl({ format: "csv" })));
+    expect(readFileSync(result.path, "utf8")).toBe("id,created_at,updated_at\r\n");
+    expect(result.rows).toBe(0);
+  });
+});
+
+describe("export_tickets: the conversations option", () => {
+  it("JSONL: each row carries its thread, one more request per ticket, all counted", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    reply(threadPath(4301), conversationPages[0]);
+    reply(threadPath(4302), conversationPages[1]);
+    const result = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(lines(result.path)).toEqual([
+      { ...row(4301), conversations: thread(conversationPages[0]) },
+      { ...row(4302), conversations: thread(conversationPages[1]) },
+    ]);
+    expect(sent()).toBe(3);
+    expect(result.api_calls_used).toBe(3);
+  });
+
+  it("a thread over two pages is read whole", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301)]));
+    mock
+      .get(ORIGIN)
+      .intercept({ path: threadPath(4301), method: "GET" })
+      .reply(200, conversationPages[0], {
+        headers: {
+          ...JSON_TYPE,
+          link: `<${ORIGIN}/api/v2/tickets/4301/conversations?per_page=100&page=2>; rel="next"`,
+        },
+      });
+    reply("/api/v2/tickets/4301/conversations?per_page=100&page=2", conversationPages[1]);
+    const result = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(lines(result.path)).toEqual([
+      { ...row(4301), conversations: thread([...conversationPages[0], ...conversationPages[1]]) },
+    ]);
+    expect(result.api_calls_used).toBe(3);
+  });
+
+  it("CSV: the thread is one last column, its JSON escaped (asserted bytes)", async () => {
+    const { session } = await warm(FAST, out, FORMULA_FIELDS);
+    reply(searchPath(PERIOD_QUERY), found([formulaTicket]));
+    reply(threadPath(4301), conversationPages[1]);
+    const result = output(
+      await callTool(session, TOOL, jsonl({ format: "csv", conversations: true })),
+    );
+    const json = JSON.stringify(thread(conversationPages[1])).replaceAll('"', '""');
+    expect(readFileSync(result.path, "utf8")).toBe(
+      `${HEADER},conversations\r\n${FORMULA_ROW},"${json}"\r\n`,
+    );
+  });
+
+  it("the estimate counts one call per ticket more: over the budget with it, not without", async () => {
+    const budget = { limits: { pacing_rps: 1000, call_budget: 2 } };
+    const { session } = await warm(budget);
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    output(await callTool(session, TOOL, jsonl()));
+    mock.clearCallHistory();
+    rmSync(out, { recursive: true });
+    mkdirSync(out);
+
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    const error = refusal(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("estimated 3 API calls");
+    expect(error.message).toContain("budget of 2");
+    expect(sent()).toBe(1);
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  it("past 300, the floor estimate counts one call per ticket of the total more", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 100 } });
+    reply(searchPath(PERIOD_QUERY), found(many(4301, 30), 301));
+    const error = refusal(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(error.message).toContain("estimated 306 API calls");
+    expect(sent()).toBe(1);
+  });
+
+  it("the threads stop at the budget while they run: the rows with their thread, truncated: true", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 3 } });
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    // 4301's thread takes two requests: with the probe, the budget of 3 is spent.
+    mock
+      .get(ORIGIN)
+      .intercept({ path: threadPath(4301), method: "GET" })
+      .reply(200, conversationPages[0], {
+        headers: {
+          ...JSON_TYPE,
+          link: `<${ORIGIN}/api/v2/tickets/4301/conversations?per_page=100&page=2>; rel="next"`,
+        },
+      });
+    reply("/api/v2/tickets/4301/conversations?per_page=100&page=2", conversationPages[1]);
+    const result = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(result.rows).toBe(1);
+    expect((lines(result.path)[0] as { id: number }).id).toBe(4301);
+    expect(result.truncated).toBe(true);
+    expect(sent()).toBe(3);
+    expect(result.api_calls_used).toBe(3);
+  });
+
+  it("a thread the limiter refuses: the rows before it, truncated: true", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    // 4301's thread says 10 of 100 calls are left: 4302's is refused unsent.
+    reply(threadPath(4301), conversationPages[0], {
+      headers: { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+    });
+    const result = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(lines(result.path)).toEqual([
+      { ...row(4301), conversations: thread(conversationPages[0]) },
+    ]);
+    expect(result.truncated).toBe(true);
+    expect(sent()).toBe(2);
+    expect(result.api_calls_used).toBe(2);
+  });
+
+  it("a thread Freshdesk refuses fails the call: no final file, no temporary file", async () => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
+    reply(threadPath(4301), conversationPages[0]);
+    reply(threadPath(4302), {}, { status: 404 });
+    const error = refusal(await callTool(session, TOOL, jsonl({ conversations: true })));
+    expect(error.code).toBe("not_found");
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  it("starts no thread after SCAN_START_MS: truncated: true, not an error", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    reply(searchPath(PERIOD_QUERY), found(many(4301, 4)));
+    // 8 s a thread: the third ends at 24 s, past SCAN_START_MS: no fourth.
+    for (let id = 4301; id <= 4304; id++) reply(threadPath(id), conversationPages[1]).delay(8000);
+    const { result, ms } = await settle(callTool(session, TOOL, jsonl({ conversations: true })));
+    const written = output(result);
+    expect(written.rows).toBe(3);
+    expect(written.truncated).toBe(true);
+    expect(sent()).toBe(4);
+    expect(ms).toBeLessThan(30_000);
   });
 });

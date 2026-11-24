@@ -302,6 +302,16 @@ T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
   limiter refuses writes the rows read so far, with `truncated: true`, as
   `count_tickets` counts them; any other failed request fails the call and
   leaves no file.
+- Conversations (`conversations: true`): `listConversations`, every page
+  of the thread (at most 10 of 100), `expensive`. The estimate counts one
+  call per ticket more (`estimateCalls`' `conversations`; on the search path
+  one per result of `total`, on the scan one per ticket of `total`, both
+  floors). A thread over one page costs more than estimated, so the budget
+  (without `confirm`) and `SCAN_START_MS` are checked before each thread as
+  before each page: a cut, `truncated: true`, and a ticket is written with
+  its whole thread or not at all. A thread the limiter refuses is a cut too;
+  any other failure fails the call. At the default pacing that is about 40
+  tickets with their threads a call.
 
 ### `get_ticket`'s recent tickets
 
