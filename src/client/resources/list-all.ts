@@ -11,7 +11,7 @@
 // quotes nothing from the body. An HTTP failure is returned unchanged.
 //
 // `deadline` (epoch ms, optional) is the caller's, for all the pages: see
-// `paginate`.
+// `paginate`. `params` fill the path template (`/tickets/{id}/conversations`).
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -24,17 +24,18 @@ export type ListResult<T> =
   | { ok: true; items: T[]; truncated: boolean; attempts: number }
   | { ok: false; error: FreshdeskError };
 
-/** `noun` names the list in the error message: "agents", "groups". */
+/** `noun` names the list in the error message: "agents", "groups", "conversations". */
 export async function listAll<T>(
   http: HttpClient,
   path: string,
   item: z.ZodType<T>,
   noun: string,
   deadline?: number,
+  params?: Record<string, string | number>,
 ): Promise<ListResult<T>> {
   const items: T[] = [];
   const pages = http.paginate(
-    { path, query: { per_page: PER_PAGE } },
+    { path, params, query: { per_page: PER_PAGE } },
     { pages: MAX_PAGES },
     deadline,
   );
