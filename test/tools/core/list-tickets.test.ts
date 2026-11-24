@@ -473,11 +473,11 @@ describe("list_tickets: filters refused", () => {
 });
 
 describe("list_tickets: the local checks (matchesLocal)", () => {
-  it("created_between: tickets the widened search returns from the boundary days are absent", async () => {
+  it("created_between: the search asks exactly the days; a ticket outside them is still absent", async () => {
     const { session } = await warm();
     const args = { status: 2, created_between: { from: "2026-01-02", to: "2026-01-03" } };
     reply(
-      searchPath("status:2 AND created_at:>'2026-01-01' AND created_at:<'2026-01-04'"),
+      searchPath("status:2 AND created_at:>'2026-01-02' AND created_at:<'2026-01-03'"),
       found([
         ticket(4301, { created_at: "2026-01-01T23:59:59Z" }),
         ticket(4302, { created_at: "2026-01-02T00:00:00Z" }),
@@ -495,7 +495,7 @@ describe("list_tickets: the local checks (matchesLocal)", () => {
     const { session } = await warm();
     const args = { tag: "sprocket", updated_since: "2026-01-02T12:00:00Z" };
     reply(
-      searchPath("tag:'sprocket' AND updated_at:>'2026-01-01'"),
+      searchPath("tag:'sprocket' AND updated_at:>'2026-01-02'"),
       found([
         ticket(4301, { updated_at: "2026-01-01T18:00:00Z" }),
         ticket(4302, { updated_at: "2026-01-02T11:59:59Z" }),
@@ -837,11 +837,11 @@ describe("list_tickets: truncated", () => {
     expect(last.has_more).toBe(false);
   });
 
-  it("the widened set over the cap is truncated, whatever the local check keeps", async () => {
+  it("a dated search over the cap is truncated, whatever the local check keeps", async () => {
     const { session } = await warm();
     const args = { status: 2, created_between: { from: "2026-01-02", to: "2026-01-02" } };
     reply(
-      searchPath("status:2 AND created_at:>'2026-01-01' AND created_at:<'2026-01-03'"),
+      searchPath("status:2 AND created_at:>'2026-01-02' AND created_at:<'2026-01-02'"),
       found([ticket(4301), ticket(4302, { created_at: "2026-01-03T00:00:00Z" })], 301),
     );
     const result = output(await callTool(session, TOOL, args));

@@ -7,7 +7,7 @@
 //     priority, group, agent, type, tag and `created_between` are one search
 //     query; with none of them the list endpoint serves the call.
 //     `matchesLocal` is applied to every ticket either endpoint returns: the
-//     widened dates of a search and `uncategorized` are checked here.
+//     dates of a search and `uncategorized` are checked here.
 //   - The cursor is read first, before any request. A position is a page of
 //     the source: of search (30 results) with a search filter, of the list
 //     endpoint without. Which source a call uses is known from its arguments
@@ -36,8 +36,8 @@
 //     call can so return fewer rows than a page, or none, with `has_more:
 //     true`; a scan can return up to SCAN_MAX_ROWS rows (DETAIL_SCAN_MAX_ROWS
 //     tickets with `detail: true`): one short of LIST_ROWS, then a whole page.
-//     `truncated` is the source's too: with a date filter the search counts
-//     the widened set, so it can be cut at 300 when fewer tickets match.
+//     `truncated` is the source's too: with `updated_since` the search counts
+//     its whole UTC day, so it can be cut at 300 when fewer tickets match.
 //   - `detail: true` is bounded: each wrapped value, the description
 //     included, is cut at DETAIL_VALUE_CAP code points with the marker
 //     (`get_ticket` returns more of the text), and a scan reads the smaller page.

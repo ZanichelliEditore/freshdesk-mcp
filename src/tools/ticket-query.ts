@@ -17,15 +17,15 @@
 //   - `buildTicketQuery`: status, priority, group, agent, type, tag and
 //     `created_between` are search conditions, joined by ` AND ` in that
 //     order (`status:2`, `group_id:<id>`, `type:'<name>'`, `tag:'<tag>'`,
-//     `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'`);
-//     `updated_since` joins them as `updated_at:>'<its UTC day − 1>'`. Both
-//     dates are widened and returned as local checks (`created_between`,
+//     `created_at:>'<from>' AND created_at:<'<to>'`); `updated_since`
+//     joins them as `updated_at:>'<its UTC day>'`. Search's `>` and `<`
+//     keep the day given and compare UTC days (measured 2026-11-24, T-055;
+//     `updated_at` assumed the same, not measured), so the dates are not
+//     widened. Both are also returned as local checks (`created_between`,
 //     `updated_since` on the result, which callers must apply with
-//     `matchesLocal`). Exact if Freshdesk compares by UTC day, whether its
-//     `>` and `<` keep the boundary day or not; if it compares by the
-//     account's time-zone day with an exclusive operator, a one-day widening
-//     can under-return on one side (an undercount, not fail-open). Open:
-//     the proposed row T-055.
+//     `matchesLocal`): the instant of `updated_since` within its day needs
+//     one; the `created_between` one is a guard that drops nothing the
+//     measured search returns.
 //     With no search condition the list endpoint serves the call,
 //     `updated_since` as its parameter (a UTC instant to the second), no
 //     local date check. No filter: the list with no parameter.
@@ -318,13 +318,6 @@ function utcDay(year: number, month: number, day: number): number | undefined {
     : undefined;
 }
 
-const DAY_MS = 86_400_000;
-
-/** The UTC day `days` after the day (or instant) `value`, as YYYY-MM-DD. */
-function shiftDay(value: string, days: number): string {
-  return new Date(Date.parse(value.slice(0, 10)) + days * DAY_MS).toISOString().slice(0, 10);
-}
-
 function isDay(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = DAY.exec(value);
@@ -444,7 +437,7 @@ export function buildTicketQuery(
     const from = isRecord(range) ? range.from : undefined;
     const to = isRecord(range) ? range.to : undefined;
     if (isDay(from) && isDay(to) && from <= to) {
-      conditions.push(`created_at:>'${shiftDay(from, -1)}' AND created_at:<'${shiftDay(to, 1)}'`);
+      conditions.push(`created_at:>'${from}' AND created_at:<'${to}'`);
       createdBetween = { from, to };
     } else {
       problems.push(
@@ -478,7 +471,7 @@ export function buildTicketQuery(
 
   const searched = conditions.length > 0;
   if (searched && updatedSince !== undefined) {
-    conditions.push(`updated_at:>'${shiftDay(updatedSince, -1)}'`);
+    conditions.push(`updated_at:>'${updatedSince.slice(0, 10)}'`);
   }
   const query = conditions.join(" AND ");
   if (problems.length === 0 && `"${query}"`.length > MAX_QUERY_LENGTH) {

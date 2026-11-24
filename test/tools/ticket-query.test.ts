@@ -193,20 +193,33 @@ describe("buildTicketQuery: the nine filters", () => {
     expect(build(filters)).toEqual({ ok: true, endpoint: "search", query });
   });
 
-  it("created_between is a search widened by a day each side, with the exact days checked locally", () => {
+  it("created_between is a search of exactly its days (inclusive, UTC; T-055), the days also checked locally", () => {
     expect(build({ created_between: { from: "2026-01-01", to: "2026-01-31" } })).toEqual({
       ok: true,
       endpoint: "search",
-      query: "created_at:>'2025-12-31' AND created_at:<'2026-02-01'",
+      query: "created_at:>'2026-01-01' AND created_at:<'2026-01-31'",
       created_between: { from: "2026-01-01", to: "2026-01-31" },
     });
+  });
+
+  it("created_between keeps 00:00:00Z on from and 23:59:59Z on to, not the second either side (T-055)", () => {
+    const result = build({ created_between: { from: "2026-01-10", to: "2026-01-12" } });
+    expect(result).toMatchObject({
+      query: "created_at:>'2026-01-10' AND created_at:<'2026-01-12'",
+    });
+    if (!result.ok) throw new Error("expected ok");
+    const at = (created_at: string) => ticket({}, { created_at });
+    expect(matchesLocal(result, at("2026-01-10T00:00:00Z"))).toBe(true);
+    expect(matchesLocal(result, at("2026-01-12T23:59:59Z"))).toBe(true);
+    expect(matchesLocal(result, at("2026-01-09T23:59:59Z"))).toBe(false);
+    expect(matchesLocal(result, at("2026-01-13T00:00:00Z"))).toBe(false);
   });
 
   it("created_between of one day is accepted, and the local check keeps that day only", () => {
     const result = build({ created_between: { from: "2026-03-01", to: "2026-03-01" } });
     expect(result).toMatchObject({
       ok: true,
-      query: "created_at:>'2026-02-28' AND created_at:<'2026-03-02'",
+      query: "created_at:>'2026-03-01' AND created_at:<'2026-03-01'",
     });
     if (!result.ok) throw new Error("expected ok");
     const at = (created_at: unknown) => ticket({}, { created_at });
@@ -254,18 +267,18 @@ describe("buildTicketQuery: the nine filters", () => {
     ).toEqual({
       ok: true,
       endpoint: "search",
-      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-02'",
+      query: "status:2 AND agent_id:503 AND tag:'late reply' AND updated_at:>'2026-01-03'",
       uncategorized: [{ field: "cf_kit", key: "cf_model", custom: true }],
       updated_since: "2026-01-03T01:30:00Z",
     });
   });
 
-  it("with a search filter, updated_since is a day earlier in the query and the instant checked locally", () => {
+  it("with a search filter, updated_since is its UTC day in the query and the instant checked locally", () => {
     const result = build({ status: "Open", updated_since: "2026-01-01T10:00:00Z" });
     expect(result).toEqual({
       ok: true,
       endpoint: "search",
-      query: "status:2 AND updated_at:>'2025-12-31'",
+      query: "status:2 AND updated_at:>'2026-01-01'",
       updated_since: "2026-01-01T10:00:00Z",
     });
     if (!result.ok) throw new Error("expected ok");

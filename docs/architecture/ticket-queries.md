@@ -93,13 +93,13 @@ The two endpoints, in short:
 | tag | search `tag:'<tag>'` | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets) |
 | `uncategorized` | local check of `custom_fields`: on the list pages alone, on the search results with other filters (see [below](#uncategorized)) | 30,000 (9,000 with `detail: true`, pages of 30) / 300 | 1 per 100 scanned (per 30 with `detail: true`) / 4 per 100 scanned | measured 2026-11-24 (a nested field is not searchable; both carry `custom_fields`) |
 | `updated_since` | list `updated_since=<ISO instant>`, 30 a page | 9,000 (300 pages of 30; T-027) | 4 | documented, [List All Tickets](https://developers.freshdesk.com/api/#list_all_tickets); measured 2026-11-24 (lifts the 30-day window) |
-| `created_between` | search `created_at:>'<from − 1 day>' AND created_at:<'<to + 1 day>'` (days, UTC), then `created_at`'s UTC day checked locally within from–to (T-043) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); with the local check, exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
+| `created_between` | search `created_at:>'<from>' AND created_at:<'<to>'` (days, UTC, both kept), `created_at`'s UTC day also checked locally within from–to as a guard (T-043, T-055) | 300 | 4 | documented, [Filter Tickets](https://developers.freshdesk.com/api/#filter_tickets); exact: search's `>` and `<` keep the day given and compare UTC days (measured 2026-11-24, T-055), see [Date boundary](#date-boundary) |
 
 Several filters at once: one search query, the conditions joined by `AND`
 (spaces sent as `+`, measured 2026-11-24). `updated_since` with any search
-filter becomes `updated_at:>'<its UTC day − 1>'` in the query (day
-granularity, widened a day) and `updated_at` ≥ the instant checked locally
-on the results (T-043); alone, it is the list endpoint, exact. `GET /tickets` refuses a `status` parameter
+filter becomes `updated_at:>'<its UTC day>'` in the query (day
+granularity; the day is kept, see [Date boundary](#date-boundary)) and
+`updated_at` ≥ the instant checked locally on the results (T-043, T-055); alone, it is the list endpoint, exact. `GET /tickets` refuses a `status` parameter
 (measured 2026-11-24) and documents none for priority, group, agent, type
 or tag: a field filter is search, or local.
 
@@ -399,17 +399,37 @@ containing `'`, `"`, `\` or a control or format character (`\p{Cc}`,
 `\p{Cf}`) is a `validation` error and no query is built. Freshdesk
 documents no escape inside single quotes, so a quote could end the value
 and add a clause; ` OR ` inside the quotes stays one value. The two date
-filters of a search are widened by a day and checked locally (`matchesLocal`
-in `src/tools/ticket-query.ts`): exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055.
+filters of a search are not widened (T-055, 2026-11-24): `created_between`
+asks exactly its days, `updated_since` its UTC day. Both are also checked
+locally (`matchesLocal` in `src/tools/ticket-query.ts`): `updated_since`
+needs it for the time within its day; for `created_between` it is a guard
+that drops nothing the measured search returns.
 
-What the widening costs. The search asks for the widened set, so its
-300-result cap and its `total` count that set: a page can yield fewer rows
-than it fetched, and `total` is not the filter's count. This bears on
-T-027's `truncated` (a cap reached on the widened set) and on T-036's
-counts (never `total` for a date-filtered search). Every caller of
-`buildTicketQuery` must apply `matchesLocal` to each returned ticket; the
-acceptance of T-027 and T-036 should include a ticket on a widened boundary
-day that is absent from the output.
+What the local check costs. With `updated_since` beside a search filter,
+the search returns that whole UTC day, so its 300-result cap and its
+`total` count tickets updated earlier that day too: a page can yield fewer
+rows than it fetched, and `total` is not the filter's count. This bears on
+T-027's `truncated` and on T-036's counts (never `total` for a search with
+`updated_since`). For `created_between` alone, `total` is the filter's
+count. Every caller of `buildTicketQuery` must apply `matchesLocal` to each
+returned ticket.
+
+### Date boundary
+
+Measured 2026-11-24 on the real account (T-055, `make smoke-date-probes`;
+probed days 2026-11-17, 2026-11-18 and 2026-11-19, each against a local
+count from the list endpoint by UTC day and by the account's time-zone day,
+with tickets on a different day in each). Verdict, 1 of 8 readings
+predicting all 15 totals: `> inclusive, < inclusive, UTC day`. So:
+
+- `created_at:>'D'` keeps day D and after, `created_at:<'D'` keeps day D
+  and before; `created_at:'D'` and `created_at:>'D' AND created_at:<'D'`
+  are both exactly day D.
+- The day is the UTC day, not the account's time-zone day.
+- `count_tickets` and `export_tickets` (T-036, T-037) count exactly from
+  `created_at:>'<from>' AND created_at:<'<to>'`.
+- `updated_at` is assumed to follow the same rule (the same date operators);
+  it was not measured.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
 `include=stats` serves `triage_queue`'s stats signals; the view carries
@@ -423,6 +443,5 @@ bears on:
 | Question | Why open | Bears on |
 |---|---|---|
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
-| `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
 | Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |
