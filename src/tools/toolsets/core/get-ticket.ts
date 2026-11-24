@@ -38,11 +38,15 @@
 //     contact has none.
 //   - Hidden (SPEC §8.4), decided by `shows`, which fails closed. A team that
 //     hides the requester field gets no `requester` key and no contact
-//     request; an incoming conversation's `user_id` is `null` and no
-//     conversation has `from`, `to` or `cc`; `include_recent` gives
+//     request; every conversation's `user_id` is `null` (whatever its
+//     `incoming`: the requester's own entry can be marked outgoing) and none
+//     has `from`, `to` or `cc`; `include_recent` gives
 //     `recent_tickets_unavailable` instead of `recent_tickets`, with no
 //     request. A team that hides the company field gets no `company` key and
-//     no company request.
+//     no company request. Not covered: a body, a subject or an attachment
+//     name that itself names the requester; and, when the schema lacks the
+//     field, a team key that is the field's localised label rather than one
+//     of its usual names.
 //   - Recent tickets: the requester's last RECENT_COUNT by creation, this
 //     ticket left out, as `ticketRow`s, by the request
 //     docs/architecture/ticket-queries.md names (`requester_id`,
@@ -165,8 +169,9 @@ function conversationItem(conversation: Conversation, requesterShown: boolean) {
   return {
     id,
     created_at: isoUpdated(conversation.created_at),
-    // An incoming message is the requester's.
-    user_id: incoming && !requesterShown ? null : user_id,
+    // Hidden requester: no author at all. Freshdesk's `incoming` does not
+    // say which entries are the requester's.
+    user_id: requesterShown ? user_id : null,
     incoming,
     private: conversation.private,
     source: Number.isSafeInteger(source) ? source : null,
@@ -223,7 +228,7 @@ export const getTicketTool: Tool<typeof input> = {
     `A conversation has its author (user_id), direction (incoming), private flag, Freshdesk's source number, its from, to and cc addresses, its attachments' names and its body as text; a body over ${BODY_CAP.toLocaleString("en-US")} characters is cut and says how many are not shown.`,
     `A thread longer than ${THREAD_CAP.toLocaleString("en-US")} conversations is cut and says truncated: true.`,
     `include_recent: true adds recent_tickets, the requester's last ${RECENT_COUNT} tickets by creation as compact rows.`,
-    "A field the team configuration hides is left out. When it hides the requester there is no requester, no author on a customer's message, no address on a conversation, and recent_tickets_unavailable in place of recent_tickets.",
+    "A field the team configuration hides is left out. When it hides the requester there is no requester, no author (user_id is null) and no address on any conversation, and recent_tickets_unavailable in place of recent_tickets.",
     "api_calls_used counts every request sent for this call, retries included, but not a load of the ticket-field schema.",
   ].join(" "),
   input,

@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M1
 - **Status:** todo (2026-11-23)
-- **Depends on:** T-018, T-023, T-024, T-026, T-042, T-043
+- **Depends on:** T-018, T-023, T-024, T-026, T-042, T-043, T-056
 - **Created:** 2026-11-23
 
 ## Goal

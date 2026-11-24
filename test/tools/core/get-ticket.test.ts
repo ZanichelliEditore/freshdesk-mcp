@@ -443,9 +443,9 @@ describe("get_ticket: the requester", () => {
     expect(result).not.toHaveProperty("recent_tickets");
     expect(result.recent_tickets_unavailable).toBe("requester hidden");
     expect(result.ticket?.fields).not.toHaveProperty("Requester");
-    // An incoming message is the requester's: its author is not named.
+    // No author on any conversation, whatever its direction.
     expect(result.items[0]).toMatchObject({ id: 6001, incoming: true, user_id: null });
-    expect(result.items[1]).toMatchObject({ id: 6002, incoming: false, user_id: 502 });
+    expect(result.items[1]).toMatchObject({ id: 6002, incoming: false, user_id: null });
     for (const item of result.items) {
       expect(item).not.toHaveProperty("from");
       expect(item).not.toHaveProperty("to");
@@ -461,11 +461,33 @@ describe("get_ticket: the requester", () => {
     const next = await callTool(session, TOOL, { ...args, cursor: result.next_cursor });
     const rest = output(next);
     expect(rest.items.map((item) => [item.id, item.user_id])).toEqual([
-      [6000 + THREAD_PAGE + 1, THREAD_PAGE % 2 === 0 ? null : 502],
-      [6000 + THREAD_PAGE + 2, THREAD_PAGE % 2 === 0 ? 502 : null],
+      [6000 + THREAD_PAGE + 1, null],
+      [6000 + THREAD_PAGE + 2, null],
     ]);
     expect(next.content[0].text).not.toContain(String(rawTicket.requester_id));
     expect(next.content[0].text).not.toContain("pip@example.com");
+  });
+
+  // Freshdesk can mark a requester's own entry `incoming: false` (one added from the portal, say).
+  const ownOutgoing = [
+    { ...conversation(1, false), user_id: rawTicket.requester_id },
+    conversation(2, false),
+  ];
+
+  it("a hidden requester's id is absent even from a conversation marked incoming: false", async () => {
+    const session = await warm({ fields: { requester: { hidden: true } } });
+    reply(TICKET, ticketBody);
+    reply(THREAD, ownOutgoing);
+    const response = await callTool(session, TOOL, { ticket_id: ID });
+    expect(output(response).items.map((item) => item.user_id)).toEqual([null, null]);
+    expect(response.content[0].text).not.toContain(String(rawTicket.requester_id));
+  });
+
+  it("with the requester shown, each conversation keeps its user_id", async () => {
+    queueHead();
+    reply(THREAD, ownOutgoing);
+    const result = output(await callTool(await warm(), TOOL, { ticket_id: ID }));
+    expect(result.items.map((item) => item.user_id)).toEqual([rawTicket.requester_id, 502]);
   });
 
   it("without include_recent a hidden requester adds no recent_tickets_unavailable", async () => {
@@ -510,6 +532,17 @@ describe("get_ticket: the requester", () => {
       expect(sent()).toBe(3);
     },
   );
+
+  it("a schema with no requester field: a team key naming it without hidden leaves it shown", async () => {
+    const team = { fields: { " Requester ": { meaning: "Who wrote in." }, requester_id: {} } };
+    const session = await warm(team, without("default_requester"));
+    queueHead();
+    reply(THREAD, conversations(1, 1));
+    const result = output(await callTool(session, TOOL, { ticket_id: ID }));
+    expect(result.requester).toMatchObject({ id: rawTicket.requester_id });
+    expect(result.items[0].user_id).toBe(rawTicket.requester_id);
+    expect(result.items[0]).toHaveProperty("from");
+  });
 
   it("a schema with neither field and nothing hidden shows the requester and the company", async () => {
     const fields = fieldsPayload.filter(
@@ -613,6 +646,28 @@ describe("get_ticket: the thread", () => {
     // One closing delimiter per opening one: none was smuggled in.
     const text = response.content[0].text;
     expect(text.split(CLOSE).length).toBe(text.split(OPEN).length);
+  });
+
+  it("an address or an attachment name over 300 code points is cut, the marker after the block", async () => {
+    queueHead();
+    const long = `${"a".repeat(300)}@example.com`;
+    const cut = `${wrapped("a".repeat(300))}\n[… 12 more characters not shown]`;
+    reply(THREAD, [
+      {
+        ...conversation(1),
+        from_email: long,
+        to_emails: [long, "a".repeat(300)],
+        cc_emails: [long],
+        attachments: [{ name: long }],
+      },
+    ]);
+    const [item] = output(await callTool(await warm(), TOOL, { ticket_id: ID })).items;
+    expect(item).toMatchObject({
+      from: cut,
+      to: [cut, wrapped("a".repeat(300))],
+      cc: [cut],
+      attachments: [cut],
+    });
   });
 
   it("a body over BODY_CAP code points is cut, the marker after the block", async () => {
@@ -969,6 +1024,20 @@ describe("get_ticket: api_calls_used", () => {
     expect(result.ticket?.fields.Status).toBe("Open");
     expect(sent()).toBe(7);
     expect(result.api_calls_used).toBe(4);
+  });
+
+  it("a cursor call on a cold schema loads it too, and leaves the load out the same way", async () => {
+    const session = await cold();
+    reply(FIELDS, fieldsPayload);
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+    reply(THREAD, conversations(1, THREAD_PAGE + 1));
+    const args = { ticket_id: ID };
+    const cursor = cursorFor(TOOL, args, 1);
+    const result = output(await callTool(session, TOOL, { ...args, cursor }));
+    expect(result.items.map((item) => item.id)).toEqual([6000 + THREAD_PAGE + 1]);
+    expect(sent()).toBe(4);
+    expect(result.api_calls_used).toBe(1);
   });
 });
 
