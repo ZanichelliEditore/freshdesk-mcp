@@ -187,6 +187,29 @@ needs a call per window to learn its `total`, and cannot split below a day
 answer. A deep list page answered in under 2 s in either order in the
 control run, so latency gives the windows no edge.
 
+T-036's choices (2026-11-24, `src/tools/toolsets/core/count-tickets.ts`):
+
+- The period is `created_between` (required): with it the query is always
+  a search, so search page 1 is the probe. Every request is `expensive`.
+- `total` ≤ 300: the estimate is the search pages (`estimateCalls` with
+  `probe: 1` and the tickets after page 1, so page 1 is not counted twice),
+  `checkBudget` before page 2. Above 300: the estimate is a floor, the probe
+  plus one list page per 100 of `total`; refused up front when even that is
+  over the budget, and without `confirm: true` the scan stops at the
+  budget while it runs (`truncated: true`). A refusal after the probe says
+  the calls already used.
+- On the list pages the search filters are checked here: status, priority,
+  group and agent by id (`responder_id` for the agent), type by the name
+  `resolveFilter` gives, tag by exact membership in `tags` (search's own
+  tag matching, case included, is not measured).
+- Deadline: the scan runs under the call's one 30 s deadline and starts no
+  page after 20 s (`SCAN_START_MS`), so an attempt (10 s) is not cut in
+  flight; at pacing 2 a second that is about 40 list pages, 4,000 tickets
+  read, so a larger period comes back `truncated: true` before the default
+  budget of 250 is reached.
+- `truncated: true` also for page 300 linking a next page or full, and for
+  a later page the limiter refuses unsent. Any other failure fails the call.
+
 ### `find_similar_tickets`
 
 | Filter | Endpoint and parameter | Cap | Calls / 100 | Source |
@@ -366,7 +389,7 @@ and so does `getTicket` (T-029, 2026-11-24: `triage_queue` gives `expensive`
 for its view per row).
 T-036 and T-037 must give it for their scans and to `searchTickets`, so
 the pages of `count_tickets` and `export_tickets` go to the limiter as
-`expensive`.
+`expensive` (`count_tickets` does, T-036, 2026-11-24).
 
 ## Parameters
 
@@ -447,6 +470,6 @@ bears on:
 
 | Question | Why open | Bears on |
 |---|---|---|
-| Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
+| Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-037 (`list_tickets` and `count_tickets` settled their own, 2026-11-24: see [Scan bounds](#scan-bounds) and [`count_tickets`](#count_tickets)) |
 | Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |
