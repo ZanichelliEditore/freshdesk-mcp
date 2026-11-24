@@ -244,6 +244,12 @@ directory under `os.tmpdir()` with no `FRESHDESK_API_KEY` or
 `FRESHDESK_HOST_OVERRIDE` (refused before spawning). The decision is
 unchanged.
 
+Note (2026-11-24, T-038): the same file may also run one npm command,
+`npm pack --dry-run --json --ignore-scripts --offline`, in a directory
+under `os.tmpdir()`, with an env of `PATH` and `HOME` only: it writes no
+tarball, runs no lifecycle script and asks no registry. The decision is
+unchanged.
+
 ## Appendix: check scripts
 
 Run with `node <script> <dir>`, where `<dir>` holds an `npm i undici@<v>`

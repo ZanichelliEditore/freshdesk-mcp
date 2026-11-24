@@ -1,7 +1,10 @@
-// Entry point (SPEC §7): serves the MCP server on stdio.
+#!/usr/bin/env node
+// Entry point (SPEC §7): serves the MCP server on stdio; the package's `bin`.
 //
-//   - stdout carries protocol frames only: nothing here writes to it, the
-//     HTTP client logs to stderr (SPEC §9).
+//   - `--version` prints the version on stdout and exits, reading no
+//     environment and starting nothing.
+//   - While serving, stdout carries protocol frames only: nothing here writes
+//     to it, the HTTP client logs to stderr (SPEC §9).
 //   - The one place the real undici `Agent` is built (RFC 2026-11-23, rule
 //     2), with explicit timeouts and the default `maxHeaderSize`
 //     (docs/improvements.md, `2a0e56c` (1), `6d4013a` (2)). No test imports
@@ -16,6 +19,7 @@ import { Agent } from "undici";
 import { ConfigError, loadConfig } from "./config.js";
 import { createServer } from "./server.js";
 import { type AppContext, createContext } from "./tools/context.js";
+import { VERSION } from "./version.js";
 
 /** Each phase of one request; `http.ts` also cuts an attempt off at 10 s. */
 const TIMEOUT_MS = 10_000;
@@ -40,11 +44,15 @@ function start(): AppContext | undefined {
   }
 }
 
-const context = start();
-if (context === undefined) {
-  process.exitCode = 1;
+if (process.argv[2] === "--version") {
+  process.stdout.write(`${VERSION}\n`);
 } else {
-  serveStdio(() => createServer(context), {
-    onerror: (error) => process.stderr.write(`freshdesk-mcp: transport error (${error.name}).\n`),
-  });
+  const context = start();
+  if (context === undefined) {
+    process.exitCode = 1;
+  } else {
+    serveStdio(() => createServer(context), {
+      onerror: (error) => process.stderr.write(`freshdesk-mcp: transport error (${error.name}).\n`),
+    });
+  }
 }

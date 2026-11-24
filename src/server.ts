@@ -12,8 +12,9 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { ConfigError } from "./config.js";
 import type { AppContext } from "./tools/context.js";
 import { registerTool, TOOLSETS, type Toolsets } from "./tools/toolsets/index.js";
+import { VERSION } from "./version.js";
 
-export const SERVER_INFO = { name: "freshdesk-mcp", version: "0.1.0" } as const;
+export const SERVER_INFO = { name: "@zanichelli/freshdesk-mcp", version: VERSION } as const;
 
 /** A server with every tool of the context's enabled toolsets. Throws `ConfigError`, `TypeError`. */
 export function createServer(context: AppContext, toolsets: Toolsets = TOOLSETS): McpServer {

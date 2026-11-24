@@ -59,9 +59,10 @@ import { type Dispatcher, fetch, type Headers } from "undici";
 import { ConfigError } from "../config.js";
 import { errorFromResponse, type FreshdeskError, networkError } from "./errors.js";
 import type { CostClass, RateLimiter } from "./rate-limit.js";
+import { VERSION } from "../version.js";
 
 const FRESHDESK_HOST = /^[a-z0-9-]+\.freshdesk\.com$/;
-const USER_AGENT = "freshdesk-mcp";
+export const USER_AGENT = `freshdesk-mcp/${VERSION}`;
 /** What `path` may be, since it is logged: segments of names and `{params}`. */
 const TEMPLATE = /^(\/[A-Za-z0-9_{}-]+)+$/;
 /** Longest one attempt may take, headers and body together. */

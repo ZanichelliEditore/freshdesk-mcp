@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { HttpClient, type HttpResult } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
@@ -9,6 +11,9 @@ const DOMAIN = "acme.freshdesk.com";
 const ORIGIN = `https://${DOMAIN}`;
 const JSON_TYPE = { "content-type": "application/json" };
 const limits = { reserve_pct: 20, floor_pct: 5, pacing_rps: 2 };
+const { version } = JSON.parse(
+  readFileSync(join(import.meta.dirname, "..", "..", "package.json"), "utf8"),
+) as { version: string };
 
 let mock: MockAgent;
 let stderr: MockInstance<typeof process.stderr.write>;
@@ -78,7 +83,7 @@ describe("HttpClient: what goes out", () => {
     expect(sent()[0]!.fullUrl).toBe(`${ORIGIN}/api/v2/tickets/42`);
     expect(sentHeaders()).toMatchObject({
       authorization: `Basic ${Buffer.from(`${API_KEY}:X`).toString("base64")}`,
-      "user-agent": "freshdesk-mcp",
+      "user-agent": `freshdesk-mcp/${version}`,
       accept: "application/json",
     });
   });
