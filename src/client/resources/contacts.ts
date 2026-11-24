@@ -5,7 +5,8 @@
 // `email` and `company_id`, nothing else. Phone, mobile, address and every
 // other key Freshdesk sends are dropped here, so no caller can return them.
 // A contact needs a string `name`; `email` is a string or null (a contact
-// may have only a phone); `company_id` a whole number or null, a missing key
+// may have only a phone), and a missing `email` key is `server`: Freshdesk
+// always sends it; `company_id` a whole number or null, a missing key
 // read as null (no company). A body in any other shape is `server` with the
 // response's real status, not retryable, and a fixed message that quotes
 // nothing from it. An HTTP failure (a 404 is `not_found`) is returned

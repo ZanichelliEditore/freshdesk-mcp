@@ -158,17 +158,29 @@ describe("getContact", () => {
     },
   );
 
+  it("passes the deadline on: one already passed sends nothing and is network", async () => {
+    reply(VIEW, 200, contactView);
+
+    expect(failure(await getContact(http, 8801, Date.now() - 1))).toMatchObject({
+      code: "network",
+      http_status: null,
+      retryable: true,
+    });
+    expect(urls()).toHaveLength(0);
+  });
+
   it("returns a 404 as not_found", async () => {
     reply("/api/v2/contacts/8999", 404, { message: CANARY });
 
     const error = failure(await getContact(http, 8999));
 
-    expect(error.code).toBe("not_found");
+    expect(error).toMatchObject({ code: "not_found", http_status: 404, retryable: false });
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
 
   it.each([
     ["a missing name", { ...contactView, name: undefined, description: CANARY }],
+    ["a missing email key", { ...contactView, email: undefined, description: CANARY }],
     ["a numeric email", { ...contactView, email: 42, description: CANARY }],
     ["a string company_id", { ...contactView, company_id: CANARY }],
     ["a fractional company_id", { ...contactView, company_id: 1.5, description: CANARY }],
@@ -213,12 +225,23 @@ describe("getCompany", () => {
     },
   );
 
+  it("passes the deadline on: one already passed sends nothing and is network", async () => {
+    reply(VIEW, 200, companyView);
+
+    expect(failure(await getCompany(http, 9001, Date.now() - 1))).toMatchObject({
+      code: "network",
+      http_status: null,
+      retryable: true,
+    });
+    expect(urls()).toHaveLength(0);
+  });
+
   it("returns a 404 as not_found", async () => {
     reply("/api/v2/companies/9999", 404, { message: CANARY });
 
     const error = failure(await getCompany(http, 9999));
 
-    expect(error.code).toBe("not_found");
+    expect(error).toMatchObject({ code: "not_found", http_status: 404, retryable: false });
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
 
