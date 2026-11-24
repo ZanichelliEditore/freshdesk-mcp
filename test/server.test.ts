@@ -201,6 +201,7 @@ describe("createServer: enabled toolsets come from the team file only", () => {
       "list_canned_responses",
       "get_canned_response",
       "count_tickets",
+      "export_tickets",
     ]);
   });
 

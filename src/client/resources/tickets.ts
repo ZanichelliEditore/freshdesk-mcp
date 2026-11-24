@@ -11,7 +11,8 @@
 //     contact and company reads, which drop what no tool should return.
 //     `stats` is passed through unchecked: its reader checks it.
 //   - `listConversations`: every page of `GET /tickets/{id}/conversations`,
-//     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`.
+//     through `list-all.ts`: 100 per page, at most 10 pages, `truncated`; a
+//     failed request carries `attempts`.
 //   - `listConversationPage`: its first page alone (the oldest 100), and
 //     whether another exists; for a caller bounded to one request a ticket
 //     (`find_similar_tickets`' excerpt, T-030). Its failures, a malformed
@@ -35,9 +36,10 @@
 // API calls. `deadline` (epoch ms, optional) is the caller's: see
 // `requestWithRetry` and `paginate`.
 //
-// Cost class: `cheap`, except a `listTickets` page, a `getTicket` view or a
-// `listConversationPage` page whose caller gives `expensive` (a scan,
-// `triage_queue`'s view per row, `find_similar_tickets`:
+// Cost class: `cheap`, except a `listTickets` page, a `getTicket` view, a
+// `listConversations` or a `listConversationPage` page whose caller gives
+// `expensive` (a scan, `triage_queue`'s view per row, `find_similar_tickets`,
+// `export_tickets`' threads:
 // docs/architecture/ticket-queries.md, "Cost class for the limiter"). A
 // `listTickets` page, a `getTicket` view or a `listConversationPage` page
 // that fails after its values were accepted carries `attempts` too: the
@@ -194,11 +196,18 @@ export function listConversations(
   http: HttpClient,
   ticketId: number,
   deadline?: number,
+  cost?: CostClass,
 ): Promise<ConversationsResult> {
   if (!isPositiveInt(ticketId)) return Promise.resolve(refused("ticket id"));
-  return listAll(http, "/tickets/{id}/conversations", conversation, "conversations", deadline, {
-    id: ticketId,
-  });
+  return listAll(
+    http,
+    "/tickets/{id}/conversations",
+    conversation,
+    "conversations",
+    deadline,
+    { id: ticketId },
+    cost,
+  );
 }
 
 export async function listConversationPage(

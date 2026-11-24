@@ -278,6 +278,31 @@ T-030's choices (2026-11-24, `src/tools/toolsets/core/find-similar-tickets.ts`):
 | filter (as `count_tickets`) | search when `total` ≤ 300, else local on the list pages | 300 / 30,000 | 4 / 1 per 100 scanned | as `count_tickets` |
 | conversations | `GET /tickets/{id}/conversations?per_page=100`, one per ticket | per ticket, paged | +100 (+1 per 100 more entries in a thread) | documented, [Pagination](https://developers.freshdesk.com/api/#pagination); `per_page=100` accepted (measured 2026-11-24), not shown honoured |
 
+T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
+
+- The read is `count_tickets`' own (`readPeriod` in
+  `count-tickets.ts`, shared, not copied): the period is `created_between`
+  (required), search page 1 is the probe, search when `total` ≤ 300 and the
+  ordered list scan above, each ticket id once, every request `expensive`,
+  the estimate and `checkBudget` before the pages, and without `confirm`
+  the scan stops at the budget while it runs.
+- The scan bound (the question [Scan bounds](#scan-bounds) left open): the
+  one 30 s deadline of the call, no page started after 20 s
+  (`SCAN_START_MS`), as `count_tickets`. Weighed and rejected: a longer
+  deadline for an export. The MCP SDK gives up on a request after 60 s by
+  default (`DEFAULT_REQUEST_TIMEOUT_MSEC`, read 2026-11-24 in the installed
+  `@modelcontextprotocol/server`; a client may set its own), and this
+  server sends no progress notification, so a
+  longer export would run on with the caller already gone, its file
+  written and its path never seen. So one call exports about 4,000 tickets
+  at the default pacing; a larger period is exported in several calls with
+  shorter periods, each its own file, and a cut one says `truncated: true`.
+  Resumable or background export stays out of scope (T-037).
+- A read cut by the budget, the time limit, page 300 or a later request the
+  limiter refuses writes the rows read so far, with `truncated: true`, as
+  `count_tickets` counts them; any other failed request fails the call and
+  leaves no file.
+
 ### `get_ticket`'s recent tickets
 
 | Filter | Endpoint and parameter | Cap | Calls / 100 | Source |
@@ -357,10 +382,13 @@ page took about 8 s once and under 2 s twice (measured 2026-11-24): the
 latency varies, so the bound is the deadline, not a page count assumed from
 one sample. Under one 30 s deadline for the whole call, a scan may get as
 few as 3 slow pages; with `paginate`'s 30 s per page, the budget is the
-bound. Which one a scan runs under is open for T-037. `count_tickets`
-(T-036, 2026-11-24) runs under the one 30 s deadline of the call and starts
-no page after 20 s: about 40 list pages (4,000 tickets) at the default
-pacing, below the default budget; `confirm: true` lifts the budget only.
+bound. Every scan runs under the one 30 s deadline of its call (settled by
+T-037, 2026-11-24, for the last tool that scanned without one).
+`count_tickets` (T-036, 2026-11-24) runs under it and starts no page after
+20 s: about 40 list pages (4,000 tickets) at the default pacing, below the
+default budget; `confirm: true` lifts the budget only. `export_tickets`
+(T-037, 2026-11-24) reads through the same code, so the same bound: see
+[`export_tickets`](#export_tickets).
 
 `list_tickets` (T-027, 2026-11-24) runs its `uncategorized` scan under the
 one 30 s deadline of the call, and so that the deadline does not cut a page
@@ -400,7 +428,8 @@ and so does `getTicket` (T-029, 2026-11-24: `triage_queue` gives `expensive`
 for its view per row).
 T-036 and T-037 must give it for their scans and to `searchTickets`, so
 the pages of `count_tickets` and `export_tickets` go to the limiter as
-`expensive` (`count_tickets` does, T-036, 2026-11-24).
+`expensive` (`count_tickets` does, T-036, 2026-11-24; `export_tickets` does,
+through the same read, T-037, 2026-11-24).
 
 ## Parameters
 
@@ -481,6 +510,5 @@ bears on:
 
 | Question | Why open | Bears on |
 |---|---|---|
-| Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-037 (`list_tickets` and `count_tickets` settled their own, 2026-11-24: see [Scan bounds](#scan-bounds) and [`count_tickets`](#count_tickets)) |
 | Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |

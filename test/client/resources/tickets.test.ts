@@ -517,6 +517,36 @@ describe("listConversations", () => {
     });
     expect(JSON.stringify(error)).not.toContain(CANARY);
   });
+
+  it("a failed page says the requests sent for the thread, retries and earlier pages included", async () => {
+    reply(THREAD, 200, conversationPages[0], pageUrl(2));
+    reply(THREAD, 404, {});
+
+    const result = await listConversations(http, 4101);
+
+    expect(failure(result).code).toBe("not_found");
+    expect(result).toMatchObject({ ok: false, attempts: 2 });
+    expect(urls()).toHaveLength(2);
+  });
+
+  it("given expensive, its pages go to the limiter as expensive: refused below the reserve, 0 attempts", async () => {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: (path: string) => path.split("?")[0] === THREAD, method: "GET" })
+      .reply(200, conversationPages[1], {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await listConversations(http, 4101));
+    reply(THREAD, 200, conversationPages[1]);
+    ok(await listConversations(http, 4101));
+    expect(urls()).toHaveLength(2);
+
+    const refusedThread = await listConversations(http, 4101, undefined, "expensive");
+
+    expect(failure(refusedThread)).toMatchObject({ code: "rate_limited", http_status: null });
+    expect(refusedThread).toMatchObject({ ok: false, attempts: 0 });
+    expect(urls()).toHaveLength(2);
+  });
 });
 
 describe("listConversationPage", () => {

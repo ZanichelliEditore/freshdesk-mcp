@@ -1,7 +1,7 @@
 {
   "bare": {
     "files": ["src/tools/**"],
-    "value": ["zod", "@modelcontextprotocol/server", "node:path", "node:fs/promises", "node:crypto"]
+    "value": ["zod", "@modelcontextprotocol/server", "node:path", "node:crypto"]
   },
   "places": {
     "T0": {
@@ -46,6 +46,7 @@
         "./canned.js",
         "./count-tickets.js",
         "./export-tickets.js",
+        "node:fs/promises",
         "../../context.js",
         "../../format.js",
         "../../list.js",

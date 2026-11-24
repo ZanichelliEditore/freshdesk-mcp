@@ -156,10 +156,11 @@ export class SchemaService {
     const deadline = startedAt + LOAD_DEADLINE_MS;
     const fields = await listTicketFields(this.#http, deadline);
     if (!fields.ok) return fields;
+    // A failed list's `attempts` is dropped: a failed load reports none.
     const agents = await listAgents(this.#http, deadline);
-    if (!agents.ok) return agents;
+    if (!agents.ok) return { ok: false, error: agents.error };
     const groups = await listGroups(this.#http, deadline);
-    if (!groups.ok) return groups;
+    if (!groups.ok) return { ok: false, error: groups.error };
 
     const schema: Schema = deepFreeze({
       fields: fields.fields,

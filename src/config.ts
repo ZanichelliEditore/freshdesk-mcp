@@ -5,9 +5,14 @@
 //   FRESHDESK_DOMAIN, FRESHDESK_API_KEY   required
 //   FRESHDESK_MCP_CONFIG                  path of the team file, optional
 //   FRESHDESK_HOST_OVERRIDE               one exact hostname, optional
+//   FRESHDESK_EXPORT_DIR                  export_tickets' directory, optional
 // The override is personal on purpose: a shared team file must not be able
 // to point everyone's API key at another host, so the team schema has no
-// such key and refuses unknown ones.
+// such key and refuses unknown ones. The export directory is personal too
+// (owner, 2026-11-23): a shared file does not choose a local path, and a team
+// file that still carries `export_dir` is refused as an unknown key. Whether
+// the directory is usable (absolute, existing, not a symlink) is checked by
+// `export_tickets` when it runs, not here: unset, only that tool is refused.
 //
 // This module checks presence and types, plus the override's shape (one
 // lower-case dotted hostname, see isHostname). Whether the domain or the
@@ -53,6 +58,7 @@ const envSchema = z.object({
         "FRESHDESK_HOST_OVERRIDE must be one lower-case hostname (like support.example.com): no scheme, port, path or wildcard",
     })
     .optional(),
+  FRESHDESK_EXPORT_DIR: z.string().optional(),
 });
 
 const percent = z.number().min(0).max(100);
@@ -105,7 +111,6 @@ const teamSchema = z.strictObject({
       error: "must not be above reserve_pct",
     })
     .prefault({}),
-  export_dir: z.string().min(1).optional(),
 });
 
 export type TeamConfig = z.infer<typeof teamSchema>;
@@ -115,6 +120,8 @@ export interface Config {
   apiKey: string;
   /** Exact hostname allowed besides `*.freshdesk.com`; off when absent. */
   hostOverride?: string;
+  /** `export_tickets`' directory, as set; checked by the tool. Absent when unset. */
+  exportDir?: string;
   team: TeamConfig;
 }
 
@@ -166,6 +173,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     FRESHDESK_API_KEY: env.FRESHDESK_API_KEY,
     FRESHDESK_MCP_CONFIG: env.FRESHDESK_MCP_CONFIG || undefined,
     FRESHDESK_HOST_OVERRIDE: env.FRESHDESK_HOST_OVERRIDE || undefined,
+    FRESHDESK_EXPORT_DIR: env.FRESHDESK_EXPORT_DIR || undefined,
   });
   if (!parsed.success) {
     throw new ConfigError(
@@ -190,6 +198,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     ...(personal.FRESHDESK_HOST_OVERRIDE === undefined
       ? {}
       : { hostOverride: personal.FRESHDESK_HOST_OVERRIDE }),
+    ...(personal.FRESHDESK_EXPORT_DIR === undefined
+      ? {}
+      : { exportDir: personal.FRESHDESK_EXPORT_DIR }),
     team,
   };
 }

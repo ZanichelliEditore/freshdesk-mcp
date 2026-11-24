@@ -134,7 +134,13 @@ describe("createContext: team fields", () => {
     queueLoad();
     await schemaOf(context);
 
-    expect(Object.keys(context).sort()).toEqual(["http", "schema", "team", "ticketOutput"]);
+    expect(Object.keys(context).sort()).toEqual([
+      "exportDir",
+      "http",
+      "schema",
+      "team",
+      "ticketOutput",
+    ]);
     // @ts-expect-error -- the context holds no limiter: a tool meets it through `http` (A4).
     expect(context.limiter).toBeUndefined();
     const key = baseEnv.FRESHDESK_API_KEY;

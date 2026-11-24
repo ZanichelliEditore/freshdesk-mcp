@@ -7,6 +7,8 @@
 // MAX_PAGES of them: past the cap the list ends where it stopped, and
 // `truncated` says so. `attempts` is the requests sent for all the pages,
 // retries included (`paginate`'s count): what the caller reports as API calls.
+// A failed request carries it too (the earlier pages' requests included);
+// a page in an unexpected shape does not.
 //
 // A page in any other shape is `server` with that page's real status, not
 // retryable, and no further page is asked for. Its message is fixed text: it
@@ -27,7 +29,7 @@ export const MAX_PAGES = 10;
 
 export type ListResult<T> =
   | { ok: true; items: T[]; truncated: boolean; attempts: number }
-  | { ok: false; error: FreshdeskError };
+  | { ok: false; error: FreshdeskError; attempts?: number };
 
 /** `noun` names the list in the error message: "agents", "groups", "conversations". */
 export async function listAll<T>(
@@ -53,7 +55,11 @@ export async function listAll<T>(
       return { ok: true, items, truncated, attempts };
     }
     const result = step.value;
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // After a failed page `paginate` ends, sending nothing more, and returns its count.
+      const end = await pages.next();
+      return { ...result, attempts: end.done ? end.value.attempts : 0 };
+    }
     const parsed = item.array().safeParse(result.body);
     if (!parsed.success) {
       return {

@@ -228,6 +228,11 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     [TX, "../../dist/config.js"],
     [TX, "../../../dist/config.js"],
     [TX, "../context.js"],
+    // The file write is export_tickets' alone (T-037): the core tools' place only.
+    [T0, "node:fs/promises"],
+    [T1, "node:fs/promises"],
+    [TX, "node:fs/promises"],
+    [T2, "node:fs"],
   ])("refuses in %s a value import of %j", async (filePath, spec) => {
     expect(await verdict(value(spec), filePath)).toEqual(["list"]);
   });

@@ -61,6 +61,11 @@
 //     in flight by the deadline.
 //   - `api_calls_used`: every request this call sent, retries included, and
 //     the schema's load when this call started it.
+//   - The read (probe, estimate, budget, search pages or list scan, each id
+//     once, the cuts) is `readPeriod`, with `periodQuery` for the query,
+//     exported for `export_tickets` (T-037): it hands each ticket to the
+//     caller's `take`, which may stop the read (a cut) or fail it, and counts
+//     the requests on the caller's `Meter`.
 
 import { z } from "zod";
 import type { FieldError, FreshdeskError } from "../../../client/errors.js";
@@ -70,13 +75,19 @@ import type { Schema } from "../../../schema/index.js";
 import { checkBudget, estimateCalls } from "../../budget.js";
 import type { AppContext } from "../../context.js";
 import { fieldValue, plainName } from "../../format.js";
-import { buildTicketQuery, matchesLocal, resolveFilter } from "../../ticket-query.js";
+import {
+  buildTicketQuery,
+  matchesLocal,
+  resolveFilter,
+  type TicketQuery,
+} from "../../ticket-query.js";
 import type { Tool } from "../index.js";
 
 type TicketField = Schema["fields"][number];
+type SearchQuery = Extract<TicketQuery, { endpoint: "search" }>;
 
 /** One call's requests end within this, all of them together. */
-const CALL_DEADLINE_MS = 30_000;
+export const CALL_DEADLINE_MS = 30_000;
 /** No page is started after this: an attempt started before it ends by the deadline. */
 export const SCAN_START_MS = CALL_DEADLINE_MS - 10_000;
 /** Tickets of a search page (Freshdesk's fixed size). */
@@ -127,7 +138,41 @@ const input = z.object({
   confirm: z.boolean().optional(),
 });
 
-type Args = z.output<typeof input>;
+/** The period and filters a read takes: count_tickets' and export_tickets' shared input. */
+export interface PeriodArgs {
+  created_between: { from: string; to: string };
+  status?: string | number | undefined;
+  priority?: string | number | undefined;
+  group?: string | number | undefined;
+  agent?: string | number | undefined;
+  type?: string | undefined;
+  tag?: string | undefined;
+  uncategorized?: boolean | undefined;
+  confirm?: boolean | undefined;
+}
+
+/** What a read has sent: every request (`used`, the schema's load included) and the ticket requests the budget counts. */
+export interface Meter {
+  used: number;
+  requests: number;
+}
+
+/**
+ * What the caller does with a ticket of the period: `true` takes it and reads
+ * on, `false` stops the read before it (a cut: `truncated`), an error fails the call.
+ */
+export type Take = (ticket: Ticket) => boolean | FreshdeskError | Promise<boolean | FreshdeskError>;
+
+export interface PeriodRead {
+  /** The call's start (epoch ms): no page is started SCAN_START_MS after it. */
+  started: number;
+  /** The call's one deadline (epoch ms). */
+  deadline: number;
+  meter: Meter;
+  /** One more call per matching ticket in the estimate (export's conversations). */
+  conversations: boolean;
+  take: Take;
+}
 
 function refused(problem: FieldError): { ok: false; error: FreshdeskError } {
   return {
@@ -218,7 +263,7 @@ function groupValue(
 }
 
 /** The search filters, checked on a list ticket (the scan cannot ask them of Freshdesk). */
-function fieldMatcher(schema: Schema, args: Args): (ticket: Ticket) => boolean {
+function fieldMatcher(schema: Schema, args: PeriodArgs): (ticket: Ticket) => boolean {
   const checks: ((ticket: Ticket) => boolean)[] = [];
   const keys = { status: "status", priority: "priority", group: "group_id", agent: "responder_id" };
   for (const kind of ["status", "priority", "group", "agent"] as const) {
@@ -248,12 +293,170 @@ function createdDay(ticket: Ticket | undefined): string | undefined {
 }
 
 /** A later page the limiter refused before sending (no HTTP status): the source is cut, not failed. */
-function limiterRefusal(error: FreshdeskError): boolean {
+export function limiterRefusal(error: FreshdeskError): boolean {
   return error.code === "rate_limited" && error.http_status === null;
 }
 
 function calls(n: number): string {
   return `${n} API call${n === 1 ? "" : "s"}`;
+}
+
+/** The period and the filters as one search query (`created_between` always makes one). */
+export function periodQuery(
+  context: AppContext,
+  schema: Schema,
+  args: PeriodArgs,
+): SearchQuery | { ok: false; error: FreshdeskError } {
+  const query = buildTicketQuery(context, schema, {
+    ...(args.status === undefined ? {} : { status: args.status }),
+    ...(args.priority === undefined ? {} : { priority: args.priority }),
+    ...(args.group === undefined ? {} : { group: args.group }),
+    ...(args.agent === undefined ? {} : { agent: args.agent }),
+    ...(args.type === undefined ? {} : { type: args.type }),
+    ...(args.tag === undefined ? {} : { tag: args.tag }),
+    ...(args.uncategorized === undefined ? {} : { uncategorized: args.uncategorized }),
+    created_between: args.created_between,
+  });
+  if (!query.ok) return query;
+  if (query.endpoint !== "search") {
+    // created_between is always a search condition: fail closed otherwise.
+    throw new Error("periodQuery: the period did not make a search query");
+  }
+  return query;
+}
+
+/**
+ * Every ticket of the period and filters, each id once, handed to `take`:
+ * search when its total is SEARCH_CAP or less, else the ordered list scan
+ * (this file's header). Counts what it sends on `meter`; `truncated` when
+ * the read was cut.
+ */
+export async function readPeriod(
+  context: AppContext,
+  schema: Schema,
+  args: PeriodArgs,
+  query: SearchQuery,
+  { started, deadline, meter, conversations, take }: PeriodRead,
+): Promise<{ ok: true; truncated: boolean } | { ok: false; error: FreshdeskError }> {
+  const seen = new Set<number>();
+  /** `undefined`: read on; `false`: stopped by `take`; an error fails the call. */
+  const hand = async (tickets: readonly Ticket[]): Promise<false | FreshdeskError | undefined> => {
+    for (const ticket of tickets) {
+      // A ticket a later page repeats (it moved during the call) is taken once.
+      if (seen.has(ticket.id)) continue;
+      seen.add(ticket.id);
+      const taken = await take(ticket);
+      if (taken !== true) return taken;
+    }
+    return undefined;
+  };
+  const spent = (error: FreshdeskError) => ({
+    ok: false as const,
+    error: {
+      ...error,
+      message: `${error.message} This call has already used ${calls(meter.used)} to learn the total.`,
+    },
+  });
+  let truncated = false;
+  const stop = (handed: false | FreshdeskError | undefined) => {
+    if (handed === undefined) return undefined;
+    if (handed === false) {
+      truncated = true;
+      return { ok: true as const, truncated };
+    }
+    return { ok: false as const, error: handed };
+  };
+
+  const probe = await searchTickets(context.http, query.query, 1, deadline, "expensive");
+  if (!probe.ok) return probe;
+  meter.used += probe.attempts;
+  meter.requests += probe.attempts;
+
+  if (probe.total <= SEARCH_CAP) {
+    const estimate =
+      estimateCalls({
+        tickets: Math.max(0, probe.total - SEARCH_PAGE_SIZE),
+        pageSize: SEARCH_PAGE_SIZE,
+        conversations: false,
+        probe: 1,
+      }) + (conversations ? probe.total : 0);
+    const refusal = checkBudget(context, estimate, args.confirm);
+    if (refusal) return spent(refusal);
+    const first = stop(await hand(probe.results.filter((ticket) => matchesLocal(query, ticket))));
+    if (first) return first;
+    const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
+    for (let page = 2; page <= pages; page++) {
+      if (Date.now() - started >= SCAN_START_MS) {
+        truncated = true;
+        break;
+      }
+      const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
+      if (!found.ok) {
+        if (!limiterRefusal(found.error)) return found;
+        meter.used += found.attempts ?? 0;
+        meter.requests += found.attempts ?? 0;
+        truncated = true;
+        break;
+      }
+      meter.used += found.attempts;
+      meter.requests += found.attempts;
+      const next = stop(await hand(found.results.filter((ticket) => matchesLocal(query, ticket))));
+      if (next) return next;
+    }
+    return { ok: true, truncated };
+  }
+
+  const estimate = estimateCalls({
+    tickets: probe.total,
+    pageSize: LIST_PAGE_SIZE,
+    conversations,
+    probe: 1,
+  });
+  const refusal = checkBudget(context, estimate, args.confirm);
+  if (refusal) return spent(refusal);
+  const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
+  const matches = fieldMatcher(schema, args);
+  const { from, to } = args.created_between;
+  for (let page = 1; ; page++) {
+    // Ticket requests, retries included, at the budget: no further page.
+    if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) {
+      truncated = true;
+      break;
+    }
+    const listed = await listTickets(
+      context.http,
+      {
+        per_page: LIST_PAGE_SIZE,
+        page,
+        updated_since: `${from}T00:00:00Z`,
+        order_by: "created_at",
+        order_type: "asc",
+      },
+      deadline,
+      "expensive",
+    );
+    if (!listed.ok) {
+      if (!limiterRefusal(listed.error)) return listed;
+      meter.used += listed.attempts ?? 0;
+      meter.requests += listed.attempts ?? 0;
+      truncated = true;
+      break;
+    }
+    meter.used += listed.attempts;
+    meter.requests += listed.attempts;
+    const next = stop(
+      await hand(listed.tickets.filter((ticket) => matches(ticket) && matchesLocal(query, ticket))),
+    );
+    if (next) return next;
+    const last = createdDay(listed.tickets.at(-1));
+    if (last !== undefined && last > to) break;
+    if (page === MAX_LIST_PAGE) {
+      truncated = listed.has_more || listed.tickets.length === LIST_PAGE_SIZE;
+      break;
+    }
+    if (!listed.has_more) break;
+  }
+  return { ok: true, truncated };
 }
 
 export const countTicketsTool: Tool<typeof input> = {
@@ -290,21 +493,8 @@ export const countTicketsTool: Tool<typeof input> = {
     const { schema } = loaded;
     const fields = groupFields(schema, args.group_by);
     if (!Array.isArray(fields)) return refused(fields);
-    const query = buildTicketQuery(context, schema, {
-      ...(args.status === undefined ? {} : { status: args.status }),
-      ...(args.priority === undefined ? {} : { priority: args.priority }),
-      ...(args.group === undefined ? {} : { group: args.group }),
-      ...(args.agent === undefined ? {} : { agent: args.agent }),
-      ...(args.type === undefined ? {} : { type: args.type }),
-      ...(args.tag === undefined ? {} : { tag: args.tag }),
-      ...(args.uncategorized === undefined ? {} : { uncategorized: args.uncategorized }),
-      created_between: args.created_between,
-    });
+    const query = periodQuery(context, schema, args);
     if (!query.ok) return query;
-    if (query.endpoint !== "search") {
-      // created_between is always a search condition: fail closed otherwise.
-      throw new Error("count_tickets: the period did not make a search query");
-    }
 
     const keys: string[] = [];
     for (const field of fields) {
@@ -312,12 +502,8 @@ export const countTicketsTool: Tool<typeof input> = {
       keys.push(keys.includes(label) ? `${label} (${plainName(field.name)})` : label);
     }
     const groups = new Map<string, { keys: unknown[]; shown: unknown[]; count: number }>();
-    const counted = new Set<number>();
     let total = 0;
     const count = (ticket: Ticket) => {
-      // A ticket a later page repeats (it moved during the call) is counted once.
-      if (counted.has(ticket.id)) return;
-      counted.add(ticket.id);
       const parts = fields.map((field) => groupValue(context, schema, field, ticket));
       const keys = parts.map((part) => part.key);
       const id = JSON.stringify(keys);
@@ -327,99 +513,18 @@ export const countTicketsTool: Tool<typeof input> = {
       total += 1;
     };
 
-    let used = loaded.attempts;
-    /** Ticket requests only: what the budget is counted in. */
-    let requests = 0;
-    let truncated = false;
-    const spent = (error: FreshdeskError) => ({
-      ok: false as const,
-      error: {
-        ...error,
-        message: `${error.message} This call has already used ${calls(used)} to learn the total.`,
+    const meter: Meter = { used: loaded.attempts, requests: 0 };
+    const read = await readPeriod(context, schema, args, query, {
+      started,
+      deadline,
+      meter,
+      conversations: false,
+      take: (ticket) => {
+        count(ticket);
+        return true;
       },
     });
-
-    const probe = await searchTickets(context.http, query.query, 1, deadline, "expensive");
-    if (!probe.ok) return probe;
-    used += probe.attempts;
-    requests += probe.attempts;
-
-    if (probe.total <= SEARCH_CAP) {
-      const estimate = estimateCalls({
-        tickets: Math.max(0, probe.total - SEARCH_PAGE_SIZE),
-        pageSize: SEARCH_PAGE_SIZE,
-        conversations: false,
-        probe: 1,
-      });
-      const refusal = checkBudget(context, estimate, args.confirm);
-      if (refusal) return spent(refusal);
-      probe.results.filter((ticket) => matchesLocal(query, ticket)).forEach(count);
-      const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
-      for (let page = 2; page <= pages; page++) {
-        if (Date.now() - started >= SCAN_START_MS) {
-          truncated = true;
-          break;
-        }
-        const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
-        if (!found.ok) {
-          if (!limiterRefusal(found.error)) return found;
-          used += found.attempts ?? 0;
-          truncated = true;
-          break;
-        }
-        used += found.attempts;
-        found.results.filter((ticket) => matchesLocal(query, ticket)).forEach(count);
-      }
-    } else {
-      const estimate = estimateCalls({
-        tickets: probe.total,
-        pageSize: LIST_PAGE_SIZE,
-        conversations: false,
-        probe: 1,
-      });
-      const refusal = checkBudget(context, estimate, args.confirm);
-      if (refusal) return spent(refusal);
-      const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
-      const matches = fieldMatcher(schema, args);
-      const { from, to } = args.created_between;
-      for (let page = 1; ; page++) {
-        // Ticket requests, retries included, at the budget: no further page.
-        if (requests >= budget || Date.now() - started >= SCAN_START_MS) {
-          truncated = true;
-          break;
-        }
-        const listed = await listTickets(
-          context.http,
-          {
-            per_page: LIST_PAGE_SIZE,
-            page,
-            updated_since: `${from}T00:00:00Z`,
-            order_by: "created_at",
-            order_type: "asc",
-          },
-          deadline,
-          "expensive",
-        );
-        if (!listed.ok) {
-          if (!limiterRefusal(listed.error)) return listed;
-          used += listed.attempts ?? 0;
-          truncated = true;
-          break;
-        }
-        used += listed.attempts;
-        requests += listed.attempts;
-        listed.tickets
-          .filter((ticket) => matches(ticket) && matchesLocal(query, ticket))
-          .forEach(count);
-        const last = createdDay(listed.tickets.at(-1));
-        if (last !== undefined && last > to) break;
-        if (page === MAX_LIST_PAGE) {
-          truncated = listed.has_more || listed.tickets.length === LIST_PAGE_SIZE;
-          break;
-        }
-        if (!listed.has_more) break;
-      }
-    }
+    if (!read.ok) return read;
 
     const sorted = [...groups.entries()].sort(([a, x], [b, y]) =>
       y.count !== x.count ? y.count - x.count : a < b ? -1 : a > b ? 1 : 0,
@@ -457,8 +562,8 @@ export const countTicketsTool: Tool<typeof input> = {
         }),
         ...(notShown > 0 ? { groups_not_shown: notShown } : {}),
         total,
-        ...(truncated || notShown > 0 ? { truncated: true } : {}),
-        api_calls_used: used,
+        ...(read.truncated || notShown > 0 ? { truncated: true } : {}),
+        api_calls_used: meter.used,
       },
     };
   },

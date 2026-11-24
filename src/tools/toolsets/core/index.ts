@@ -3,6 +3,7 @@
 import type { Tool } from "../index.js";
 import { getCannedResponseTool, listCannedResponsesTool } from "./canned.js";
 import { countTicketsTool } from "./count-tickets.js";
+import { exportTicketsTool } from "./export-tickets.js";
 import { findSimilarTicketsTool } from "./find-similar-tickets.js";
 import { getTicketTool } from "./get-ticket.js";
 import { getTicketSchema } from "./get-ticket-schema.js";
@@ -28,4 +29,5 @@ export const CORE_TOOLS: readonly Tool[] = Object.freeze([
   listCannedResponsesTool,
   getCannedResponseTool,
   countTicketsTool,
+  exportTicketsTool,
 ]);

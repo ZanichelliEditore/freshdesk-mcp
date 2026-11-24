@@ -57,6 +57,15 @@ describe("personal settings (env)", () => {
     expect(err.message).toContain("FRESHDESK_API_KEY");
   });
 
+  it("FRESHDESK_EXPORT_DIR is kept as set, unchecked; empty or absent is unset", () => {
+    expect(loadConfig({ ...baseEnv, FRESHDESK_EXPORT_DIR: "/srv/exports" }).exportDir).toBe(
+      "/srv/exports",
+    );
+    expect(loadConfig({ ...baseEnv, FRESHDESK_EXPORT_DIR: "exports" }).exportDir).toBe("exports");
+    expect(loadConfig({ ...baseEnv, FRESHDESK_EXPORT_DIR: "" })).not.toHaveProperty("exportDir");
+    expect(loadConfig(baseEnv)).not.toHaveProperty("exportDir");
+  });
+
   it("an empty FRESHDESK_MCP_CONFIG or FRESHDESK_HOST_OVERRIDE counts as unset", () => {
     const config = loadConfig({
       ...baseEnv,
@@ -167,7 +176,6 @@ describe("team config: defaults", () => {
         schema_ttl_s: 60,
         call_budget: 1000,
       },
-      export_dir: "/var/tmp/exports",
     };
     expect(loadTeam(team).team).toEqual({
       ...team,
@@ -232,13 +240,19 @@ describe("team config: errors name the file and the path", () => {
       "forward_allow_list.0",
     ],
     ["an empty uncategorised list", { uncategorised_fields: [] }, "uncategorised_fields"],
-    ["an empty export dir", { export_dir: "" }, "export_dir"],
     ["a boolean meaning", { fields: { Prodotto: { meaning: true } } }, "fields.Prodotto.meaning"],
   ])("%s", (_what, content, where) => {
     const path = teamFile(content);
     const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: path }));
     expect(err.message).toContain(path);
     expect(err.message).toContain(`"${where}"`);
+  });
+
+  it("a team file with export_dir is refused, naming the key: the directory is personal env", () => {
+    const path = teamFile({ toolsets: ["core"], export_dir: "/var/tmp/exports" });
+    const err = errorOf(() => loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: path }));
+    expect(err.message).toContain(path);
+    expect(err.message).toContain('"export_dir": unknown key');
   });
 
   it.each([
@@ -298,7 +312,6 @@ describe("examples/team-config.example.json", () => {
   it("parses, and sets every team key", () => {
     const { team } = loadConfig({ ...baseEnv, FRESHDESK_MCP_CONFIG: example });
     expect(Object.keys(team).sort()).toEqual([
-      "export_dir",
       "fields",
       "forward_allow_list",
       "limits",
