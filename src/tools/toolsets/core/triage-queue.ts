@@ -14,15 +14,29 @@
 //     through `isoUpdated`; a duration is in words (`human`). Overdue says
 //     only that the due time has passed at the call's start. A value that is
 //     missing or not in its expected form is `null`: unknown, never a guess.
-//   - `reply_signals: true` adds the two signals that need `stats`: one
+//   - `reply_signals: true` adds the signals that need `stats`: one
 //     `GET /tickets/{id}?include=stats` per returned row, one after another,
 //     each sent as `expensive` (refused below the reserve, paced). The bound
 //     is 1 + SEARCH_PER_PAGE requests a call (31, about 61 credits), retries
 //     apart. Without it no ticket is viewed and the rows have no reply key.
 //     `stats` is read here, key by key: a key that is absent or not `null`
 //     or an ISO 8601 date-time with a zone makes the signals that need it
-//     `null`. A view answered `not_found` (search lags a few minutes) leaves
-//     the row with the three `null`; any other failed view fails the call.
+//     `null`.
+//       - `last_customer_reply` is `requester_responded_at`; when that is
+//         `null` the customer's last message is the opening one, so it is
+//         `created`. `unanswered_customer_reply`: no agent response
+//         (`agent_responded_at` `null`), or one before the customer's reply.
+//       - `first_response_overdue` is refined: true only when the due time
+//         has passed and `first_responded_at` is `null`. A due time that has
+//         passed with `first_responded_at` unreadable, or the ticket not
+//         viewed, is `null`.
+//       - A view answered `not_found` (search lags a few minutes) leaves the
+//         row unviewed: the three reply signals `null`.
+//       - Once a view was answered, a later one the limiter refuses unsent
+//         (`rate_limited` with no HTTP status) ends the views: every row of
+//         the page is returned, the rest unviewed, with
+//         `reply_signals_incomplete: true` beside the envelope. Any other
+//         failed view, and a refusal of the first, fails the call.
 //   - Order: the rows of a page by resolution due time, earliest first, a
 //     ticket with none last, ties by id. The pages follow search's own order,
 //     so the order holds within a page only.
@@ -57,19 +71,6 @@ const input = z.object({
   reply_signals: z.boolean().optional(),
   cursor: z.string().optional(),
 });
-
-/** The signals that need a ticket's `stats`; `null` is unknown. */
-interface ReplySignals {
-  last_customer_reply: string | null;
-  since_last_customer_reply: string | null;
-  unanswered_customer_reply: boolean | null;
-}
-
-const UNKNOWN: ReplySignals = {
-  last_customer_reply: null,
-  since_last_customer_reply: null,
-  unanswered_customer_reply: null,
-};
 
 function count(n: number, unit: string): string {
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
@@ -109,24 +110,6 @@ function statTime(stats: Record<string, unknown>, key: string): number | null | 
   return iso === null ? undefined : Date.parse(iso);
 }
 
-function replySignals(stats: unknown, now: number): ReplySignals {
-  if (typeof stats !== "object" || stats === null || Array.isArray(stats)) return UNKNOWN;
-  const record = stats as Record<string, unknown>;
-  const requester = statTime(record, "requester_responded_at");
-  if (requester === undefined) return UNKNOWN;
-  if (requester === null) {
-    // No customer reply since the ticket was opened: none can be unanswered.
-    return { ...UNKNOWN, unanswered_customer_reply: false };
-  }
-  const agent = statTime(record, "agent_responded_at");
-  const last = new Date(requester).toISOString();
-  return {
-    last_customer_reply: last,
-    since_last_customer_reply: since(last, now),
-    unanswered_customer_reply: agent === undefined ? null : agent === null || requester > agent,
-  };
-}
-
 /** A due time in epoch ms for the order; one that is missing or unreadable sorts last. */
 function dueTime(ticket: Ticket): number {
   const iso = isoUpdated(ticket.due_by);
@@ -156,12 +139,62 @@ function signals(ticket: Ticket, now: number) {
   };
 }
 
+type Signals = ReturnType<typeof signals>;
+
+/** A row's signals with those that need `stats`; in these `null` is unknown. */
+interface ReplySignals extends Signals {
+  last_customer_reply: string | null;
+  since_last_customer_reply: string | null;
+  unanswered_customer_reply: boolean | null;
+}
+
+/**
+ * The signals of a row whose `stats` could not be read at all. Whether a
+ * first response was sent is not known, so a due time that has passed is not
+ * known to be overdue.
+ */
+function unviewed(row: Signals): ReplySignals {
+  return {
+    ...row,
+    first_response_overdue: row.first_response_overdue === true ? null : row.first_response_overdue,
+    last_customer_reply: null,
+    since_last_customer_reply: null,
+    unanswered_customer_reply: null,
+  };
+}
+
+function replySignals(row: Signals, stats: unknown, now: number): ReplySignals {
+  const unknown = unviewed(row);
+  if (typeof stats !== "object" || stats === null || Array.isArray(stats)) return unknown;
+  const record = stats as Record<string, unknown>;
+  const first = statTime(record, "first_responded_at");
+  const overdue = {
+    first_response_overdue:
+      first === undefined
+        ? unknown.first_response_overdue
+        : row.first_response_overdue && first === null,
+  };
+  const requester = statTime(record, "requester_responded_at");
+  if (requester === undefined) return { ...unknown, ...overdue };
+  const agent = statTime(record, "agent_responded_at");
+  // No reply since the ticket was opened: the customer's last message is the opening one.
+  const last = requester === null ? row.created : new Date(requester).toISOString();
+  return {
+    ...row,
+    ...overdue,
+    last_customer_reply: last,
+    since_last_customer_reply: since(last, now),
+    unanswered_customer_reply:
+      agent === undefined ? null : agent === null || (requester !== null && requester > agent),
+  };
+}
+
 export const triageQueueTool: Tool<typeof input> = {
   name: "triage_queue",
   description: [
     "The tickets in status Open or Pending with the signals to rank them by urgency; the ranking is yours. A ticket in any other status, a custom one included, is not listed (list_tickets filters by any status).",
-    "Each row is a compact ticket row (id, subject, status, priority, category, last update, agent and group, by name) plus: created and age; first_response_due and resolution_due with first_response_overdue and resolution_overdue (true once the due time has passed, whether or not a response was sent); first_response_escalated, resolution_escalated and next_response_escalated, Freshdesk's own flags. Times are ISO 8601 in UTC; age is in words (3 days 4 hours), measured when the call starts. In any signal null means unknown (the value was missing or unreadable), not false and not zero.",
-    `With reply_signals: true each row also has last_customer_reply (the customer's last reply after opening the ticket; null when there is none), since_last_customer_reply in words, and unanswered_customer_reply (true when no agent has responded since that reply; false when there is no reply to answer; null when unknown). They cost one more request per row, at most ${1 + SEARCH_PER_PAGE} requests a call, sent as an expensive operation: paced, so a full page takes about 15 s, and refused with rate_limited when the account's API budget is low. Ask for them when the first pass leaves the ranking open.`,
+    "Each row is a compact ticket row (id, subject, status, priority, category, last update, agent and group, by name) plus: created and age; first_response_due and resolution_due with first_response_overdue and resolution_overdue (first_response_overdue means the first-response due time has passed, whether or not a first response was sent; reply_signals refines it); first_response_escalated, resolution_escalated and next_response_escalated, Freshdesk's own flags. Times are ISO 8601 in UTC; age is in words (3 days 4 hours), measured when the call starts. In any signal null means unknown (the value was missing or unreadable), not false and not zero.",
+    `With reply_signals: true each row also has last_customer_reply (the time of the customer's last message, the opening one when there was no later reply), since_last_customer_reply in words, and unanswered_customer_reply (true when no agent has responded since that message; null when unknown), and first_response_overdue is true only while no first response has been sent. They cost one more request per row, at most ${1 + SEARCH_PER_PAGE} requests a call, sent as an expensive operation: paced, so a full page takes about 15 s, and refused with rate_limited when the account's API budget is low. If the budget runs out after some rows were read, every row still comes back, the rows not read with these signals null, and the result says reply_signals_incomplete: true: call again later for the rest. Ask for the reply signals when the first pass leaves the ranking open.`,
     `Rows come ${SEARCH_PER_PAGE} a call, ordered by resolution due time, earliest first (a ticket with none last, then by id): the order holds within a page only, so read every page before ranking. While has_more is true, call again with the same arguments and next_cursor. Freshdesk returns the first ${MAX_SEARCH_PAGE * SEARCH_PER_PAGE} matches only: past them the list is cut and says truncated: true. A ticket changed in the last few minutes can be missing or show its earlier state.`,
     "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
@@ -193,32 +226,52 @@ export const triageQueueTool: Tool<typeof input> = {
     const tickets = found.results
       .filter((ticket) => ticket.status === OPEN || ticket.status === PENDING)
       .sort(byResolutionDue);
+    const rows = tickets.map((ticket) => ({
+      id: ticket.id,
+      row: ticketRow(context, schema, ticket),
+      signals: signals(ticket, now),
+    }));
     const items = [];
-    for (const ticket of tickets) {
-      const row = { ...ticketRow(context, schema, ticket), ...signals(ticket, now) };
+    let answered = 0;
+    let incomplete = false;
+    for (const { id, row, signals: own } of rows) {
       if (args.reply_signals !== true) {
-        items.push(row);
+        items.push({ ...row, ...own });
         continue;
       }
-      const viewed = await getTicket(context.http, ticket.id, ["stats"], deadline, "expensive");
+      if (incomplete) {
+        items.push({ ...row, ...unviewed(own) });
+        continue;
+      }
+      const viewed = await getTicket(context.http, id, ["stats"], deadline, "expensive");
       calls += viewed.attempts ?? 0;
       if (viewed.ok) {
-        items.push({ ...row, ...replySignals(viewed.ticket.stats, now) });
-      } else if (viewed.error.code === "not_found") {
-        items.push({ ...row, ...UNKNOWN });
-      } else {
-        return { ok: false, error: viewed.error };
+        answered += 1;
+        items.push({ ...row, ...replySignals(own, viewed.ticket.stats, now) });
+        continue;
       }
+      const { error } = viewed;
+      if (error.code === "not_found") {
+        answered += 1;
+      } else if (answered > 0 && error.code === "rate_limited" && error.http_status === null) {
+        incomplete = true;
+      } else {
+        return { ok: false, error };
+      }
+      items.push({ ...row, ...unviewed(own) });
     }
 
     return {
       ok: true,
-      value: listEnvelope(call, {
-        items,
-        ...(more ? { next: page } : {}),
-        truncated: found.total > MAX_SEARCH_PAGE * SEARCH_PER_PAGE,
-        api_calls_used: calls,
-      }),
+      value: {
+        ...listEnvelope(call, {
+          items,
+          ...(more ? { next: page } : {}),
+          truncated: found.total > MAX_SEARCH_PAGE * SEARCH_PER_PAGE,
+          api_calls_used: calls,
+        }),
+        ...(incomplete ? { reply_signals_incomplete: true } : {}),
+      },
     };
   },
 };

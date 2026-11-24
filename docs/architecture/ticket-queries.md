@@ -10,7 +10,8 @@ A row is `documented` when Freshdesk's API v2 documentation settles it (the
 link names the section), or `measured 2026-11-24`: the orchestrator's two
 runs of `make smoke-probes` (`scripts/smoke/smoke.ts`, `runProbes`) against
 the real account on 2026-11-24, on the owner's authorisation: the first
-run, and the control run after the review of 2026-11-24. The output is kept
+run, and the control run after the review of 2026-11-24. A third run on
+2026-11-24, for T-029, added `view_include_stats`. The output is kept
 in the gitignored `docs/private/`; only shapes (counts of a page, bands,
 yes/no, credits) are quoted here. Anything still open is listed under
 [Open](#open). This file names no account value: field names are written as
@@ -46,7 +47,7 @@ Sources (read 2026-11-24), all on <https://developers.freshdesk.com/api/>:
 
 What the two runs measured (2026-11-24; first run 16 GETs, 10 answered 200
 and 6 answered 400; control run 21 GETs, 14 answered 200 and 7 answered
-400):
+400; T-029's run 22 GETs, 15 answered 200 and 7 answered 400):
 
 | Probe | Result (shape) | Means |
 |---|---|---|
@@ -55,6 +56,7 @@ and 6 answered 400; control run 21 GETs, 14 answered 200 and 7 answered
 | `list_updated_since_365d_default_order` (control) | 100 items, none older than 31 days (newest first), `<2s` | the order is not what made a page slow; the 8 s was variance |
 | `list_status_param` | 400 `validation` | `GET /tickets` refuses a `status` parameter: no list-side field filter |
 | `list_include_stats` | all 8 `stats` keys present, **2 credits** | `stats` carries `agent_responded_at`, `requester_responded_at`, `status_updated_at`, `pending_since`, `reopened_at` beyond the documented three; one include costs +1 credit, not +2 |
+| `view_include_stats` (T-029's run) | all 8 `stats` keys present, **2 credits** | `GET /tickets/{id}?include=stats` carries the same 8 keys as the list, `requester_responded_at` and `agent_responded_at` among them; a view with the include costs 2 credits |
 | `list_ticket_keys`, `search_ticket_keys` | `fr_due_by`, `due_by`, `nr_due_by`, `fr_escalated`, `is_escalated`, `nr_escalated`, `tags`, `custom_fields`, `requester_id`, `company_id` present on both; `stats` on neither | a search result carries the same ticket keys as a list item |
 | `list_requester` (control run's requester) | 100 items, next page, 96 created over 31 days ago | **`requester_id` alone lifts the 30-day window** (the first run's requester had one ticket: inconclusive) |
 | `list_requester_updated_since_2000` | the same counts | `updated_since` adds nothing to `requester_id` |
@@ -111,10 +113,11 @@ Its signals (T-029): priority, `fr_due_by`, `due_by`, `nr_due_by` and the
 three escalation flags are on every search result (measured 2026-11-24): no
 per-ticket call for them. The last customer message and unanswered replies
 need `stats.requester_responded_at` and `stats.agent_responded_at`: `stats`
-carries both on the list (measured 2026-11-24), but search refuses
-`include=stats` and the list cannot filter by status. So those two signals
-cost one `GET /tickets/{id}?include=stats` per returned row: a page of 30
-rows is 31 requests, about 61 credits (1 for the search, 2 per view). With
+carries both on the list and on a one-ticket view (measured 2026-11-24),
+but search refuses `include=stats` and the list cannot filter by status. So
+those two signals cost one `GET /tickets/{id}?include=stats` per returned
+row: a page of 30 rows is 31 requests, 61 credits (1 for the search, 2 per
+view, measured 2026-11-24). With
 them `triage_queue` is **`expensive`**; T-029 may leave them out of the
 default and fetch them only on request, and states the bound either way.
 
@@ -122,15 +125,32 @@ T-029's choice (2026-11-24): on request only. Without `reply_signals: true`
 a call is the search page alone (1 request, `cheap`) and its rows carry no
 reply key. With it, one view per returned row, one after another, each sent
 as `expensive` (`getTicket`'s cost argument): at most 1 + 30 = 31 requests a
-call, about 61 credits, retries apart; at the default pacing of 2 a second a
-full page takes about 15 s of the call's one 30 s deadline. The search
-request itself stays `cheap` (`searchTickets` has no cost argument yet), so
-below the reserve such a call spends 1 request before the first view is
-refused. A `stats` key that is absent or not in its expected form makes the
-signals that need it `null`; a view answered 404 leaves that row's three
-signals `null`; any other failed view fails the call. A result whose status
-is neither 2 nor 3 is dropped locally. A ticket in a custom status is not in
-the queue.
+call, 61 credits, retries apart; at the default pacing of 2 a second a full
+page takes about 15 s of the call's one 30 s deadline. The search request
+itself stays `cheap` (`searchTickets` has no cost argument yet), so below
+the reserve such a call spends 1 request before the first view is refused.
+A result whose status is neither 2 nor 3 is dropped locally. A ticket in a
+custom status is not in the queue.
+
+What the view's `stats` gives a row (full review, 2026-11-24):
+
+- `last_customer_reply`: `requester_responded_at`; when that is `null` the
+  customer's last message is the opening one, so the ticket's `created_at`.
+  `unanswered_customer_reply`: true when `agent_responded_at` is `null` or
+  earlier than the customer's reply.
+- `first_response_overdue`, with the flag: true only when `fr_due_by` has
+  passed and `first_responded_at` is `null`. Without the flag it says only
+  that the due time has passed.
+- A key that is absent or not in its expected form makes the signals that
+  need it `null`, a due time that has passed included; a view answered 404
+  leaves that row unviewed, its reply signals `null`.
+- Once a view was answered, a later view the limiter refuses unsent
+  (`rate_limited`, no HTTP status: the reserve, a pacing wait that would
+  reach the deadline, the hold after a 429) ends the views: every row of
+  the page is returned, the rest unviewed, with
+  `reply_signals_incomplete: true` and `api_calls_used` the requests sent.
+  Any other failed view (a 403, an attempt cut in flight), and a refusal of
+  the first view, fails the call.
 
 Rejected: the list with `include=stats` and a local status filter. The list
 cannot be asked for open tickets, so it would have to scan every ticket
@@ -291,11 +311,11 @@ page 300 is the last: when it links a next page or comes back full,
 `expensive` (SPEC §7.2): every call of `count_tickets`, `export_tickets`
 and `find_similar_tickets`; a `list_tickets` call that scans for
 `uncategorized` alone; and `triage_queue` when it fetches the stats
-signals (31 requests, about 61 credits a page). `cheap`: other
+signals (31 requests, 61 credits a page). `cheap`: other
 `list_tickets` calls, `search_tickets`, `triage_queue` without the stats
 signals and `get_ticket` (its recent tickets included), each a bounded
 number of pages. A request with `include=stats` costs 2 credits (measured
-2026-11-24, on the list); a plain one 1.
+2026-11-24, on the list and on a one-ticket view); a plain one 1.
 
 `searchTickets` sends every request as `cheap` (T-024). `listTickets`
 (T-023) does too unless its caller gives the optional cost argument (T-027,
@@ -351,7 +371,8 @@ acceptance of T-027 and T-036 should include a ticket on a widened boundary
 day that is absent from the output.
 
 `viewTicket` (`GET /tickets/{id}`, T-023's `getTicket`) with
-`include=stats` serves `triage_queue`'s two stats signals.
+`include=stats` serves `triage_queue`'s stats signals; the view carries
+all 8 `stats` keys (measured 2026-11-24).
 
 ## Open
 
@@ -362,6 +383,5 @@ bears on:
 |---|---|---|
 | Which deadline does a list scan run under, so how many pages can a call scan? | deep-page latency varies (about 8 s once, under 2 s twice) | T-036, T-037 (`list_tickets` settled its own, 2026-11-24: see [Scan bounds](#scan-bounds)) |
 | `created_at:>'<day>'` and `updated_at:>'<day>'`: inclusive or exclusive of the day, and which time zone's day? | the docs give examples only | T-036, T-037, T-055; for `list_tickets`' `created_between` and `updated_since` (T-043, T-027), whose search is widened a day and checked locally: exact if Freshdesk compares by UTC day; if it compares by the account's time-zone day with an exclusive operator, a one-day widening can under-return on one side (an undercount, not fail-open): open, see the proposed row T-055 |
-| Does `GET /tickets/{id}?include=stats` carry the same 8 `stats` keys as the list? | measured on the list only; the docs list three. The probe `view_include_stats` asks it (T-029, 2026-11-24), not run yet. If the view lacks `requester_responded_at` or `agent_responded_at`, `triage_queue`'s reply signals come back `null` (unknown), never a guess | T-029 |
 | Does page 300 of `GET /tickets` carry a `Link` to a page 301 when more tickets exist? | the 300-page limit is documented, not measured | T-027 (`list_tickets` also takes a full page 300 as cut), T-036, T-037 |
 | Does `company_id` alone lift the 30-day window, as `requester_id` does? | not probed | none while `find_similar_tickets` sends its N-day `updated_since` (T-030) |

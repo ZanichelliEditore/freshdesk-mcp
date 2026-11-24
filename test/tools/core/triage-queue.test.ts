@@ -41,6 +41,9 @@ const GROUPS = "/api/v2/groups?per_page=100";
 const QUERY = "status:2 OR status:3";
 const CAP = MAX_SEARCH_PAGE * SEARCH_PER_PAGE;
 const STATS = { reply_signals: true };
+/** Budget headers below and above the default reserve of 20 %. */
+const LOW = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" };
+const HIGH = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "90" };
 
 /** The fake clock's time at the start of every call. */
 const NOW = Date.parse("2026-01-10T12:00:00Z");
@@ -285,6 +288,11 @@ describe("triage_queue: the listing", () => {
     expect(description).toContain("first 300");
     expect(description).toContain("truncated: true");
     expect(description).toContain("null means unknown");
+    expect(description).toContain("the first-response due time has passed");
+    expect(description).toContain(
+      "the customer's last message, the opening one when there was no later reply",
+    );
+    expect(description).toContain("reply_signals_incomplete: true");
     expect(description).toContain("reply_signals: true");
     expect(description).toContain("has_more");
   });
@@ -487,8 +495,8 @@ describe("triage_queue: reply_signals, one view per row", () => {
     });
     expect(result.items[0]).toMatchObject({
       age: "42 minutes",
-      last_customer_reply: null,
-      since_last_customer_reply: null,
+      last_customer_reply: "2026-01-10T11:18:00.000Z",
+      since_last_customer_reply: "42 minutes",
       unanswered_customer_reply: false,
     });
     // One view per returned row, none for the resolved ticket.
@@ -506,13 +514,46 @@ describe("triage_queue: reply_signals, one view per row", () => {
       false,
     ],
     ["no agent has answered", "2026-01-10T08:00:00Z", null, true],
-    ["the customer has not replied, nor an agent", null, null, false],
   ])("unanswered when %s", async (_, requester, agent, unanswered) => {
     const row = await rowOf(OPEN_TICKET, {
       stats: { requester_responded_at: requester, agent_responded_at: agent },
     });
     expect(row.unanswered_customer_reply).toBe(unanswered);
-    expect(row.since_last_customer_reply).toBe(requester === null ? null : "4 hours");
+    expect(row.since_last_customer_reply).toBe("4 hours");
+  });
+
+  it.each([
+    ["no agent has answered it: unanswered", null, true],
+    ["an agent has answered it: not unanswered", "2026-01-08T09:00:00Z", false],
+    ["the agent time is missing: unknown", undefined, null],
+    ["the agent time is not a date: unknown", "soon", null],
+  ])(
+    "no later customer reply: the last message is the opening one; %s",
+    async (_, agent, unanswered) => {
+      const row = await rowOf(OPEN_TICKET, {
+        stats: {
+          requester_responded_at: null,
+          ...(agent === undefined ? {} : { agent_responded_at: agent }),
+        },
+      });
+      expect(row).toMatchObject({
+        created: "2026-01-07T07:48:00.000Z",
+        last_customer_reply: "2026-01-07T07:48:00.000Z",
+        since_last_customer_reply: "3 days 4 hours",
+        unanswered_customer_reply: unanswered,
+      });
+    },
+  );
+
+  it("no later customer reply and a created_at that cannot be read: no time, the flag still known", async () => {
+    const row = await rowOf(ticket(4301, { created_at: "last week" }), {
+      stats: { requester_responded_at: null, agent_responded_at: null },
+    });
+    expect(row).toMatchObject({
+      last_customer_reply: null,
+      since_last_customer_reply: null,
+      unanswered_customer_reply: true,
+    });
   });
 
   it.each([
@@ -557,9 +598,60 @@ describe("triage_queue: reply_signals, one view per row", () => {
     });
   });
 
-  it("no customer reply and an agent time that cannot be read: not unanswered", async () => {
-    const row = await rowOf(OPEN_TICKET, { stats: { requester_responded_at: null } });
-    expect(row).toMatchObject({ last_customer_reply: null, unanswered_customer_reply: false });
+  it.each([
+    ["no first response yet, the due time passed", null, "2026-01-08T10:00:00Z", true],
+    [
+      "a first response sent, the due time passed",
+      "2026-01-09T08:00:00Z",
+      "2026-01-08T10:00:00Z",
+      false,
+    ],
+    ["no first response yet, the due time ahead", null, "2026-01-11T10:00:00Z", false],
+    [
+      "a first response sent, the due time ahead",
+      "2026-01-09T08:00:00Z",
+      "2026-01-11T10:00:00Z",
+      false,
+    ],
+    [
+      "a first response time that is not a date, the due time passed",
+      "soon",
+      "2026-01-08T10:00:00Z",
+      null,
+    ],
+    [
+      "a first response time that is not a date, the due time ahead",
+      "soon",
+      "2026-01-11T10:00:00Z",
+      false,
+    ],
+    ["no first response yet, no due time", null, null, null],
+  ])("first_response_overdue with reply_signals: %s", async (_, first, due, overdue) => {
+    const row = await rowOf(ticket(4301, { fr_due_by: due }), {
+      stats: { first_responded_at: first, requester_responded_at: null, agent_responded_at: null },
+    });
+    expect(row.first_response_overdue).toBe(overdue);
+    // The resolution flag stays the date's.
+    expect(row.resolution_overdue).toBe(false);
+  });
+
+  it.each([
+    ["no stats", undefined],
+    [
+      "stats without first_responded_at",
+      { requester_responded_at: null, agent_responded_at: null },
+    ],
+  ])(
+    "first_response_overdue with reply_signals and %s: unknown once the due time passed",
+    async (_, stats) => {
+      expect((await rowOf(OPEN_TICKET, { stats })).first_response_overdue).toBeNull();
+      const ahead = ticket(4301, { fr_due_by: "2026-01-11T10:00:00Z" });
+      expect((await rowOf(ahead, { stats })).first_response_overdue).toBe(false);
+    },
+  );
+
+  it("first_response_overdue without reply_signals is the date's alone", async () => {
+    expect((await rowOf(OPEN_TICKET)).first_response_overdue).toBe(true);
   });
 
   it("a customer reply in the future keeps its time and gives no duration", async () => {
@@ -585,7 +677,8 @@ describe("triage_queue: reply_signals, one view per row", () => {
       since_last_customer_reply: null,
       unanswered_customer_reply: null,
     });
-    expect(result.items[0]!.unanswered_customer_reply).toBe(false);
+    expect(result.items[0]!.unanswered_customer_reply).toBe(true);
+    expect(result).not.toHaveProperty("reply_signals_incomplete");
     expect(sent()).toBe(3);
     expect(result.api_calls_used).toBe(sent());
   });
@@ -608,13 +701,64 @@ describe("triage_queue: reply_signals, one view per row", () => {
     expect(listed.has_more).toBe(true);
   });
 
-  it("the views are expensive: below the reserve the call is rate_limited, none sent", async () => {
-    const LOW = { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" };
+  it("the reserve crossed after 2 views: every row comes back, the rest unviewed, and the result says so", async () => {
+    const { session } = await warm();
+    const page = tickets(4301, 5);
+    const stats = {
+      first_responded_at: null,
+      requester_responded_at: "2026-01-10T08:00:00Z",
+      agent_responded_at: null,
+    };
+    reply(searchPath(), found(page, SEARCH_PER_PAGE + 5), 200, HIGH);
+    reply(viewPath(4301), { ...page[0], stats }, 200, HIGH);
+    reply(viewPath(4302), { ...page[1], stats }, 200, LOW);
+    const result = output(await run(session, STATS));
+
+    expect(result.items.map((item) => item.id)).toEqual([4301, 4302, 4303, 4304, 4305]);
+    for (const item of result.items.slice(0, 2)) {
+      expect(item).toMatchObject({
+        first_response_overdue: true,
+        last_customer_reply: "2026-01-10T08:00:00.000Z",
+        since_last_customer_reply: "4 hours",
+        unanswered_customer_reply: true,
+      });
+    }
+    for (const item of result.items.slice(2)) {
+      expect(item).toMatchObject({
+        age: "3 days 4 hours",
+        resolution_overdue: false,
+        // Its due time has passed, and whether a first response was sent is not known.
+        first_response_overdue: null,
+        last_customer_reply: null,
+        since_last_customer_reply: null,
+        unanswered_customer_reply: null,
+      });
+    }
+    expect((result as unknown as Record<string, unknown>).reply_signals_incomplete).toBe(true);
+    expect(paths()).toEqual([searchPath(), viewPath(4301), viewPath(4302)]);
+    expect(sent()).toBe(3);
+    expect(result.api_calls_used).toBe(sent());
+    expect(result.has_more).toBe(true);
+    expect(result.next_cursor).toBe(cursorFor(TOOL, STATS, 1));
+  });
+
+  it("a call whose views were all answered has no reply_signals_incomplete key", async () => {
+    const { session } = await warm();
+    reply(searchPath(), found([OPEN_TICKET]));
+    view(OPEN_TICKET, { requester_responded_at: null, agent_responded_at: null });
+    expect(output(await run(session, STATS))).not.toHaveProperty("reply_signals_incomplete");
+    reply(searchPath(), found([OPEN_TICKET]));
+    expect(output(await run(session))).not.toHaveProperty("reply_signals_incomplete");
+  });
+
+  it("the views are expensive: below the reserve the first view is refused and the call is rate_limited", async () => {
     const { session } = await warm();
     reply(searchPath(), found([OPEN_TICKET]), 200, LOW);
     const error = refusal(await run(session, STATS));
     expect(error.code).toBe("rate_limited");
+    expect(error.http_status).toBeNull();
     expect(paths()).toEqual([searchPath()]);
+    expect(sent()).toBe(1);
 
     // Without the signals the same budget serves the call: it is cheap.
     reply(searchPath(), found([OPEN_TICKET]), 200, LOW);
@@ -749,13 +893,30 @@ describe("triage_queue: errors", () => {
     expect(sent()).toBe(1);
   });
 
-  it("a view that fails, other than not found, fails the call and stops the views", async () => {
+  it("a 403 on a later view fails the call and stops the views, though one was answered", async () => {
     const { session } = await warm();
-    reply(searchPath(), found([OPEN_TICKET, PENDING_TICKET]));
+    const page = tickets(4301, 3);
+    reply(searchPath(), found(page));
+    view(page[0]!, { requester_responded_at: null, agent_responded_at: null });
     reply(viewPath(4302), { code: "access_denied", message: "no" }, 403);
     const error = refusal(await run(session, STATS));
     expect(error.code).toBe("forbidden");
-    expect(sent()).toBe(2);
+    expect(error.http_status).toBe(403);
+    expect(paths()).toEqual([searchPath(), viewPath(4301), viewPath(4302)]);
+    expect(sent()).toBe(3);
+  });
+
+  it("a 429 on a later view, its retry refused by the limiter unsent: the partial return, the 429 counted", async () => {
+    const { session } = await warm();
+    const page = tickets(4301, 3);
+    reply(searchPath(), found(page));
+    view(page[0]!, { requester_responded_at: null, agent_responded_at: null });
+    reply(viewPath(4302), { message: "slow down" }, 429, { "retry-after": "3600" });
+    const result = output(await run(session, STATS));
+    expect(result.items.map((item) => item.unanswered_customer_reply)).toEqual([true, null, null]);
+    expect((result as unknown as Record<string, unknown>).reply_signals_incomplete).toBe(true);
+    expect(paths()).toEqual([searchPath(), viewPath(4301), viewPath(4302)]);
+    expect(result.api_calls_used).toBe(sent());
   });
 
   it("a failed schema load fails the call, no search sent", async () => {
