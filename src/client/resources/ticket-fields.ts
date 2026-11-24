@@ -55,7 +55,8 @@ export async function listTicketFields(
   deadline?: number,
 ): Promise<TicketFieldsResult> {
   const result = await http.requestWithRetry({ path: "/ticket_fields" }, deadline);
-  if (!result.ok) return result;
+  // The error only: the result's `attempts` is not this function's to pass on.
+  if (!result.ok) return { ok: false, error: result.error };
   const parsed = ticketFields.safeParse(result.body);
   if (!parsed.success) {
     return {

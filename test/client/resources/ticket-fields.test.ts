@@ -316,6 +316,13 @@ describe("listTicketFields: an HTTP failure", () => {
       http_status: 403,
     });
   });
+  it("returns the error alone, without the client's attempt count", async () => {
+    reply(403, {});
+
+    const result = await listTicketFields(http);
+
+    expect(Object.keys(result).sort()).toEqual(["error", "ok"]);
+  });
 });
 
 describe("listTicketFields: a caller's deadline", () => {

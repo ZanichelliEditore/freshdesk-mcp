@@ -52,7 +52,8 @@
 //     back (one cut in flight by a deadline included); one refused before
 //     that (URL, deadline, limiter) is not. `request` keeps the results it
 //     got through `fetch` in a private WeakSet, so a subclass's override that
-//     answers without calling it counts nothing, as it sends nothing.
+//     answers without calling it, or returns anything but the object it
+//     returned (a copy included), counts nothing for that attempt.
 
 import { type Dispatcher, fetch, type Headers } from "undici";
 import { ConfigError } from "../config.js";

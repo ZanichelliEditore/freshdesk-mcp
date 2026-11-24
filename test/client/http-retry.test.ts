@@ -354,6 +354,29 @@ describe("requestWithRetry: attempts counts the attempts sent", () => {
     expect(sent()).toHaveLength(4);
   });
 
+  it("is 1 for a 200 whose body is not JSON", async () => {
+    on("GET").reply(200, "not json", { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: false, attempts: 1, error: { code: "server" } });
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("is 1 for a POST answered 503, with no retry sent", async () => {
+    on("POST").reply(503, "");
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(result).toMatchObject({
+      ok: false,
+      attempts: 1,
+      error: { code: "server", http_status: 503, retryable: false },
+    });
+    expect(sent()).toHaveLength(1);
+  });
+
   it("does not count the limiter's refusal of the retry after a 429", async () => {
     on("POST").reply(429, "");
 
