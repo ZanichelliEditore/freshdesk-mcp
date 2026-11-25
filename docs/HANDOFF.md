@@ -4,58 +4,67 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T09:54:23+01:00`
-- **Describes commit:** `c6dba4b`
-  (`c6dba4b1561cc0514b80c6e6d3785319e96f28da`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45580479733
-  (workflow `quality`, ran on `c6dba4b`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T10:26:01+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-045 `done (2026-11-25)`, release workflow,
-  `docs/tasks/T-045-release-workflow.md` ("Done", "Dry run observed").
-  Commits `4bf3ade`, `2076c9f`, `b3b8b07`, `8600942`, `3a19cc7` (dry run
-  observed, done). RFC 2026-11-25 Implemented box ticked.
-  - **Dry run:** `workflow_dispatch` on `main` (`66cb17b`), started by the
-    orchestrator with `gh` (owner logged in, 2026-11-25):
-    https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45580075912,
-    success: quality (22.19), quality (24), gitleaks, build, dry-run;
-    publish skipped.
-  - **After it:** no tag on the remote; `npm view
-    @zanichelli/freshdesk-mcp` E404.
+- **Current task:** T-057 `done (2026-11-25)`, `export_tickets` pages
+  (`max_tickets`, cursor, one file per call),
+  `docs/tasks/T-057-export-pages.md` ("Done"). Commits `69d7fc8`
+  (status), `c9f2b3d` (build), `97709eb` (full-round fixes: search cursor
+  by lowest id written, no cursor without progress, search budget check),
+  `ba6ea89` (scoped list A fixes: budget and time checks on step-back
+  pages; id order checked fail-closed), `fdc1057` (done). Built by a
+  builder agent under the orchestrator.
+  - **Measured (orchestrator, real account, GET, 2026-11-25):** search
+    results come back in the same order on repeated calls, sorted by
+    `created_at` and `id` both descending, not by `updated_at` (raw in the
+    gitignored `docs/private/account-facts.md`). Which key is primary is
+    not told apart; a resumed call refuses when ids do not fall strictly.
+  - **Acceptance amended (orchestrator, 2026-11-25):** a call cut before
+    it wrote any row returns `truncated: true` without `next_cursor`
+    (loop safety).
 
-- **Next action:** the first release, the owner's steps of
-  `docs/rfc/active/2026-11-25-release-on-npm.md` ("Owner's manual steps"):
-  0. repository public (it is, 2026-11-25);
-  1. environment `npm`, "Selected branches and tags", tag rule `v*` only,
-     before any `v*` tag;
-  2. `v*` tag ruleset and `main` branch ruleset, bypass list = who may
-     release (the maintainers, so direct pushes to `main` keep working);
-  3. on the go: placeholder `0.0.0` by hand from an empty directory, then
-     deprecate it (2FA, an `@zanichelli` member);
-  4. npm trusted publisher: `ZanichelliEditore` / `freshdesk-mcp` /
-     `release.yml` / environment `npm`;
-  5. within 2 days: tag `v0.1.0` on `main` (`package.json` is `0.1.0`);
-  6. then "Require two-factor authentication and disallow tokens".
-  Then `/pickup`: **T-057** (export pages), then **T-058** (solution tree
-  by category).
+- **Next action:** the owner (rule 9, below), then the first release.
+  - **The owner:** the scoped round's list A fixes (`ba6ea89`) changed a
+    mechanism again (step-back budget check, id-order check); by rule 9
+    they are not reviewed a third time. Accept, or ask for a review.
+  - **The owner:** list-scan same-second tie exception (past 300
+    matches): keep as documented, or fix at one `GET /tickets/{id}` per
+    resumed call.
+  - **The owner:** release steps of RFC 2026-11-25 (HANDOFF at
+    `c6dba4b`); the orchestrator can do steps 1–2 with `gh` if the owner's
+    account is a repository admin and the owner says go.
+  - Then `/pickup`: **T-058** (solution tree by category).
 
-- **Read before anything else:** the RFC's manual steps; PLAN rows T-057,
+- **Read before anything else:** T-057's task file "Open doubts"; PLAN row
   T-058.
 
-- **Reviews:** T-045's two rounds: HANDOFF at `e373c2e`. No code since.
+- **Reviews:**
+  - **Full round** on `57ebfdc..c9f2b3d`, R1 = `c9f2b3d`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security: 1 Low
+    (search path read past the estimate with `max_tickets`), 1 info.
+    code-reviewer: 1 High (search offset cursor: a ticket created between
+    calls shifted offsets, written twice or missed), 1 Medium (a cut with
+    no progress returned the same cursor), 3 Low. Fixed in `97709eb`.
+  - **Scoped round** on `c9f2b3d..97709eb`. The four quotes matched for
+    all three. compliance `none`. List A: security A1 (step-back pages
+    before any budget check), code A1 (id-only boundary assumes id order
+    = `created_at` order). Fixed in `ba6ea89`, not reviewed again (rule
+    9). Lists B parked, entries `c9f2b3d`, `97709eb`.
 
 - **Proposed plan changes:** none new.
 
-- **Open doubts (owner):**
-  - **T-045:** GitHub/npm settings untestable in the repo; after 0.1.0 a
-    dry run at the same version may be refused (expected); a hand-typed
-    `--provenance=false` overrides `publishConfig` (accepted).
-  - **Earlier:** see HANDOFF at `d1c7efe`, `fe81a3c`, `f1dde79`.
+- **Open doubts (owner):** see "Next action"; T-057 task file; earlier:
+  HANDOFF at `c6dba4b`, `d1c7efe`, `fe81a3c`.
 
-- **Dead ends:** none.
+- **Dead ends:** see T-057's task file (a fake `Date` clock hung the
+  limiter's pacing; the search offset as a position).
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `8600942` (HANDOFF at
-  `e373c2e`); `3a19cc7` changes docs only (pre-commit hooks passed).
+- **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
+  orchestrator on `fdc1057`:
+  - vitest "Test Files 39 passed (39)", "Tests 2565 passed (2565)";
+  - `tools/checks` "Ran 87 tests", OK;
+  - lint, format, typecheck, build and both gitleaks scans passed.
