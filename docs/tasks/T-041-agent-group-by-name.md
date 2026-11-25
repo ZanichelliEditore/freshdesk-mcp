@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-065; OD-4 (answered 2026-11-24)
 - **Created:** 2026-11-25
 
@@ -39,18 +39,33 @@ No split point.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `2ccf988`: agent and group join priority and source in `idValue`
+  (`src/schema/input.ts`); the fixture's synthetic name → id choices
+  (`test/fixtures/schema.ts`); header and `docs/architecture/overview.md`.
+- `b80b69a`: review fixes. A truncated agents or groups list refuses a
+  name as `incomplete_list`; an exact name refused when the list holds
+  another id folding alike; stale `src/tools/ticket-query.ts` comment.
+- Tests: `test/schema/input.test.ts` "ticketInput: agent and group" (exact,
+  folded, id, unknown name or id, non-number id, shared name by fold and by
+  list for both fields, truncated list for both, clipping, no choices,
+  `product` still `unsupported_field`), and "ticketInput: allow sets"
+  "hand_off_draft: takes agent and group by name, built as their ids".
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The list check assumes `/ticket_fields` agent and group choice keys fold
+  equal to `/agents` `contact.name` and `/groups` `name`. Not measured; if
+  they differ, two agents of one name go unseen (`docs/improvements.md`,
+  `b80b69a` entry). A comparison on the account (owner) settles it.
+- An agent or group with no choices now takes no id (before: passed
+  through). OD-4 says the account has choices for both.
+- `incomplete_list` is a new per-field code in `ticketInput`; SPEC §7.3
+  names no code list.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
