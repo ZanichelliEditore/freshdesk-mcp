@@ -5,8 +5,15 @@
 "none".*
 
 - **Written:** `2026-11-25T14:46:31+01:00`
-- **Describes commit:** filled in the stamp commit right after it.
-  **CI:** filled in the stamp commit.
+- **Describes commit:** `8f0569f`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the CI fix after the handoff commit
+  `2ef129d`). **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45627751721
+  (workflow `quality`, ran on `8f0569f`: `quality (22.19)`, `quality (24)`,
+  `checks` all success). Red before it on `2ef129d`:
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45627169277
+  (`UnicodeDecodeError`, fixed by `8f0569f`). This file's hash and CI line
+  arrive in the commit right after it.
 
 - **Current task:** T-062 (the Makefile asks for GNU Make 4 and says how
   to get it) `done (2026-11-25)`. Work `37aa821`, handoff `2ef129d` (CI
