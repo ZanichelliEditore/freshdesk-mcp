@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** todo (2026-11-25)
+- **Status:** doing (2026-11-25)
 - **Depends on:** T-060
 - **Created:** 2026-11-25
 
@@ -29,13 +29,16 @@ gets the version npm serves now and not npm's cached metadata (owner,
   ` --prefer-online`, or any `"args"` array starting with `"-y"` lacks
   `"--prefer-online"` right after it. `"command": "npx"` lines carry no
   flag by design: the `"args"` rule covers them.
-- If the owner removes the "Not yet published" block first, its line
-  leaves this list.
+- **Scope addition (orchestrator, under the owner's delegation,
+  2026-11-25):** remove the README's "Not yet published" block, stale since
+  0.1.0 and 0.2.0 are on npm (`npm view @zanichelli/freshdesk-mcp versions`,
+  2026-11-25). Its "replace … with" sentence leaves with it. No test
+  asserted the block; a new case in `test/package.test.ts` checks it is gone.
 
 ## Out of scope
-- Removing or rewriting the "Not yet published" block (stale since 0.1.0
-  is on npm); only its snippet text changes here. Raised to the owner
-  (planning session, 2026-11-25).
+- Rewriting the "Not yet published" block: it is removed instead (scope
+  addition above, which settles the doubt raised by the planning session,
+  2026-11-25).
 - A release; RFC texts (`docs/rfc/active/`) that quote the old command.
 
 ## Spec sections to read

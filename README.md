@@ -11,26 +11,14 @@ sees, and nothing more.
 Requires Node.js 22.19 or later.
 
 ```bash
-npx -y @zanichelli/freshdesk-mcp
+npx -y --prefer-online @zanichelli/freshdesk-mcp
 ```
 
 The process holds your API key: pin a version you have chosen
-(`npx -y @zanichelli/freshdesk-mcp@<version>`) rather than run whatever is
+(`npx -y --prefer-online @zanichelli/freshdesk-mcp@<version>`) rather than run whatever is
 latest.
 
 **Version policy:** 0.x until milestone M4, then 1.0.0.
-
-> **Not yet published.** `@zanichelli/freshdesk-mcp` is not on npm yet. Until it is, run the
-> server from a clone:
->
-> ```bash
-> git clone <this repository> freshdesk-mcp
-> cd freshdesk-mcp
-> npm ci && npm run build
-> ```
->
-> and, in the client configurations below, replace `npx -y @zanichelli/freshdesk-mcp` with
-> `node /absolute/path/to/freshdesk-mcp/dist/cli.js`.
 
 The server takes two arguments: `--export-dir <dir>` (or `--export-dir=<dir>`),
 the directory `export_tickets` writes to (see [Exports](#exports)), and
@@ -48,7 +36,7 @@ A client passes `args` to the server as they are, with no shell in between:
 claude mcp add freshdesk \
   -e FRESHDESK_DOMAIN=example.freshdesk.com \
   -e FRESHDESK_API_KEY="$FRESHDESK_API_KEY" \
-  -- npx -y @zanichelli/freshdesk-mcp --export-dir /absolute/path/to/exports
+  -- npx -y --prefer-online @zanichelli/freshdesk-mcp --export-dir /absolute/path/to/exports
 ```
 
 Or in a project's `.mcp.json` (keep the key out of version control):
@@ -58,7 +46,7 @@ Or in a project's `.mcp.json` (keep the key out of version control):
   "mcpServers": {
     "freshdesk": {
       "command": "npx",
-      "args": ["-y", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
+      "args": ["-y", "--prefer-online", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
       "env": {
         "FRESHDESK_DOMAIN": "example.freshdesk.com",
         "FRESHDESK_API_KEY": "${FRESHDESK_API_KEY}"
@@ -78,7 +66,7 @@ share or commit it.
   "mcpServers": {
     "freshdesk": {
       "command": "npx",
-      "args": ["-y", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
+      "args": ["-y", "--prefer-online", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
       "env": {
         "FRESHDESK_DOMAIN": "example.freshdesk.com",
         "FRESHDESK_API_KEY": "your-api-key",

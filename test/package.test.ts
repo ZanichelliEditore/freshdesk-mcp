@@ -53,6 +53,18 @@ const SPEC_CORE = [
   "export_tickets",
 ];
 
+/**
+ * T-061: every `npx -y` (shell form) and every `"args"` array starting with
+ * `"-y"` must go on with `--prefer-online`; returns the offenders.
+ */
+function readmeNpxWithoutPreferOnline(text: string): string[] {
+  const shell = [...text.matchAll(/npx -y(?! --prefer-online)\S*.*/g)].map((m) => m[0]);
+  const args = [...text.matchAll(/"args":\s*\[\s*"-y"(?!\s*,\s*"--prefer-online")[^\]]*\]/g)].map(
+    (m) => m[0],
+  );
+  return [...shell, ...args];
+}
+
 /** What the tarball may hold besides dist/. */
 const TOP_LEVEL = new Set(["README.md", "LICENSE", "package.json"]);
 const EXAMPLE = "examples/team-config.example.json";
@@ -189,8 +201,26 @@ describe("README.md", () => {
     expect(readme).toContain("Exported files hold customer text unwrapped.");
   });
 
-  it("runs the package with npx", () => {
-    expect(readme).toContain(`npx -y ${pkg.name}`);
+  it("runs the package with npx, latest and pinned, with --prefer-online (T-061)", () => {
+    expect(readme).toContain(`npx -y --prefer-online ${pkg.name}`);
+    expect(readme).toContain(`npx -y --prefer-online ${pkg.name}@<version>`);
+  });
+
+  // T-061: npm's cached metadata must not decide the version npx runs.
+  it("puts --prefer-online right after -y in every npx command and args array (T-061)", () => {
+    expect(readmeNpxWithoutPreferOnline(readme)).toEqual([]);
+  });
+
+  it("the --prefer-online check flags a shell npx and an args array without it", () => {
+    expect(readmeNpxWithoutPreferOnline('npx -y pkg\n"args": ["-y", "pkg"]')).toHaveLength(2);
+    expect(readmeNpxWithoutPreferOnline("npx -y --prefer-online pkg@1.0.0")).toEqual([]);
+    expect(readmeNpxWithoutPreferOnline('"args": [\n  "-y",\n  "--prefer-online", "pkg"]')).toEqual(
+      [],
+    );
+  });
+
+  it("no longer says the package is not published (T-061)", () => {
+    expect(readme).not.toContain("Not yet published");
   });
 
   // T-060: the export directory as a command-line argument in each client's snippet.
@@ -201,11 +231,13 @@ describe("README.md", () => {
       const end = readme.indexOf("\n## ", start);
       return readme.slice(start, end === -1 ? undefined : end);
     };
-    const ARGS = `"args": ["-y", "${pkg.name}", "--export-dir", "/absolute/path/to/exports"]`;
+    const ARGS = `"args": ["-y", "--prefer-online", "${pkg.name}", "--export-dir", "/absolute/path/to/exports"]`;
 
     it("Claude Code: claude mcp add and .mcp.json", () => {
       const code = section("Claude Code");
-      expect(code).toContain(`-- npx -y ${pkg.name} --export-dir /absolute/path/to/exports`);
+      expect(code).toContain(
+        `-- npx -y --prefer-online ${pkg.name} --export-dir /absolute/path/to/exports`,
+      );
       expect(code).toContain(ARGS);
     });
 
