@@ -20,8 +20,15 @@
   "regression: a tie of 3 in one second, ids ascending, across pages 1
   and 2" (shown failing on `dd33b08`'s `src/`). CHANGELOG "Unreleased".
 
-- **Next action:** the orchestrator releases 0.3.1 (owner
-  pre-authorised; not a row). Then `/decompose M2`, which awaits the
+- **Released 0.3.1** (2026-11-25, orchestrator, owner pre-authorised):
+  `b005bd0` bumps the version and dates CHANGELOG; `quality` green
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45650992436);
+  tag `v0.3.1` on `b005bd0`; `release` green, publish success
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45651149214);
+  npm `latest` = `0.3.1`, `npx -y --prefer-online
+  @zanichelli/freshdesk-mcp@0.3.1 --version` printed `0.3.1`.
+
+- **Next action:** `/decompose M2`, which awaits the
   owner's go: it must reword SPEC §8.2/§9/C4's `add_note` rows and §8.2's
   `update_ticket` purpose (`docs/improvements.md` entries `84dd7aa`), and
   size T-064 and T-065.
