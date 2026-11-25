@@ -5,9 +5,14 @@
 "none".*
 
 - **Written:** `2026-11-25T14:07:49+01:00`
-- **Describes commit:** (filled by the stamp commit) **CI:** (filled by the
-  stamp commit). This file's hash and CI line arrive in the commit right
-  after it.
+- **Describes commit:** `917a5b4`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`: the merge of `origin/main` (owner's
+  merge of Dependabot PR #1, `08e739a`, `quality.yml` action bumps, pushed
+  during the session) into the handoff commit `a8e2f35`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45620735409
+  (workflow `quality`, ran on `917a5b4`: `quality (22.19)`, `quality (24)`,
+  `checks` all success). This file's hash and CI line arrive in the commit
+  right after it.
 
 - **Current task:** T-049 (maintainer's check of a commit range for
   account values) `done (2026-11-25)`. Commits `5005334` (R1), `ea88db6`
