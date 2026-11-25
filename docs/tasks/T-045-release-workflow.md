@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-25)
 - **Depends on:** T-038, T-048
 - **Created:** 2026-11-23
 - **Gates:** Before the first tag the owner does steps 0-2 of RFC
