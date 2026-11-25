@@ -247,6 +247,122 @@ describe("ticketInput: values", () => {
   });
 });
 
+/** The schema with `field`'s choices replaced, and its agents or groups list. */
+function withNames(
+  field: "agent" | "group",
+  choices: Record<string, number>,
+  names: [number, string][] = [],
+): Schema {
+  const s = schema();
+  s.fields.find((f) => f.name === field)!.choices = choices;
+  const list = { names: new Map(names), truncated: false };
+  return field === "agent" ? { ...s, agents: list } : { ...s, groups: list };
+}
+
+describe("ticketInput: agent and group", () => {
+  it("turns an exact agent or group name into its id", () => {
+    expect(body({ Agent: "Juniper Vantablack", Group: "Spanner Desk" })).toEqual({
+      responder_id: 502,
+      group_id: 703,
+    });
+  });
+
+  it("matches a name folded: any case, trimmed, any Unicode form", () => {
+    expect(body({ Agent: "  juniper VANTABLACK ", Group: "sprocket desk" })).toEqual({
+      responder_id: 502,
+      group_id: 701,
+    });
+    const s = withNames("agent", { ["Ren" + String.fromCharCode(0xe9)]: 531 });
+    expect(body({ Agent: "REN" + "E" + String.fromCharCode(0x301) }, s)).toEqual({
+      responder_id: 531,
+    });
+  });
+
+  it("accepts an id among the choices' values", () => {
+    expect(body({ Agent: 501, Group: 702 })).toEqual({ responder_id: 501, group_id: 702 });
+  });
+
+  it("refuses an unknown name or id, listing the valid names", () => {
+    for (const [input, names] of [
+      [{ Agent: "Nobody" }, '"Quill Ottersby", "Juniper Vantablack", "Ferro Lumen"'],
+      [{ Agent: 504 }, '"Quill Ottersby", "Juniper Vantablack", "Ferro Lumen"'],
+      [{ Group: "Nowhere Desk" }, '"Sprocket Desk", "Widget Desk", "Spanner Desk"'],
+      [{ Group: 704 }, '"Sprocket Desk", "Widget Desk", "Spanner Desk"'],
+    ] as const) {
+      const [error] = errors(input);
+      expect(error).toMatchObject({ field: Object.keys(input)[0], code: "invalid_choice" });
+      expect(error!.message).toContain(names);
+    }
+  });
+
+  it("refuses an id given as a string or a value of another kind", () => {
+    for (const value of ["502", true, { id: 502 }, [502]]) {
+      expect(errors({ Agent: value })[0]).toMatchObject({ code: "invalid_choice" });
+    }
+  });
+
+  it("refuses a name that folds like two choices, none exact, listing both ids", () => {
+    const s = withNames("agent", { "Ann Lee": 511, "ann lee": 512 });
+    const [error] = errors({ Agent: "ANN LEE" }, s);
+    expect(error).toMatchObject({ field: "Agent", code: "ambiguous_choice" });
+    expect(error!.message).toContain("511");
+    expect(error!.message).toContain("512");
+    // An exact name still picks one, and so does each id.
+    expect(body({ Agent: "ann lee" }, s)).toEqual({ responder_id: 512 });
+    expect(body({ Agent: 511 }, s)).toEqual({ responder_id: 511 });
+  });
+
+  it.each(["agent", "group"] as const)(
+    "refuses a %s name two ids share in its list, though the choices keep one",
+    (field) => {
+      // JSON keeps the last of two equal keys: the choices hold one id, the
+      // agents or groups list both.
+      const s = withNames(field, { "Sam Roe": 522 }, [
+        [521, "Sam Roe"],
+        [522, "sam roe "],
+        [523, "Other"],
+      ]);
+      const key = field === "agent" ? "Agent" : "Group";
+      const [error] = errors({ [key]: "Sam Roe" }, s);
+      expect(error).toMatchObject({ field: key, code: "ambiguous_choice" });
+      expect(error!.message).toContain("521");
+      expect(error!.message).toContain("522");
+      expect(error!.message).not.toContain("523");
+      expect(body({ [key]: 522 }, s)).toEqual({
+        [field === "agent" ? "responder_id" : "group_id"]: 522,
+      });
+    },
+  );
+
+  it("clips a long list of valid names", () => {
+    const many = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`Agent ${i}`, i + 1]));
+    const [error] = errors({ Agent: "Nobody" }, withNames("agent", many));
+    expect(error!.message.length).toBeLessThanOrEqual(500);
+    expect(error!.message).toMatch(/… and \d+ more\.$/);
+  });
+
+  it("refuses every agent when the choices are absent: an id is not passed through", () => {
+    const s = schema();
+    s.fields.find((f) => f.name === "agent")!.choices = null;
+    const [error] = errors({ Agent: 502 }, s);
+    expect(error).toMatchObject({ code: "invalid_choice" });
+    expect(error!.message).toContain("(none)");
+    // null still clears it.
+    expect(body({ Agent: null }, s)).toEqual({ responder_id: null });
+  });
+
+  it("still refuses product: with a name → id record its choices are not checked", () => {
+    const s = schema();
+    s.fields.find((f) => f.name === "product")!.choices = { Gizmos: 7001 };
+    for (const value of ["Gizmos", 7001]) {
+      expect(errors({ Catalogue: value }, s)[0]).toMatchObject({
+        field: "Catalogue",
+        code: "unsupported_field",
+      });
+    }
+  });
+});
+
 describe("ticketInput: nested fields", () => {
   it("resolves a 3-level path to the three API fields", () => {
     expect(body({ Product: "Gadgets > Sprockets > Red sprocket" })).toEqual({
@@ -671,6 +787,16 @@ describe("ticketInput: allow sets", () => {
         cf_later: "x",
       },
     });
+  });
+
+  it("hand_off_draft: takes agent and group by name, built as their ids", () => {
+    expect(
+      body(
+        { Agent: "ferro lumen", Group: "Widget Desk" },
+        schema(NEVER_FIELDS),
+        allowSet("hand_off_draft"),
+      ),
+    ).toEqual({ responder_id: 503, group_id: 702 });
   });
 
   it("checks the set before the value: a refused field's choices are not listed", () => {

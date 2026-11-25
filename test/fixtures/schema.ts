@@ -14,8 +14,23 @@ export const schemaFieldsPayload = [
     default: true,
     choices: { Email: 1, Portal: 2, Phone: 3 },
   },
-  { id: 1007, name: "agent", label: "Agent", type: "default_agent", default: true },
-  { id: 1008, name: "group", label: "Group", type: "default_group", default: true },
+  {
+    id: 1007,
+    name: "agent",
+    label: "Agent",
+    type: "default_agent",
+    default: true,
+    // name → id, as /ticket_fields sends them; the same agents as agents-groups.ts.
+    choices: { "Quill Ottersby": 501, "Juniper Vantablack": 502, "Ferro Lumen": 503 },
+  },
+  {
+    id: 1008,
+    name: "group",
+    label: "Group",
+    type: "default_group",
+    default: true,
+    choices: { "Sprocket Desk": 701, "Widget Desk": 702, "Spanner Desk": 703 },
+  },
   {
     id: 1009,
     name: "ticket_type",

@@ -16,17 +16,24 @@
 //     choices folding alike and none exact is refused.
 //       dropdown, ticket type   a choice from the list
 //       status                  its agent name, or an id it has → the id
-//       priority, source        a name, or an id among them → the id
+//       priority, source,       a name, or an id among them → the id
+//       agent, group
 //       nested field            "A > B > C": each level among the choices
 //                               under the one before; a shorter path sends
 //                               `null` for the levels after it, a longer one
 //                               is refused
 //       any other type          with a non-empty list of choices, one of
-//                               them; with choices of another shape,
-//                               refused; with none, passed through unchanged
-//                               (agent, group and requester stay ids)
-//     A status, priority or source name two ids share is refused; a status
-//     key that is not a whole number is not offered.
+//                               them; with choices of another shape (a
+//                               product's name → id record), refused; with
+//                               none, passed through unchanged (requester
+//                               stays an id)
+//     A name two ids share is refused, listing the ids; so is a name that
+//     folds like two, none exact. An agent or group name is also looked up,
+//     folded, in the schema's agents or groups list: JSON keeps one of two
+//     equal keys, so the choices alone cannot show two agents of one name (a
+//     truncated list can still miss one). An agent or group with no choices
+//     cannot be set, only cleared. A status key that is not a whole number
+//     is not offered.
 //   - Every call takes an allow set (`FieldSet`), required, with no default:
 //     the write entry point's set from the core's table (RFC
 //     2026-11-25-write-safety-core, OD-2). A default field is writable when
@@ -53,7 +60,7 @@ import {
   MAX_FIELD_TEXT,
 } from "../client/errors.js";
 import type { TicketField } from "../client/resources/ticket-fields.js";
-import type { Schema } from "./index.js";
+import type { NameMap, Schema } from "./index.js";
 import { fold, ticketKey } from "./output.js";
 
 type Raw = Record<string, unknown>;
@@ -173,24 +180,35 @@ function namedIds(field: TicketField): [string, number][] {
   return pairs;
 }
 
-function idValue(field: TicketField, value: unknown): number | Refusal {
+/**
+ * The id `value` names: an id among the pairs, or a name (exact first, else
+ * folded) only one id has. `list` is the agents or groups list, checked for
+ * other ids with the name.
+ */
+function idValue(field: TicketField, value: unknown, list: NameMap | null): number | Refusal {
   const pairs = namedIds(field);
   if (typeof value === "number" && pairs.some(([, id]) => id === value)) return value;
   const where = `field ${field.label}`;
-  const name = pick(
-    pairs.map(([label]) => label),
-    value,
-    where,
-  );
-  if (name instanceof Refusal) return name;
-  const ids = pairs.filter(([label]) => label === name).map(([, id]) => id);
-  if (ids.length > 1) {
+  const ids = new Set<number>();
+  if (typeof value === "string") {
+    const exact = pairs.filter(([label]) => label === value);
+    const named = exact.length > 0 ? exact : pairs.filter(([label]) => fold(label) === fold(value));
+    for (const [, id] of named) ids.add(id);
+    if (ids.size > 0 && list) {
+      for (const [id, label] of list.names) if (fold(label) === fold(value)) ids.add(id);
+    }
+  }
+  if (ids.size === 1) return [...ids][0]!;
+  if (ids.size > 1) {
     return new Refusal(
       "ambiguous_choice",
-      `${quote(name)} names several ids for ${where} (${ids.join(", ")}): give the id.`,
+      `${quote(value)} names several ids for ${where} (${[...ids].join(", ")}): give the id.`,
     );
   }
-  return ids[0]!;
+  return new Refusal(
+    "invalid_choice",
+    `${quote(value)} is not a valid choice for ${where}. Valid choices: ${listed(pairs.map(([label]) => label))}.`,
+  );
 }
 
 function levelFields(field: TicketField): { name: string; label: string }[] {
@@ -235,14 +253,26 @@ function nestedValues(field: TicketField, value: unknown): [string, unknown][] |
 }
 
 /** The field's value or values as `[API name, value]`, or why it is refused. */
-function fieldValues(field: TicketField, value: unknown): [string, unknown][] | Refusal {
+function fieldValues(
+  schema: Schema,
+  field: TicketField,
+  value: unknown,
+): [string, unknown][] | Refusal {
   if (field.type === "nested_field") return nestedValues(field, value);
   if (value === null) return [[field.name, null]];
   switch (field.type) {
     case "default_status":
     case "default_priority":
-    case "default_source": {
-      const id = idValue(field, value);
+    case "default_source":
+    case "default_agent":
+    case "default_group": {
+      const list =
+        field.type === "default_agent"
+          ? schema.agents
+          : field.type === "default_group"
+            ? schema.groups
+            : null;
+      const id = idValue(field, value, list);
       return id instanceof Refusal ? id : [[field.name, id]];
     }
     case "custom_dropdown":
@@ -307,7 +337,7 @@ export function ticketInput(schema: Schema, input: Raw, allow: FieldSet): InputR
         : (writable(field, allow) ??
           (seen.has(field.name)
             ? new Refusal("duplicate_field", `Field ${field.label} is given more than once.`)
-            : fieldValues(field, value)));
+            : fieldValues(schema, field, value)));
     const isDefault = !(field instanceof Refusal) && field.default;
     const target = isDefault ? body : custom;
     if (
