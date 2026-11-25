@@ -295,9 +295,19 @@ T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
   server sends no progress notification, so a
   longer export would run on with the caller already gone, its file
   written and its path never seen. So one call exports about 4,000 tickets
-  at the default pacing; a larger period is exported in several calls with
-  shorter periods, each its own file, and a cut one says `truncated: true`.
-  Resumable or background export stays out of scope (T-037).
+  at the default pacing; a larger period is exported in several calls,
+  each its own file: with shorter periods, or (T-057, 2026-11-25) the same
+  period paged with `next_cursor`. Background export stays out of scope.
+
+T-057's choices (2026-11-25): a page's position on search is the index of
+the next result in Freshdesk's order (the search order between two calls is
+not measured); on the list scan it is the UTC second of the latest ticket
+written and how many created in that second were written, and the next call
+reads the list from `updated_since` one second before that second (every
+ticket created then or later was updated then or later), page 1 again, so
+the 300-page cap counts anew for each call, and skips what it already wrote.
+A ticket updated between calls that was created before that second does not
+shift the position, as a page or offset would.
 - A read cut by the budget, the time limit, page 300, a later request the
   limiter refuses or a later request aborted at the call's deadline
   (`network` once it is reached: `isCut`, which `count_tickets` shares since

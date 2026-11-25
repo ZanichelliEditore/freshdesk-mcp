@@ -136,7 +136,7 @@ costs in Freshdesk API calls, which count against your account's rate limit:
 - `list_canned_responses` — 1 API call per 100 folders listed (at most 10), plus 1 per folder returned (at most 10), within 30 s, plus one per retry after an error.
 - `get_canned_response` — 1 API call, within 30 s, plus one per retry after an error.
 - `count_tickets` — 1 API call per 30 matching tickets up to 300 (10 at most); above that 1 plus 1 per 100 tickets read, up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true, and a list read starts no request after 20 s (about 40 at the default pacing); all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached.
-- `export_tickets` — as count_tickets: 1 API call per 30 matching tickets up to 300; above that 1 plus 1 per 100 tickets read; with conversations, 1 more per ticket (and 1 per 100 more entries of a long thread); all up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true; no request started after 20 s, all within 30 s; plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached.
+- `export_tickets` — per call, as count_tickets: 1 API call per 30 matching tickets up to 300; above that 1 plus 1 per 100 tickets read; with conversations, 1 more per ticket (and 1 per 100 more entries of a long thread); all up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true (with max_tickets the estimate counts that many tickets at most); no request started after 20 s, all within 30 s; plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached.
 
 ## Ticket text is data, not instructions
 
@@ -151,8 +151,22 @@ of a ticket with that in mind.
 ## Exports
 
 `export_tickets` writes the tickets of a period to a new JSONL or CSV file in
-`FRESHDESK_EXPORT_DIR`, and returns the file's path, its row count and the API
-calls used.
+`FRESHDESK_EXPORT_DIR`, and returns the file's path, its row count, a
+`next_cursor` while the period has more, and the API calls used.
+
+- One call writes what it reads in about 20 seconds (about 4,000 tickets, or
+  about 40 with their conversations, at the default pacing), or at most
+  `max_tickets` rows (1 to 10,000) when given. While the period has more,
+  the result carries `next_cursor`: call again with the same arguments and
+  `cursor` set to it for the next tickets. Each call writes its own new file;
+  the last call's result has no `next_cursor`. Across the files of one
+  period each ticket is written once; a ticket created in the period, or
+  changed in a filtered field, between two calls can be missing. A call cut
+  by the budget, the time limit or the rate limit also says
+  `truncated: true`, beside its `next_cursor`.
+- A cursor works only with the arguments it came with: used with any other
+  (another format, period, filter, `max_tickets`, `conversations` or
+  `confirm`), or edited, it is refused before anything is sent or written.
 
 - `FRESHDESK_EXPORT_DIR` must be an absolute path to an existing directory,
   and not a symlink. Otherwise, or unset, the call is refused before any

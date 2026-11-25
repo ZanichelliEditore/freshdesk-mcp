@@ -67,7 +67,11 @@
 //     once, the cuts) is `readPeriod`, with `periodQuery` for the query,
 //     exported for `export_tickets` (T-037): it hands each ticket to the
 //     caller's `take`, which may stop the read (a cut) or fail it, and counts
-//     the requests on the caller's `Meter`.
+//     the requests on the caller's `Meter`. For `export_tickets`' pages
+//     (T-057) it also takes a `resume` position and a `limit` (the estimate
+//     counts no more tickets than it), and gives `next`, where a later read
+//     resumes, whenever it stopped before the period's end (export-tickets.ts
+//     header); `count_tickets` passes neither and ignores `next`.
 
 import { z } from "zod";
 import type { FieldError, FreshdeskError } from "../../../client/errors.js";
@@ -174,7 +178,26 @@ export interface PeriodRead {
   /** One more call per matching ticket in the estimate (export's conversations). */
   conversations: boolean;
   take: Take;
+  /** Where the read starts (export_tickets' cursor, T-057); the period's start when absent. */
+  resume?: Resume;
+  /** The tickets the caller takes at most (export_tickets' max_tickets): the estimate counts no more. */
+  limit?: number;
 }
+
+/**
+ * A position in a period's read (export_tickets' cursor, T-057): its start;
+ * on search, the index of the next result in Freshdesk's order; on the list
+ * scan, the UTC second of the latest ticket taken (epoch seconds) and how
+ * many tickets created in that second were taken.
+ */
+export type Resume =
+  | { path: "start" }
+  | { path: "search"; offset: number }
+  | { path: "list"; second: number; ties: number };
+
+/** A read's outcome: `next`, where to resume, present exactly when it stopped before the period's end. */
+export type PeriodResult =
+  { ok: true; truncated: boolean; next?: Resume } | { ok: false; error: FreshdeskError };
 
 function refused(problem: FieldError): { ok: false; error: FreshdeskError } {
   return {
@@ -294,6 +317,18 @@ function createdDay(ticket: Ticket | undefined): string | undefined {
   return Number.isNaN(time) ? undefined : new Date(time).toISOString().slice(0, 10);
 }
 
+/** The second (epoch, UTC) a ticket was created in, or `undefined` when unreadable. */
+function createdSecond(ticket: Ticket): number | undefined {
+  const value: unknown = ticket.created_at;
+  const time = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(time) ? undefined : Math.floor(time / 1000);
+}
+
+/** An epoch second as the list's `updated_since`: `2026-01-02T03:04:05Z`. */
+function instantOf(second: number): string {
+  return new Date(second * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 /**
  * A later request that cuts the source rather than failing the call: one the
  * limiter refused before sending (`rate_limited`, no HTTP status), or one
@@ -337,28 +372,19 @@ export function periodQuery(
 /**
  * Every ticket of the period and filters, each id once, handed to `take`:
  * search when its total is SEARCH_CAP or less, else the ordered list scan
- * (this file's header). Counts what it sends on `meter`; `truncated` when
- * the read was cut.
+ * (this file's header), from `resume` when given. Counts what it sends on
+ * `meter`; `truncated` when the read was cut, or `take` stopped it; `next`
+ * where a later read resumes, whenever it stopped before the period's end.
  */
 export async function readPeriod(
   context: AppContext,
   schema: Schema,
   args: PeriodArgs,
   query: SearchQuery,
-  { started, deadline, meter, conversations, take }: PeriodRead,
-): Promise<{ ok: true; truncated: boolean } | { ok: false; error: FreshdeskError }> {
+  { started, deadline, meter, conversations, take, resume, limit }: PeriodRead,
+): Promise<PeriodResult> {
+  const from = resume ?? { path: "start" };
   const seen = new Set<number>();
-  /** `undefined`: read on; `false`: stopped by `take`; an error fails the call. */
-  const hand = async (tickets: readonly Ticket[]): Promise<false | FreshdeskError | undefined> => {
-    for (const ticket of tickets) {
-      // A ticket a later page repeats (it moved during the call) is taken once.
-      if (seen.has(ticket.id)) continue;
-      seen.add(ticket.id);
-      const taken = await take(ticket);
-      if (taken !== true) return taken;
-    }
-    return undefined;
-  };
   const spent = (error: FreshdeskError) => ({
     ok: false as const,
     error: {
@@ -366,57 +392,73 @@ export async function readPeriod(
       message: `${error.message} This call has already used ${calls(meter.used)} to learn the total.`,
     },
   });
-  let truncated = false;
-  const stop = (handed: false | FreshdeskError | undefined) => {
-    if (handed === undefined) return undefined;
-    if (handed === false) {
-      truncated = true;
-      return { ok: true as const, truncated };
-    }
-    return { ok: false as const, error: handed };
-  };
+  /** The read stopped before the period's end: `at` is where it resumes. */
+  const cut = (at: Resume) => ({ ok: true as const, truncated: true, next: at });
 
-  const probe = await searchTickets(context.http, query.query, 1, deadline, "expensive");
+  // A search position starts at the page that holds it: that page is the probe.
+  const offset = from.path === "search" ? from.offset : 0;
+  const firstPage = Math.floor(offset / SEARCH_PAGE_SIZE) + 1;
+  const probe = await searchTickets(context.http, query.query, firstPage, deadline, "expensive");
   if (!probe.ok) return probe;
   meter.used += probe.attempts;
   meter.requests += probe.attempts;
 
-  if (probe.total <= SEARCH_CAP) {
+  if (from.path === "search" && probe.total > SEARCH_CAP) {
+    return spent({
+      code: "validation",
+      http_status: null,
+      message: `The period now matches more than ${SEARCH_CAP} tickets, so the cursor's position in Freshdesk's search no longer holds: nothing was kept. Call again without a cursor to start over.`,
+      retryable: false,
+    });
+  }
+
+  if (from.path === "search" || (from.path === "start" && probe.total <= SEARCH_CAP)) {
+    // The results this call reads at most: the caller's limit from the offset.
+    const end = Math.min(probe.total, limit === undefined ? probe.total : offset + limit);
     const estimate =
       estimateCalls({
-        tickets: Math.max(0, probe.total - SEARCH_PAGE_SIZE),
+        tickets: Math.max(0, end - firstPage * SEARCH_PAGE_SIZE),
         pageSize: SEARCH_PAGE_SIZE,
         conversations: false,
         probe: 1,
-      }) + (conversations ? probe.total : 0);
+      }) + (conversations ? Math.max(0, end - offset) : 0);
     const refusal = checkBudget(context, estimate, args.confirm);
     if (refusal) return spent(refusal);
-    const first = stop(await hand(probe.results.filter((ticket) => matchesLocal(query, ticket))));
-    if (first) return first;
+    const at = (index: number): Resume =>
+      index === 0 ? { path: "start" } : { path: "search", offset: index };
     const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
-    for (let page = 2; page <= pages; page++) {
-      if (Date.now() - started >= SCAN_START_MS) {
-        truncated = true;
-        break;
+    let results = probe.results;
+    for (let page = firstPage; ; page++) {
+      const base = (page - 1) * SEARCH_PAGE_SIZE;
+      if (page > firstPage) {
+        if (page > pages) break;
+        if (Date.now() - started >= SCAN_START_MS) return cut(at(base));
+        const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
+        if (!found.ok) {
+          if (!isCut(found.error, deadline)) return found;
+          meter.used += found.attempts ?? 0;
+          meter.requests += found.attempts ?? 0;
+          return cut(at(base));
+        }
+        meter.used += found.attempts;
+        meter.requests += found.attempts;
+        results = found.results;
       }
-      const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
-      if (!found.ok) {
-        if (!isCut(found.error, deadline)) return found;
-        meter.used += found.attempts ?? 0;
-        meter.requests += found.attempts ?? 0;
-        truncated = true;
-        break;
+      for (const [i, ticket] of results.entries()) {
+        if (base + i < offset || !matchesLocal(query, ticket)) continue;
+        // A ticket a later page repeats (it moved during the call) is taken once.
+        if (seen.has(ticket.id)) continue;
+        seen.add(ticket.id);
+        const taken = await take(ticket);
+        if (taken === false) return cut(at(base + i));
+        if (taken !== true) return { ok: false, error: taken };
       }
-      meter.used += found.attempts;
-      meter.requests += found.attempts;
-      const next = stop(await hand(found.results.filter((ticket) => matchesLocal(query, ticket))));
-      if (next) return next;
     }
-    return { ok: true, truncated };
+    return { ok: true, truncated: false };
   }
 
   const estimate = estimateCalls({
-    tickets: probe.total,
+    tickets: limit === undefined ? probe.total : Math.min(probe.total, limit),
     pageSize: LIST_PAGE_SIZE,
     conversations,
     probe: 1,
@@ -425,19 +467,25 @@ export async function readPeriod(
   if (refusal) return spent(refusal);
   const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
   const matches = fieldMatcher(schema, args);
-  const { from, to } = args.created_between;
+  const { to } = args.created_between;
+  /** Taken before this read: tickets created before `skip.second`, and the first `skip.ties` created in it. */
+  const skip = from.path === "list" ? from : undefined;
+  let skipped = 0;
+  /** The latest second taken and how many tickets created in it were taken. */
+  let last = skip === undefined ? undefined : { second: skip.second, ties: skip.ties };
+  const here = (): Resume => (last === undefined ? { path: "start" } : { path: "list", ...last });
+  // Every ticket created in or after a second was updated in or after it: the list from just before it holds them all.
+  const since =
+    skip === undefined ? `${args.created_between.from}T00:00:00Z` : instantOf(skip.second - 1);
   for (let page = 1; ; page++) {
     // Ticket requests, retries included, at the budget: no further page.
-    if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) {
-      truncated = true;
-      break;
-    }
+    if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return cut(here());
     const listed = await listTickets(
       context.http,
       {
         per_page: LIST_PAGE_SIZE,
         page,
-        updated_since: `${from}T00:00:00Z`,
+        updated_since: since,
         order_by: "created_at",
         order_type: "asc",
       },
@@ -448,24 +496,40 @@ export async function readPeriod(
       if (!isCut(listed.error, deadline)) return listed;
       meter.used += listed.attempts ?? 0;
       meter.requests += listed.attempts ?? 0;
-      truncated = true;
-      break;
+      return cut(here());
     }
     meter.used += listed.attempts;
     meter.requests += listed.attempts;
-    const next = stop(
-      await hand(listed.tickets.filter((ticket) => matches(ticket) && matchesLocal(query, ticket))),
-    );
-    if (next) return next;
-    const last = createdDay(listed.tickets.at(-1));
-    if (last !== undefined && last > to) break;
+    for (const ticket of listed.tickets) {
+      if (!matches(ticket) || !matchesLocal(query, ticket)) continue;
+      if (seen.has(ticket.id)) continue;
+      seen.add(ticket.id);
+      // In the period (matchesLocal), so its created_at reads.
+      const second = createdSecond(ticket);
+      if (second === undefined) continue;
+      if (skip !== undefined) {
+        if (second < skip.second) continue;
+        if (second === skip.second && skipped < skip.ties) {
+          skipped += 1;
+          continue;
+        }
+      }
+      const taken = await take(ticket);
+      if (taken === false) return cut(here());
+      if (taken !== true) return { ok: false, error: taken };
+      // Out of order (an earlier second after a later one): the position stays at the later.
+      if (last === undefined || second > last.second) last = { second, ties: 1 };
+      else if (second === last.second) last.ties += 1;
+    }
+    const lastDay = createdDay(listed.tickets.at(-1));
+    if (lastDay !== undefined && lastDay > to) break;
     if (page === MAX_LIST_PAGE) {
-      truncated = listed.has_more || listed.tickets.length === LIST_PAGE_SIZE;
+      if (listed.has_more || listed.tickets.length === LIST_PAGE_SIZE) return cut(here());
       break;
     }
     if (!listed.has_more) break;
   }
-  return { ok: true, truncated };
+  return { ok: true, truncated: false };
 }
 
 export const countTicketsTool: Tool<typeof input> = {
