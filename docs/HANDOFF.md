@@ -4,75 +4,60 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T10:31:58+01:00`
-- **Describes commit:** `aff4666`
-  (`aff4666f8d5d00b27f0734c270f4bf3504450b73`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45586349690
-  (workflow `quality`, ran on `aff4666`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T10:43:51+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-057 `done (2026-11-25)`, `export_tickets` pages
-  (`max_tickets`, cursor, one file per call),
-  `docs/tasks/T-057-export-pages.md` ("Done"). Commits `69d7fc8`
-  (status), `c9f2b3d` (build), `97709eb` (full-round fixes: search cursor
-  by lowest id written, no cursor without progress, search budget check),
-  `ba6ea89` (scoped list A fixes: budget and time checks on step-back
-  pages; id order checked fail-closed), `fdc1057` (done), `c23a682`
-  (deterministic SCAN_START_MS thread test: CI was red on `1afbd08`,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45585485882,
-  quality (24) `expected 2 to be 3`; the fake clock counted real I/O as
-  time, a T-037 test; fixed by faking `Date` only). Built by a
-  builder agent under the orchestrator.
-  - **Measured (orchestrator, real account, GET, 2026-11-25):** search
-    results come back in the same order on repeated calls, sorted by
-    `created_at` and `id` both descending, not by `updated_at` (raw in the
-    gitignored `docs/private/account-facts.md`). Which key is primary is
-    not told apart; a resumed call refuses when ids do not fall strictly.
-  - **Acceptance amended (orchestrator, 2026-11-25):** a call cut before
-    it wrote any row returns `truncated: true` without `next_cursor`
-    (loop safety).
+- **Current task:** T-058 `done (2026-11-25)`, `list_solution_tree`
+  takes an optional `category`,
+  `docs/tasks/T-058-solution-tree-category.md` ("Done"). Commits
+  `c14c8c0` (status), `59dc763` (`getCategory`, the tool's `category`,
+  smoke prefers it), `f0f9869` (review records, done). Built by a builder
+  agent under the orchestrator.
+  - **Real run** (orchestrator, owner's authorisation, GET only,
+    2026-11-25, `make smoke-core` at `59dc763`; raw in the gitignored
+    `docs/private/account-facts.md`): "17 tool lines, 17 pass, 0 pass
+    (empty), 0 not exercised, 0 refused (budget), 0 fail; 102 calls",
+    `smoke core: ok`; `list_solution_tree category: pass, categories 1,
+    folders 11, articles 35, calls 13`.
 
-- **Next action:** the owner (rule 9, below), then the first release.
-  - **The owner:** the scoped round's list A fixes (`ba6ea89`) changed a
-    mechanism again (step-back budget check, id-order check); by rule 9
-    they are not reviewed a third time. Accept, or ask for a review.
-  - **The owner:** list-scan same-second tie exception (past 300
-    matches): keep as documented, or fix at one `GET /tickets/{id}` per
-    resumed call.
-  - **The owner:** release steps of RFC 2026-11-25 (HANDOFF at
-    `c6dba4b`); the orchestrator can do steps 1–2 with `gh` if the owner's
-    account is a repository admin and the owner says go.
-  - Then `/pickup`: **T-058** (solution tree by category).
+- **Next action:** no build task left on the path to the first release.
+  The owner:
+  - **Release, RFC 2026-11-25 steps 0–6** (HANDOFF at `c6dba4b`): steps
+    1–2 (environment `npm`, `v*` tag ruleset, `main` ruleset) can be done
+    by the orchestrator with `gh` if the owner is a repository admin and
+    says go; steps 3–4 and 6 need the owner's npm login; step 5 (tag
+    `v0.1.0`) by the orchestrator on the owner's go.
+  - **T-057 (rule 9):** accept the unreviewed scoped list A fixes
+    (`ba6ea89`), or ask for a review.
+  - **T-057:** list-scan same-second tie exception: keep, or fix at one
+    `GET /tickets/{id}` per resumed call.
+  - Then `/pickup` by PLAN's rule (still `proposed`: T-041, T-052, T-049;
+    M2 gates T-040, T-014).
 
-- **Read before anything else:** T-057's task file "Open doubts"; PLAN row
-  T-058.
+- **Read before anything else:** the RFC's manual steps; T-057's task
+  file "Open doubts".
 
-- **Reviews:**
-  - **Full round** on `57ebfdc..c9f2b3d`, R1 = `c9f2b3d`. The four quotes
-    matched for all three. compliance: Wireframes `none`. security: 1 Low
-    (search path read past the estimate with `max_tickets`), 1 info.
-    code-reviewer: 1 High (search offset cursor: a ticket created between
-    calls shifted offsets, written twice or missed), 1 Medium (a cut with
-    no progress returned the same cursor), 3 Low. Fixed in `97709eb`.
-  - **Scoped round** on `c9f2b3d..97709eb`. The four quotes matched for
-    all three. compliance `none`. List A: security A1 (step-back pages
-    before any budget check), code A1 (id-only boundary assumes id order
-    = `created_at` order). Fixed in `ba6ea89`, not reviewed again (rule
-    9). Lists B parked, entries `c9f2b3d`, `97709eb`.
+- **Reviews:** full round on `90ce4a8..59dc763`, R1 = `59dc763`. The four
+  quotes matched for all three. compliance: Wireframes `none`. security:
+  no finding, 1 info (folders read with the id from Freshdesk's reply).
+  code-reviewer: clean, 3 Low. Parked, `docs/improvements.md` entry
+  `59dc763`. No code after R1, no scoped round. SPEC §8.2 checked by the
+  orchestrator: it names the tool, not its inputs.
 
 - **Proposed plan changes:** none new.
 
-- **Open doubts (owner):** see "Next action"; T-057 task file; earlier:
-  HANDOFF at `c6dba4b`, `d1c7efe`, `fe81a3c`.
+- **Open doubts (owner):** see "Next action"; earlier: HANDOFF at
+  `aff4666`, `c6dba4b`, `d1c7efe`, `fe81a3c`.
 
-- **Dead ends:** see T-057's task file (a fake `Date` clock hung the
-  limiter's pacing; the search offset as a position).
+- **Dead ends:** a bad `category` is refused by the SDK's input check, not
+  the tool's `validation` (T-058 task file).
 
-- **Known red:** none.
+- **Known red:** none (CI red on `1afbd08` fixed in `c23a682`, green on
+  `aff4666`).
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `fdc1057`; the builder on `c23a682` (2565 tests):
-  - vitest "Test Files 39 passed (39)", "Tests 2565 passed (2565)";
+  orchestrator on `f0f9869`:
+  - vitest "Test Files 39 passed (39)", "Tests 2591 passed (2591)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
