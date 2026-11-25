@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T22:57:20+01:00`
-- **Describes commit:** `<hash>` (the T-065 handoff commit). **CI:** filled
-  by the stamp commit.
+- **Describes commit:** `5781e37` (the T-065 handoff commit), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45709130257
+  (workflow `quality`, ran on `5781e37`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-065 (per-tool allow sets; `ticketInput` with a
   required allow set) `done (2026-11-25)`. Commits `75ca50f`
