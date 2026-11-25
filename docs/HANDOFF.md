@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T09:43:18+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `e373c2e`
+  (`e373c2e4848f824e8e79d0736fbf235ed5b03f3c`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45578904852
+  (workflow `quality`, ran on `e373c2e`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-045 `doing (2026-11-25)`, release workflow,
   `docs/tasks/T-045-release-workflow.md` ("Done" filled; "Next action"
