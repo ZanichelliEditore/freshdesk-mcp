@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T11:37:43+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `1258ea6`
+  (`1258ea6a19cde63d6644fa4ed050636012ab1d42`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45597346778
+  (workflow `quality`, ran on `1258ea6`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-059 `done (2026-11-25)`, a late request with no
   time left to retry is a cut, `docs/tasks/T-059-late-attempt-cut.md`
