@@ -3,7 +3,7 @@
 All notable changes to `@zanichelli/freshdesk-mcp`. Versions follow semver
 and stay 0.x until milestone M4, then 1.0.0.
 
-## Unreleased
+## 0.3.1 (2026-11-25)
 
 - **Fixed:** `export_tickets` resumed with `next_cursor` on a period of 300
   matches or fewer is no longer refused ("out of its own order") when
