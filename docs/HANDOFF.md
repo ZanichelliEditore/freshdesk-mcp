@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T12:26:42+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `63c4fc3`
+  (`63c4fc33ffa7ad88d97e67912ec9927f371f10e5`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45604699633
+  (workflow `quality`, ran on `63c4fc3`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-060 `todo (2026-11-25)`, `--export-dir` flag,
   `docs/tasks/T-060-export-dir-flag.md`. Only its RFC is done:
