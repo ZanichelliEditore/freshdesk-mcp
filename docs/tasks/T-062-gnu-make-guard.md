@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-25
 
@@ -71,6 +71,26 @@ builder's call.
 *Filled at `/handoff`:*
 
 ## Done
+- `37aa821`: guard at `Makefile:3-5` (`$(error ...)` when the major of
+  `$(MAKE_VERSION)` is in `0 1 2 3`), above the first `export override`
+  (now `Makefile:62`, was 56 before the guard's 6 lines); `README.md`
+  "## Development" and `CONTRIBUTING.md` "## Dev loop" name GNU Make 4,
+  `brew install make`, `gnubin` and `gmake`.
+- `tools/checks/test_make_version.py`: `OldMakeIsStopped::test_versions_under_4_stop_with_the_fix`,
+  `NewMakeRuns::test_versions_4_and_up_list_the_targets`,
+  `GuardPlacement::test_guard_is_above_the_first_export_override`,
+  `DocsNameTheRequirement::test_readme_and_contributing`. Shown failing
+  before the change (12 subtest failures; the 4.x case passed already).
+- By hand, `/usr/bin/make --version` "GNU Make 3.81":
+  - before (`de24a88`): `/usr/bin/make help` printed
+    `Makefile:56: *** multiple target patterns.  Stop.`
+  - after: `/usr/bin/make help` printed, exit 2:
+    `Makefile:4: *** GNU Make 4 or later is required, this is 3.81. On macOS: brew install make, then put its gnubin directory first in PATH, e.g. export PATH="$(brew --prefix make)/libexec/gnubin:$PATH", or run gmake instead of make.  Stop.`
+- Builder's call on the optional note: kept `filter 0 1 2 3`, so an
+  empty `MAKE_VERSION` passes (GNU make always sets it; a real 3.81 stops
+  at the guard anyway, shown above).
+- The placement test skips comment lines: the guard's own comment names
+  `export override`.
 
 ## Dead ends
 none
@@ -79,5 +99,7 @@ none
 none
 
 ## Context pressure
+low
 
 ## Next action
+none (done). Next row: T-063.
