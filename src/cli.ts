@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Entry point (SPEC §7): serves the MCP server on stdio; the package's `bin`.
 //
-//   - `--version` prints the version on stdout and exits, reading no
-//     environment and starting nothing.
+//   - The command line is parsed first (`parseCliArgs`, RFC 2026-11-25,
+//     export-dir flag): a refusal (unknown option, positional argument,
+//     `--export-dir` missing, empty or twice) stops the start like any
+//     configuration problem below. Otherwise `--version`, anywhere in the
+//     list, prints the version on stdout and exits, reading no environment
+//     and starting nothing.
 //   - While serving, stdout carries protocol frames only: nothing here writes
 //     to it, the HTTP client logs to stderr (SPEC §9).
 //   - The one place the real undici `Agent` is built (RFC 2026-11-23, rule
@@ -16,7 +20,7 @@
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { Agent } from "undici";
-import { ConfigError, loadConfig } from "./config.js";
+import { type CliArgs, ConfigError, loadConfig, parseCliArgs } from "./config.js";
 import { createServer } from "./server.js";
 import { type AppContext, createContext } from "./tools/context.js";
 import { VERSION } from "./version.js";
@@ -24,9 +28,23 @@ import { VERSION } from "./version.js";
 /** Each phase of one request; `http.ts` also cuts an attempt off at 10 s. */
 const TIMEOUT_MS = 10_000;
 
-function start(): AppContext | undefined {
+function fail(err: unknown): undefined {
+  const message = err instanceof ConfigError ? err.message : "could not start (unexpected error).";
+  process.stderr.write(`freshdesk-mcp: ${message}\n`);
+  return undefined;
+}
+
+function readArgs(): CliArgs | undefined {
   try {
-    const config = loadConfig(process.env);
+    return parseCliArgs(process.argv.slice(2));
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+function start(args: CliArgs): AppContext | undefined {
+  try {
+    const config = loadConfig(process.env, args);
     const agent = new Agent({
       connectTimeout: TIMEOUT_MS,
       headersTimeout: TIMEOUT_MS,
@@ -37,17 +55,17 @@ function start(): AppContext | undefined {
     createServer(context);
     return context;
   } catch (err) {
-    const message =
-      err instanceof ConfigError ? err.message : "could not start (unexpected error).";
-    process.stderr.write(`freshdesk-mcp: ${message}\n`);
-    return undefined;
+    return fail(err);
   }
 }
 
-if (process.argv[2] === "--version") {
+const args = readArgs();
+if (args === undefined) {
+  process.exitCode = 1;
+} else if (args.version) {
   process.stdout.write(`${VERSION}\n`);
 } else {
-  const context = start();
+  const context = start(args);
   if (context === undefined) {
     process.exitCode = 1;
   } else {

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "../src/config.js";
+import { ConfigError, loadConfig, parseCliArgs } from "../src/config.js";
 
 // Tests never read process.env: each passes its own env object, and a team
 // config comes from a temp file or the shipped example only.
@@ -320,5 +320,92 @@ describe("examples/team-config.example.json", () => {
     ]);
     expect(team.forward_allow_list.every((entry) => entry.endsWith("example.com"))).toBe(true);
     expect(team.limits.call_budget).toBe(250);
+  });
+});
+
+describe("command-line arguments (T-060, RFC 2026-11-25 export-dir flag)", () => {
+  const load = (args: string[], env: NodeJS.ProcessEnv = baseEnv) =>
+    loadConfig(env, parseCliArgs(args));
+
+  it("an empty list gives no export directory and no --version", () => {
+    expect(parseCliArgs([])).toEqual({ version: false });
+    expect(load([])).not.toHaveProperty("exportDir");
+  });
+
+  it.each([
+    ["--export-dir /a", ["--export-dir", "/a"]],
+    ["--export-dir=/a", ["--export-dir=/a"]],
+  ])("%s gives exportDir /a", (_what, args) => {
+    expect(load(args).exportDir).toBe("/a");
+  });
+
+  it("the flag wins over FRESHDESK_EXPORT_DIR; without it the variable is used", () => {
+    const env = { ...baseEnv, FRESHDESK_EXPORT_DIR: "/b" };
+    expect(load(["--export-dir", "/a"], env).exportDir).toBe("/a");
+    expect(load(["--export-dir=/a"], env).exportDir).toBe("/a");
+    expect(load([], env).exportDir).toBe("/b");
+  });
+
+  it("keeps the value as given, unchecked: the tool checks it", () => {
+    expect(load(["--export-dir", "exports"]).exportDir).toBe("exports");
+    expect(load(["--export-dir=-x"]).exportDir).toBe("-x");
+  });
+
+  it("--version is read anywhere in the list, beside valid options", () => {
+    expect(parseCliArgs(["--version"])).toEqual({ version: true });
+    expect(parseCliArgs(["--export-dir", "/a", "--version"])).toEqual({
+      version: true,
+      exportDir: "/a",
+    });
+    expect(parseCliArgs(["--version", "--export-dir=/a"]).version).toBe(true);
+  });
+
+  it.each([
+    ["an unknown flag", ["--export_dir", "/a"], "an unknown option"],
+    ["an unknown short flag", ["-v"], "an unknown option"],
+    ["an unknown flag after a valid one", ["--export-dir", "/a", "--verbose"], "an unknown option"],
+    ["the option terminator", ["--"], "an unknown option"],
+    ["a positional argument", ["/a"], "a positional argument"],
+    ["a positional after the terminator", ["--", "/a"], "an unknown option"],
+    ["--version with a value", ["--version=1"], "--version takes no value"],
+    ["--version given twice", ["--version", "--version"], "--version is given more than once"],
+  ])("%s is refused without quoting it", (_what, args, says) => {
+    const err = errorOf(() => parseCliArgs(args));
+    expect(err.message).toContain(says);
+    expect(err.message).not.toContain("/a");
+  });
+
+  it.each([
+    ["--export-dir with no value", ["--export-dir"]],
+    ["--export-dir followed by an option", ["--export-dir", "--version"]],
+    ["--export-dir followed by a dash value", ["--export-dir", "-x"]],
+    ["--export-dir=", ["--export-dir="]],
+    ["--export-dir with an empty value", ["--export-dir", ""]],
+    ["--export-dir given twice", ["--export-dir", "/a", "--export-dir=/b"]],
+    ["--export-dir given twice, same value", ["--export-dir=/a", "--export-dir=/a"]],
+  ])("%s is refused naming --export-dir", (_what, args) => {
+    const err = errorOf(() => parseCliArgs(args));
+    expect(err.message).toContain("--export-dir");
+    expect(err.message).not.toContain("/a");
+    expect(err.message).not.toContain("/b");
+  });
+
+  it("a refusal wins over --version", () => {
+    errorOf(() => parseCliArgs(["--version", "--nope"]));
+    errorOf(() => parseCliArgs(["--version", "--export-dir"]));
+  });
+
+  it.each([
+    ["the API key's value as a flag", [`--${API_KEY}`], API_KEY],
+    ["the API key's value as an inline flag value", [`--key=${API_KEY}`], API_KEY],
+    ["the API key's value as a positional", [API_KEY], API_KEY],
+    ["an arbitrary token", ["--zq9-unlikely-token"], "zq9-unlikely-token"],
+    ["an arbitrary short token", ["-Zq9"], "Zq9"],
+  ])("an unknown token holding %s is not in the message", (_what, args, secret) => {
+    const err = errorOf(() => parseCliArgs(args));
+    expect(err.message).not.toContain(secret);
+    expect(JSON.stringify(err)).not.toContain(secret);
+    expect(String(err.stack)).not.toContain(secret);
+    expect(err.cause).toBeUndefined();
   });
 });

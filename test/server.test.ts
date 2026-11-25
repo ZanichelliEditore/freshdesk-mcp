@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/server";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ConfigError, loadConfig } from "../src/config.js";
 import { createServer, SERVER_INFO } from "../src/server.js";
@@ -351,6 +351,56 @@ describe("the built cli", () => {
       rmSync(out, { recursive: true, force: true });
     }
   }, 120_000);
+
+  // T-060: the command line is parsed before the environment is read. The
+  // runs carry a domain and no key, so a start past the parse would stop on
+  // FRESHDESK_API_KEY instead; no run can send a request (no key).
+  describe("command line (T-060)", () => {
+    let out = "";
+    beforeAll(() => {
+      out = mkdtempSync(join(tmpdir(), "freshdesk-mcp-cli-"));
+      buildCli(out);
+    }, 120_000);
+    afterAll(() => rmSync(out, { recursive: true, force: true }));
+    const env = () => ({ PATH: process.env.PATH ?? "", FRESHDESK_DOMAIN: "acme.freshdesk.com" });
+    const TOKEN = "zq9-unlikely-token";
+
+    it.each([
+      ["an unknown flag", [`--${TOKEN}`], "an unknown option"],
+      [
+        "an unknown flag after a valid one",
+        ["--export-dir", "/a", `--${TOKEN}=1`],
+        "an unknown option",
+      ],
+      ["a missing value", ["--export-dir"], "--export-dir"],
+    ])(
+      "%s exits 1, explained on stderr, the token not quoted, nothing on stdout",
+      (_, args, says) => {
+        const run = runBuiltCli(out, env(), args);
+        expect(run.status).toBe(1);
+        expect(run.stdout).toBe("");
+        expect(run.stderr).toContain(says);
+        expect(run.stderr).not.toContain(TOKEN);
+        expect(run.stderr).not.toContain("FRESHDESK_API_KEY");
+        expect(run.stderr).not.toMatch(/\bat\s.*\(|\.js:\d+/);
+      },
+    );
+
+    it.each([
+      ["alone", ["--version"]],
+      ["after --export-dir /a", ["--export-dir", "/a", "--version"]],
+      ["before --export-dir=/a", ["--version", "--export-dir=/a"]],
+    ])("--version %s prints 0.2.0 and exits 0, with no environment set", (_, args) => {
+      expect(runBuiltCli(out, {}, args)).toEqual({ status: 0, stdout: "0.2.0\n", stderr: "" });
+    });
+
+    it("a refusal wins over --version", () => {
+      const run = runBuiltCli(out, {}, ["--version", `--${TOKEN}`]);
+      expect(run.status).toBe(1);
+      expect(run.stdout).toBe("");
+      expect(run.stderr).toContain("an unknown option");
+    });
+  });
 });
 
 describe("test/support/cli-process.ts", () => {

@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadConfig } from "../../../src/config.js";
+import { loadConfig, parseCliArgs } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { type AppContext, createContext } from "../../../src/tools/context.js";
 import { listEnvelope } from "../../../src/tools/list.js";
@@ -168,16 +168,26 @@ interface Desk {
   context: AppContext;
 }
 
-/** `exportDir`: FRESHDESK_EXPORT_DIR, `out` unless given; `null` leaves it unset. */
-async function cold(team: unknown = FAST, exportDir: string | null = out): Promise<Desk> {
+/**
+ * `exportDir`: `out` unless given; `null` leaves it unset. `via`: set as
+ * FRESHDESK_EXPORT_DIR (the default) or as `--export-dir` (T-060).
+ */
+async function cold(
+  team: unknown = FAST,
+  exportDir: string | null = out,
+  via: "env" | "flag" = "env",
+): Promise<Desk> {
   const path = join(root, `team-${++count}.json`);
   writeFileSync(path, JSON.stringify(team));
-  const config = loadConfig({
-    FRESHDESK_DOMAIN: DOMAIN,
-    FRESHDESK_API_KEY: "k3y-Secret-Value-123",
-    FRESHDESK_MCP_CONFIG: path,
-    ...(exportDir === null ? {} : { FRESHDESK_EXPORT_DIR: exportDir }),
-  });
+  const config = loadConfig(
+    {
+      FRESHDESK_DOMAIN: DOMAIN,
+      FRESHDESK_API_KEY: "k3y-Secret-Value-123",
+      FRESHDESK_MCP_CONFIG: path,
+      ...(exportDir === null || via === "flag" ? {} : { FRESHDESK_EXPORT_DIR: exportDir }),
+    },
+    parseCliArgs(exportDir === null || via === "env" ? [] : ["--export-dir", exportDir]),
+  );
   const context = createContext(config, mock);
   const server = createServer(context);
   servers.push(server);
@@ -195,8 +205,9 @@ async function warm(
   team: unknown = FAST,
   exportDir: string | null = out,
   fields?: unknown[],
+  via: "env" | "flag" = "env",
 ): Promise<Desk> {
-  const desk = await cold(team, exportDir);
+  const desk = await cold(team, exportDir, via);
   queueSchema(fields);
   const loaded = await desk.context.schema.get();
   if (!loaded.ok) throw new Error("the fixture schema did not load");
@@ -260,6 +271,7 @@ describe("export_tickets: the listing", () => {
     expect(tool?.annotations.idempotentHint).toBe(false);
     const description = tool?.description ?? "";
     expect(description).toContain("Cost:");
+    expect(description).toContain("--export-dir");
     expect(description).toContain("FRESHDESK_EXPORT_DIR");
     expect(description).toContain(
       "The file holds customer-written text as it is: not wrapped in <ticket_content> and not marked.",
@@ -368,11 +380,13 @@ describe("export_tickets: JSONL", () => {
 });
 
 describe("export_tickets: the directory, refused with no request", () => {
-  it("unset: refused, naming the variable and how to set it, with no request even on a cold schema", async () => {
+  it("unset: refused, naming both ways to set it, with no request even on a cold schema", async () => {
     const { session } = await cold(FAST, null);
     const error = refusal(await callTool(session, TOOL, jsonl()));
     expect(error.code).toBe("validation");
-    expect(error.message).toContain("FRESHDESK_EXPORT_DIR is not set");
+    expect(error.message).toContain("The export directory is not set");
+    expect(error.message).toContain("--export-dir");
+    expect(error.message).toContain("FRESHDESK_EXPORT_DIR");
     expect(error.message).toContain("absolute path of an existing directory");
     expect(sent()).toBe(0);
   });
@@ -438,6 +452,38 @@ describe("export_tickets: the directory, refused with no request", () => {
         expect(readFileSync(kept, "utf8")).toBe("kept");
       }
     });
+  });
+});
+
+describe("export_tickets: a directory given by --export-dir (T-060)", () => {
+  it("is written to, as with the variable", async () => {
+    const { session } = await warm(FAST, out, undefined, "flag");
+    reply(searchPath(PERIOD_QUERY), found([ticket(4301)]));
+    const result = output(await callTool(session, TOOL, jsonl()));
+    expect(dirname(result.path)).toBe(out);
+    expect(lines(result.path)).toEqual([row(4301)]);
+  });
+
+  it.each([
+    ["a relative path", () => "exports", "absolute"],
+    ["a path that does not exist", () => join(root, "absent"), "existing directory"],
+    [
+      "a symlink to a directory",
+      () => {
+        const path = join(root, `link-${++count}`);
+        symlinkSync(out, path);
+        return path;
+      },
+      "symlink",
+    ],
+  ])("%s: refused, nothing written, no request", async (_what, make, said) => {
+    const { session } = await cold(FAST, make(), "flag");
+    const error = refusal(await callTool(session, TOOL, jsonl()));
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain(said);
+    expect(error.message).toContain("--export-dir");
+    expect(sent()).toBe(0);
+    expect(readdirSync(out)).toEqual([]);
   });
 });
 
@@ -783,7 +829,7 @@ describe("export_tickets: full review fixes (R1)", () => {
     });
     const error = refusal(await callTool(session, TOOL, jsonl()));
     expect(error.code).toBe("validation");
-    expect(error.message).toContain("FRESHDESK_EXPORT_DIR changed while the call ran");
+    expect(error.message).toContain("The export directory changed while the call ran");
     expect(error.message).toContain("used 1 API call");
     expect(readdirSync(elsewhere)).toEqual([]);
     // No path reaches the moved directory any more (no openat): its temporary file stays, empty.
@@ -805,7 +851,7 @@ describe("export_tickets: full review fixes (R1)", () => {
     reply(AGENTS, agentPages.flat());
     reply(GROUPS, groupPages.flat());
     const error = refusal(await callTool(session, TOOL, jsonl()));
-    expect(error.message).toContain("FRESHDESK_EXPORT_DIR changed while the call ran");
+    expect(error.message).toContain("The export directory changed while the call ran");
     expect(readdirSync(elsewhere)).toEqual([]);
     expect(readdirSync(moved)).toEqual([]);
     expect(sent()).toBe(3);

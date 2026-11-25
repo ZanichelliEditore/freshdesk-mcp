@@ -1,11 +1,19 @@
-// Configuration (SPEC §10): personal settings from the environment, team
-// settings from an optional JSON file.
+// Configuration (SPEC §10): personal settings from the command line and the
+// environment, team settings from an optional JSON file.
+//
+// Personal (command line, parsed by parseCliArgs from what cli.ts passes):
+//   --export-dir <dir>, --export-dir=<dir>  export_tickets' directory, optional;
+//                                           wins over FRESHDESK_EXPORT_DIR
+//   --version                               print the version and exit
+// Anything else on the command line is refused (RFC 2026-11-25, export-dir
+// flag), naming only an option this server knows, never the token.
 //
 // Personal (env):
 //   FRESHDESK_DOMAIN, FRESHDESK_API_KEY   required
 //   FRESHDESK_MCP_CONFIG                  path of the team file, optional
 //   FRESHDESK_HOST_OVERRIDE               one exact hostname, optional
-//   FRESHDESK_EXPORT_DIR                  export_tickets' directory, optional
+//   FRESHDESK_EXPORT_DIR                  export_tickets' directory, optional;
+//                                         the fallback when --export-dir is absent
 // The override is personal on purpose: a shared team file must not be able
 // to point everyone's API key at another host, so the team schema has no
 // such key and refuses unknown ones. The export directory is personal too
@@ -26,6 +34,7 @@
 // Wherever the API key's text would appear in either, it is replaced.
 
 import { readFileSync } from "node:fs";
+import { parseArgs } from "node:util";
 import { z } from "zod";
 
 export class ConfigError extends Error {
@@ -125,6 +134,56 @@ export interface Config {
   team: TeamConfig;
 }
 
+/** What the command line says. */
+export interface CliArgs {
+  version: boolean;
+  /** `--export-dir`'s value, as given (checked by the tool). Absent when not given. */
+  exportDir?: string;
+}
+
+/**
+ * Parse the server's command line (`process.argv.slice(2)`). Throws
+ * `ConfigError` on an unknown option, a positional argument, an option given
+ * twice, `--export-dir` with no or an empty value, or `--version` with a value.
+ * The message never quotes a token: `parseArgs`' own messages do, so the list
+ * is parsed leniently into tokens and each token is checked here.
+ */
+export function parseCliArgs(args: readonly string[]): CliArgs {
+  const { tokens } = parseArgs({
+    args: [...args],
+    options: { "export-dir": { type: "string" }, version: { type: "boolean" } },
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+  });
+  const refuse = (why: string) =>
+    new ConfigError(`Invalid command line: ${why}. The server takes --export-dir <dir> only.`);
+  const result: CliArgs = { version: false };
+  let exportDirSeen = false;
+  for (const token of tokens) {
+    if (token.kind === "positional") throw refuse("a positional argument is not accepted");
+    if (token.kind === "option-terminator") throw refuse("an unknown option was given");
+    if (token.name === "version") {
+      if (token.value !== undefined) throw refuse("--version takes no value");
+      if (result.version) throw refuse("--version is given more than once");
+      result.version = true;
+    } else if (token.name === "export-dir") {
+      if (exportDirSeen) throw refuse("--export-dir is given more than once");
+      exportDirSeen = true;
+      // As strict parsing does: a separate value starting with "-" is taken
+      // for a missing value, so `--export-dir --version` is not a path.
+      const value = token.value;
+      if (value === undefined || value === "" || (!token.inlineValue && value.startsWith("-"))) {
+        throw refuse("--export-dir needs a directory (--export-dir <dir> or --export-dir=<dir>)");
+      }
+      result.exportDir = value;
+    } else {
+      throw refuse("an unknown option was given");
+    }
+  }
+  return result;
+}
+
 /** One line per problem: `"path.to.key": what is wrong`. Never the value. */
 function describeIssues(issues: z.core.$ZodIssue[]): string[] {
   return issues.flatMap((issue) => {
@@ -165,8 +224,12 @@ function loadTeamConfig(path: string | undefined): TeamConfig {
   return parsed.data;
 }
 
-/** Load and validate the configuration. Throws `ConfigError`. */
-export function loadConfig(env: NodeJS.ProcessEnv): Config {
+/**
+ * Load and validate the configuration. `args` is what `parseCliArgs` gave:
+ * its `exportDir`, when present, wins over FRESHDESK_EXPORT_DIR. Throws
+ * `ConfigError`.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv, args: Pick<CliArgs, "exportDir"> = {}): Config {
   // An MCP client may pass an unset optional setting as an empty string.
   const parsed = envSchema.safeParse({
     FRESHDESK_DOMAIN: env.FRESHDESK_DOMAIN,
@@ -181,6 +244,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     );
   }
   const personal = parsed.data;
+  const exportDir = args.exportDir ?? personal.FRESHDESK_EXPORT_DIR;
   let team: TeamConfig;
   try {
     team = loadTeamConfig(personal.FRESHDESK_MCP_CONFIG);
@@ -198,9 +262,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     ...(personal.FRESHDESK_HOST_OVERRIDE === undefined
       ? {}
       : { hostOverride: personal.FRESHDESK_HOST_OVERRIDE }),
-    ...(personal.FRESHDESK_EXPORT_DIR === undefined
-      ? {}
-      : { exportDir: personal.FRESHDESK_EXPORT_DIR }),
+    ...(exportDir === undefined ? {} : { exportDir }),
     team,
   };
 }

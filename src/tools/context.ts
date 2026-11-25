@@ -25,8 +25,9 @@
 //     so it is refused as an import); a re-export through a module
 //     outside src/tools/; a symlink under src/tools/ or under a listed path.
 //   - `ticketOutput` with the team `fields` already given.
-//   - `exportDir`: the personal FRESHDESK_EXPORT_DIR as set, `undefined` when
-//     unset; `export_tickets` checks it when it runs.
+//   - `exportDir`: the personal export directory as set (`--export-dir`, else
+//     FRESHDESK_EXPORT_DIR), `undefined` when unset; `export_tickets` checks
+//     it when it runs.
 //   - The API key goes to the client, which keeps it in a private field: the
 //     context has no `config`, `domain` or `apiKey`, and the key cannot be
 //     read or printed from the context (serialised or inspected, it shows
@@ -50,7 +51,7 @@ export interface AppContext {
   readonly http: HttpClient;
   readonly schema: SchemaService;
   readonly team: TeamConfig;
-  /** FRESHDESK_EXPORT_DIR as set (unchecked), `undefined` when unset. */
+  /** `--export-dir`, else FRESHDESK_EXPORT_DIR, as set (unchecked); `undefined` when unset. */
   readonly exportDir: string | undefined;
   /** `ticketOutput` (src/schema/output.ts) with the team's `fields`. */
   ticketOutput(schema: Schema, ticket: Record<string, unknown>): Record<string, unknown>;

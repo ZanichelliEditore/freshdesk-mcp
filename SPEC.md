@@ -348,14 +348,18 @@ Two levels:
 
 | Level | What | How |
 |---|---|---|
-| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (`FRESHDESK_EXPORT_DIR`) | env vars (Claude Code) or `.mcpb` `user_config` (key marked `sensitive`, stored in the OS keychain by Claude Desktop) |
+| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (flag or env: `--export-dir`, else `FRESHDESK_EXPORT_DIR`) | env vars and the server's `args` (Claude Code) or `.mcpb` `user_config` (key marked `sensitive`, stored in the OS keychain by Claude Desktop) |
 | Team | enabled toolsets, field meanings and hidden fields, "uncategorised" definition, forward allow-list, caps, call budget, reserve % | JSON file, path via `FRESHDESK_MCP_CONFIG` / `user_config`; validated with zod at start, clear error on bad config |
 
 - **Uncategorised** default: a ticket where the configured category field
   (default: the last level of the first nested field) is empty. Overridable as a list of fields.
 - The export directory is personal, not a team setting (owner,
-  2026-11-23): a shared file does not choose a local path. With it unset,
-  `export_tickets` is refused with a message saying how to set it. File
+  2026-11-23): a shared file does not choose a local path. It is set by
+  flag or env (RFC 2026-11-25, export-dir flag): the command-line argument
+  `--export-dir <dir>` in the client's `args`, else `FRESHDESK_EXPORT_DIR`;
+  the flag wins. An unknown command-line argument stops the start. With
+  neither set, `export_tickets` is refused with a message saying how to set
+  it. File
   export is not a rule-1 capability (no RFC); its task runs
   `/security-review`.
 - Example team config ships in the repo with synthetic values; the

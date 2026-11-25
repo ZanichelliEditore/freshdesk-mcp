@@ -192,4 +192,30 @@ describe("README.md", () => {
   it("runs the package with npx", () => {
     expect(readme).toContain(`npx -y ${pkg.name}`);
   });
+
+  // T-060: the export directory as a command-line argument in each client's snippet.
+  describe("sets the export directory with --export-dir (T-060)", () => {
+    const section = (heading: string) => {
+      const start = readme.indexOf(`\n### ${heading}\n`);
+      expect(start, heading).toBeGreaterThan(-1);
+      const end = readme.indexOf("\n## ", start);
+      return readme.slice(start, end === -1 ? undefined : end);
+    };
+    const ARGS = `"args": ["-y", "${pkg.name}", "--export-dir", "/absolute/path/to/exports"]`;
+
+    it("Claude Code: claude mcp add and .mcp.json", () => {
+      const code = section("Claude Code");
+      expect(code).toContain(`-- npx -y ${pkg.name} --export-dir /absolute/path/to/exports`);
+      expect(code).toContain(ARGS);
+    });
+
+    it("Claude Desktop: args", () => {
+      expect(section("Claude Desktop")).toContain(ARGS);
+    });
+
+    it("FRESHDESK_EXPORT_DIR is the fallback, and ~ is not expanded", () => {
+      expect(readme).toMatch(/\| `FRESHDESK_EXPORT_DIR` +\| no +\| Fallback for `--export-dir`/);
+      expect(readme).toContain("`~` is not expanded");
+    });
+  });
 });

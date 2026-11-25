@@ -32,9 +32,15 @@ latest.
 > and, in the client configurations below, replace `npx -y @zanichelli/freshdesk-mcp` with
 > `node /absolute/path/to/freshdesk-mcp/dist/cli.js`.
 
-`--version` prints the version and exits. Without it, the server reads its
-configuration, stops with a message on stderr and exit code 1 if something is
-wrong, and otherwise serves MCP on stdin/stdout.
+The server takes two arguments: `--export-dir <dir>` (or `--export-dir=<dir>`),
+the directory `export_tickets` writes to (see [Exports](#exports)), and
+`--version`, which prints the version and exits. Any other argument stops the
+server at start with a message on stderr and exit code 1 (from 0.2.0; 0.1.0
+ignored it). Without `--version`, the server reads its configuration, stops
+the same way if something is wrong, and otherwise serves MCP on stdin/stdout.
+
+A client passes `args` to the server as they are, with no shell in between:
+`~` is not expanded, so write the export directory as a full absolute path.
 
 ### Claude Code
 
@@ -42,7 +48,7 @@ wrong, and otherwise serves MCP on stdin/stdout.
 claude mcp add freshdesk \
   -e FRESHDESK_DOMAIN=example.freshdesk.com \
   -e FRESHDESK_API_KEY="$FRESHDESK_API_KEY" \
-  -- npx -y @zanichelli/freshdesk-mcp
+  -- npx -y @zanichelli/freshdesk-mcp --export-dir /absolute/path/to/exports
 ```
 
 Or in a project's `.mcp.json` (keep the key out of version control):
@@ -52,11 +58,10 @@ Or in a project's `.mcp.json` (keep the key out of version control):
   "mcpServers": {
     "freshdesk": {
       "command": "npx",
-      "args": ["-y", "@zanichelli/freshdesk-mcp"],
+      "args": ["-y", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
       "env": {
         "FRESHDESK_DOMAIN": "example.freshdesk.com",
-        "FRESHDESK_API_KEY": "${FRESHDESK_API_KEY}",
-        "FRESHDESK_EXPORT_DIR": "/absolute/path/to/exports"
+        "FRESHDESK_API_KEY": "${FRESHDESK_API_KEY}"
       }
     }
   }
@@ -73,7 +78,7 @@ share or commit it.
   "mcpServers": {
     "freshdesk": {
       "command": "npx",
-      "args": ["-y", "@zanichelli/freshdesk-mcp"],
+      "args": ["-y", "@zanichelli/freshdesk-mcp", "--export-dir", "/absolute/path/to/exports"],
       "env": {
         "FRESHDESK_DOMAIN": "example.freshdesk.com",
         "FRESHDESK_API_KEY": "your-api-key",
@@ -91,7 +96,7 @@ share or commit it.
 | `FRESHDESK_DOMAIN` | yes | Your Freshdesk host, `<name>.freshdesk.com` (no `https://`, no path), or the same host as `FRESHDESK_HOST_OVERRIDE`. The key is sent to this one host only, over HTTPS. |
 | `FRESHDESK_API_KEY` | yes | Your own API key (Freshdesk: profile settings, "View API key"). |
 | `FRESHDESK_MCP_CONFIG`    | no       | Path of the team config file (below). Unset: the defaults.                                                                                                                   |
-| `FRESHDESK_EXPORT_DIR`    | no       | The directory `export_tickets` writes to (see [Exports](#exports)). Unset: `export_tickets` is refused and says how to set it; every other tool works.                       |
+| `FRESHDESK_EXPORT_DIR`    | no       | Fallback for `--export-dir`: the directory `export_tickets` writes to when the argument is not given (see [Exports](#exports)). The argument wins when both are set. Neither set: `export_tickets` is refused and says how to set it; every other tool works. |
 | `FRESHDESK_HOST_OVERRIDE` | no | For a custom domain that is not `<name>.freshdesk.com`: set it and `FRESHDESK_DOMAIN` to the same host. It does not add a second host: the key still goes to `FRESHDESK_DOMAIN` only. Personal on purpose: the team file cannot set it. |
 
 ## Team config
@@ -151,7 +156,8 @@ of a ticket with that in mind.
 ## Exports
 
 `export_tickets` writes the tickets of a period to a new JSONL or CSV file in
-`FRESHDESK_EXPORT_DIR`, and returns the file's path, its row count, a
+the export directory (`--export-dir`, or `FRESHDESK_EXPORT_DIR` as the
+fallback), and returns the file's path, its row count, a
 `next_cursor` while the period has more, and the API calls used.
 
 - One call writes what it reads in about 20 seconds (about 4,000 tickets, or
@@ -177,9 +183,9 @@ of a ticket with that in mind.
   (another format, period, filter, `max_tickets`, `conversations` or
   `confirm`), or edited, it is refused before anything is sent or written.
 
-- `FRESHDESK_EXPORT_DIR` must be an absolute path to an existing directory,
-  and not a symlink. Otherwise, or unset, the call is refused before any
-  request is sent.
+- The export directory must be an absolute path to an existing directory,
+  and not a symlink, whichever way it is set. Otherwise, or unset, the call
+  is refused before any request is sent; every other tool works.
 - The file name is generated (`freshdesk-tickets-<UTC time>.jsonl` or
   `.csv`); an existing file is never overwritten. The file is readable by its
   owner only (mode 0600), and a failed call leaves no partial file.
