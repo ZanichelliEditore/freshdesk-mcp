@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-064
 - **Created:** 2026-11-25
 
@@ -41,18 +41,31 @@ No split point: one module, one signature, its tests.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `75ca50f`: `src/core/allow-sets.ts` (`allowSet`, `AllowSet`, `WriteEntry`),
+  `ticketInput(schema, input, allow: FieldSet)` and `field_not_writable` in
+  `src/schema/input.ts`. Tests: `test/core/allow-sets.test.ts` (the four sets
+  equal OD-2; frozen; unknown entry and prototype keys throw `TypeError`);
+  `test/schema/input.test.ts` "ticketInput: allow sets" (per set allowed /
+  refused naming the set; the six never-fields; `add_note` refuses every
+  field; `categorize_tickets` refuses status, priority, group, agent and takes
+  any custom field; no set throws `TypeError`; input.ts does not import
+  `../core/`). Existing tests pass the fixture-wide set `ALL`.
+- `88763d2`: review fixes (overview.md entries; test tidy-ups).
+- Mutation check: with the allow check neutered, 16 tests of
+  `test/schema/input.test.ts` fail.
+- `make quality`: Vitest 2826 passed; `tools/checks` 138 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Default fields are keyed by API name as `/ticket_fields` gives it
+  (`agent`, `group`, `ticket_type`), the names output.ts's `TICKET_KEY`
+  assumes. A schema naming them otherwise (`responder_id`, as one fixture
+  does) would refuse agent and group: fail closed, but T-076's first real
+  run should confirm the names.
+- `tags` is a flag on `AllowSet`, not a `ticketInput` field: Freshdesk's
+  `/ticket_fields` has no tags field; T-068's `update_ticket` entry reads it.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
-
-## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+low
