@@ -5,13 +5,15 @@
 "none".*
 
 - **Written:** `2026-11-25T13:39:35+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's
-  hash and CI line arrive in the commit right after it.
+- **Describes commit:** `54cb9c8`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45615978761
+  (workflow `quality`, ran on `54cb9c8`). This file's hash and CI line
+  arrive in the commit right after it.
 
 - **Current task:** T-061 (README `npx` commands run with
   `--prefer-online`) `done (2026-11-25)`. Commits `bad813a` (change, R1)
-  and the handoff commit (review fixes). Scope addition (orchestrator,
+  and `54cb9c8` (review fixes, handoff). Scope addition (orchestrator,
   under the owner's delegation, 2026-11-25): the README's "Not yet
   published" block removed; recorded in
   `docs/tasks/T-061-readme-prefer-online.md`, "In scope".
@@ -55,7 +57,7 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `bad813a` plus the review fixes:
+- **Checkpoint:** `make quality` exit 0 on `54cb9c8`'s tree:
   - vitest "Test Files 39 passed (39)", "Tests 2648 passed (2648)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
