@@ -54,8 +54,10 @@
 //   - `truncated: true` beside the counts when the source was cut: the scan
 //     stopped at the budget, at MAX_LIST_PAGE (it links a next page or comes
 //     back full), or at SCAN_START_MS; or a later page the limiter refused
-//     (`rate_limited` with no HTTP status), or one aborted at the call's
-//     deadline (`network` once it is reached; T-037 review, 2026-11-24).
+//     (`rate_limited` with no HTTP status), or one the call's deadline
+//     ended (`network` the client marks `http.reachedDeadline`: aborted at the
+//     deadline, T-037 review, 2026-11-24; or failed with no time left to
+//     retry before it, T-059).
 //     Any other failed request, and a failed probe, fails the call: no
 //     partial count.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start. No
@@ -343,13 +345,14 @@ function instantOf(second: number): string {
 
 /**
  * A later request that cuts the source rather than failing the call: one the
- * limiter refused before sending (`rate_limited`, no HTTP status), or one
- * aborted once the call's deadline was reached (`network`, at or past it).
+ * limiter refused before sending (`rate_limited`, no HTTP status), or one the
+ * call's deadline ended (`network` the client marks so: aborted at it, or
+ * failed with no time left to retry before it; `http.reachedDeadline`, T-059).
  */
-export function isCut(error: FreshdeskError, deadline: number): boolean {
+export function isCut(error: FreshdeskError, context: AppContext): boolean {
   return (
     (error.code === "rate_limited" && error.http_status === null) ||
-    (error.code === "network" && Date.now() >= deadline)
+    (error.code === "network" && context.http.reachedDeadline(error))
   );
 }
 
@@ -439,7 +442,7 @@ export async function readPeriod(
       "expensive",
     );
     if (!earlier.ok) {
-      if (!isCut(earlier.error, deadline)) return earlier;
+      if (!isCut(earlier.error, context)) return earlier;
       meter.used += earlier.attempts ?? 0;
       meter.requests += earlier.attempts ?? 0;
       return cut(from);
@@ -492,7 +495,7 @@ export async function readPeriod(
         if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return stopped();
         const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
         if (!found.ok) {
-          if (!isCut(found.error, deadline)) return found;
+          if (!isCut(found.error, context)) return found;
           meter.used += found.attempts ?? 0;
           meter.requests += found.attempts ?? 0;
           return stopped();
@@ -558,7 +561,7 @@ export async function readPeriod(
       "expensive",
     );
     if (!listed.ok) {
-      if (!isCut(listed.error, deadline)) return listed;
+      if (!isCut(listed.error, context)) return listed;
       meter.used += listed.attempts ?? 0;
       meter.requests += listed.attempts ?? 0;
       return cut(here());

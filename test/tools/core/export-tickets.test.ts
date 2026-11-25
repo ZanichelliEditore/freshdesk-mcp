@@ -888,6 +888,51 @@ describe("export_tickets: full review fixes (R1)", () => {
     expect(readdirSync(out)).toEqual([basename(written.path)]);
   });
 
+  // T-059: a page started at 19.6 s times out (10 s an attempt) at 29.6 s,
+  // before the deadline, and no retry fits: a cut, not a failure.
+  it("a later search page started at 19.6 s that hangs is a cut: the rows read, truncated: true", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    replyTaking(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45), 19_600);
+    replyHanging(searchPath(PERIOD_QUERY, 2), 10_000);
+    const written = output(await callTool(session, TOOL, jsonl()));
+    expect(written.rows).toBe(30);
+    expect(written.truncated).toBe(true);
+    expect(sent()).toBe(2);
+    expect(written.api_calls_used).toBe(sent());
+    expect(readdirSync(out)).toEqual([basename(written.path)]);
+  });
+
+  it("a later search page whose attempt at 9 s fails and whose retry hangs is a cut: truncated: true", async () => {
+    const { session } = await warm();
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    replyTaking(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45), 9000);
+    // Fails at 19 s; the retry, after 0.5 s, fails at 29.5 s: no second retry fits.
+    replyHanging(searchPath(PERIOD_QUERY, 2), 10_000);
+    replyHanging(searchPath(PERIOD_QUERY, 2), 10_000);
+    const written = output(await callTool(session, TOOL, jsonl()));
+    expect(written.rows).toBe(30);
+    expect(written.truncated).toBe(true);
+    expect(sent()).toBe(3);
+    expect(written.api_calls_used).toBe(sent());
+  });
+
+  // Four attempts and 3.5 s of real backoff.
+  it(
+    "a later search page failing network at 5 s with time left fails the call, no file",
+    { timeout: 15_000 },
+    async () => {
+      const { session } = await warm();
+      vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+      replyTaking(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45), 5000);
+      for (let attempt = 0; attempt < 4; attempt++) replyHanging(searchPath(PERIOD_QUERY, 2), 0);
+      const error = refusal(await callTool(session, TOOL, jsonl()));
+      expect(error.code).toBe("network");
+      expect(sent()).toBe(5);
+      expect(readdirSync(out)).toEqual([]);
+    },
+  );
+
   it("a thread aborted at the call's deadline is a cut: its ticket not written, the rows before it kept", async () => {
     const { session } = await warm();
     vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });

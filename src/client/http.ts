@@ -37,6 +37,14 @@
 //     deadline is aborted and comes back as the expiry error: `network`,
 //     retryable for a GET only. A backoff that would end at or after the
 //     deadline is not started: the last answer is returned as it is.
+//   - Deadline reached: `http.reachedDeadline(error)` is true for an error the
+//     deadline ended, and only the client marks one (a private WeakSet, so
+//     the error's shape in a tool's output is unchanged): the expiry error
+//     above, and a GET's `network` failure that no retry can follow before
+//     the deadline (an attempt started at 19.6 s times out at 29.6 s; T-059).
+//     Not a `network` failure that used its retries with time left, not a
+//     5xx (an answer), not a write's failure (it may have been applied). A
+//     caller that cuts its work at the deadline asks this, not the clock.
 //   - A caller's deadline (epoch ms, optional) can only shorten that one: the
 //     call ends at the earlier of the two, by the same rules, and one already
 //     reached sends nothing and does not ask the limiter (`request` checks it
@@ -74,6 +82,9 @@ export const BACKOFF_MS = 500;
 /** Longest one `requestWithRetry` may take, waits and attempts together. */
 export const TOTAL_DEADLINE_MS = 30_000;
 
+/** The errors a deadline ended: see the file's header, "Deadline reached". */
+const ended = new WeakSet<FreshdeskError>();
+
 function notSent(why: string): HttpResult {
   return {
     ok: false,
@@ -93,15 +104,14 @@ function notSent(why: string): HttpResult {
  * a write that is not sent an answer of its own.
  */
 function expired(method: string): HttpResult {
-  return {
-    ok: false,
-    error: {
-      code: "network",
-      http_status: null,
-      message: "No answer from Freshdesk before the call's deadline: the call was given up.",
-      retryable: method === "GET",
-    },
+  const error: FreshdeskError = {
+    code: "network",
+    http_status: null,
+    message: "No answer from Freshdesk before the call's deadline: the call was given up.",
+    retryable: method === "GET",
   };
+  ended.add(error);
+  return { ok: false, error };
 }
 
 export interface HttpClientOptions {
@@ -196,6 +206,15 @@ export class HttpClient {
    */
   reserveRefusal(): FreshdeskError | undefined {
     return this.#limiter.reserveRefusal();
+  }
+
+  /**
+   * True when the client marked `error` as one its call's deadline ended
+   * (the file's header, "Deadline reached"). Read-only, like
+   * `reserveRefusal`: a tool asks it and cannot set it.
+   */
+  reachedDeadline(error: FreshdeskError): boolean {
+    return ended.has(error);
   }
 
   /**
@@ -328,7 +347,11 @@ export class HttpClient {
       if (attempt === MAX_RETRIES || !(limited || transient)) return { ...result, attempts };
       const backoff = limited ? 0 : BACKOFF_MS * 2 ** attempt;
       // Written so that a deadline that is not a number starts no retry.
-      if (!(Date.now() + backoff < deadline)) return { ...result, attempts };
+      if (!(Date.now() + backoff < deadline)) {
+        // A GET with no time left to retry: the deadline ended it (T-059).
+        if (code === "network") ended.add(result.error);
+        return { ...result, attempts };
+      }
       if (!limited) await sleep(backoff);
     }
   }

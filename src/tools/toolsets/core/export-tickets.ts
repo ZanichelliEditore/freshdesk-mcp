@@ -36,7 +36,8 @@
 //     `confirm` the scan stops at the budget; one 30 s deadline, no page
 //     started after SCAN_START_MS. A read cut by the budget, the time limit,
 //     the list's last page, the limiter refusing a later request or a request
-//     aborted at the call's deadline (`isCut`) writes
+//     the call's deadline ended (aborted at it, or failed with no time left
+//     to retry before it; `isCut`) writes
 //     the rows read so far and says `truncated: true` (and gives
 //     `next_cursor`, below); any other failed
 //     request fails the call and keeps nothing.
@@ -454,7 +455,7 @@ export const exportTicketsTool: Tool<typeof input> = {
             const thread = await listConversations(context.http, ticket.id, deadline, "expensive");
             meter.used += thread.attempts ?? 0;
             meter.requests += thread.attempts ?? 0;
-            if (!thread.ok) return isCut(thread.error, deadline) ? false : thread.error;
+            if (!thread.ok) return isCut(thread.error, context) ? false : thread.error;
             row.conversations = thread.items.map(threadEntry);
             if (thread.truncated) row.conversations_truncated = true;
           }

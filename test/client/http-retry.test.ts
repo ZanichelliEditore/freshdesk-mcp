@@ -455,6 +455,81 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     await nothingMoreSent(3);
   });
 
+  it("marks the expiry of a GET in flight at the deadline as the deadline reached", async () => {
+    slow("GET").times(4);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(http.reachedDeadline(failure(result))).toBe(true);
+  });
+
+  // T-059: an attempt started at 19.6 s times out at 29.6 s, before the
+  // deadline, and the 1 s backoff does not fit: the deadline ended the call.
+  it("marks a GET's network failure that no retry can follow before the deadline as the deadline reached", async () => {
+    // Answers at 9.5 s and 18.6 s; the third attempt, at 19.6 s, times out.
+    on("GET").reply(503, "").delay(9500);
+    on("GET").reply(503, "").delay(8600);
+    slow("GET");
+    on("GET").reply(200, { late: true }, { headers: JSON_TYPE });
+
+    const { result, ms } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    const error = failure(result);
+    expect(error).toMatchObject({ code: "network", http_status: null, retryable: true });
+    expect(error.message).not.toContain("deadline");
+    expect(http.reachedDeadline(error)).toBe(true);
+    expect(ms).toBe(19_600 + REQUEST_TIMEOUT_MS);
+    expect(sent()).toHaveLength(3);
+    await nothingMoreSent(3);
+  });
+
+  it("marks a network failure with no time left before a caller's deadline too", async () => {
+    on("GET").reply(503, "").delay(4000);
+    on("GET")
+      .replyWithError(Object.assign(new Error("reset"), { code: "ECONNRESET" }))
+      .delay(400);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }, Date.now() + 5000));
+
+    expect(http.reachedDeadline(failure(result))).toBe(true);
+    expect(sent()).toHaveLength(2);
+  });
+
+  it("does not mark a network failure that used its retries with time left", async () => {
+    on("GET")
+      .replyWithError(Object.assign(new Error("reset"), { code: "ECONNRESET" }))
+      .times(4);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(failure(result)).toMatchObject({ code: "network" });
+    expect(http.reachedDeadline(failure(result))).toBe(false);
+    expect(sent()).toHaveLength(4);
+  });
+
+  it("does not mark a 5xx that no retry can follow: an answer, not the deadline", async () => {
+    on("GET").reply(503, "").delay(9500).times(2);
+    on("GET").reply(503, "").delay(9300);
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
+
+    expect(http.reachedDeadline(failure(result))).toBe(false);
+  });
+
+  it("does not mark a write's network failure: it may have been applied", async () => {
+    // A GET failing at 9 s with the deadline at 9.2 s would be marked.
+    on("POST")
+      .replyWithError(Object.assign(new Error("reset"), { code: "ECONNRESET" }))
+      .delay(9000);
+
+    const { result } = await settle(
+      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() + 9200),
+    );
+
+    expect(failure(result)).toMatchObject({ code: "network", retryable: false });
+    expect(http.reachedDeadline(failure(result))).toBe(false);
+  });
+
   it("returns the last answer rather than start a backoff that would cross the deadline", async () => {
     // Answers at 9.5 s, 19.5 s and 29.8 s; the third backoff is 2 s.
     on("GET").reply(503, "").delay(9500).times(2);
