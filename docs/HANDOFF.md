@@ -4,13 +4,9 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T10:43:51+01:00`
-- **Describes commit:** `91b6eec`
-  (`91b6eecd13bb9fb0f35b0e8c181c2956ac88fd96`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** red (see Known red),
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45588346392
-  (workflow `quality`, ran on `91b6eec`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T10:59:27+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
 - **Current task:** T-058 `done (2026-11-25)`, `list_solution_tree`
   takes an optional `category`,
@@ -49,7 +45,14 @@
   `59dc763`. No code after R1, no scoped round. SPEC §8.2 checked by the
   orchestrator: it names the tool, not its inputs.
 
-- **Proposed plan changes:** none new.
+- **Proposed plan changes:** a new build task (found while fixing
+  `1d51e20`, 2026-11-25): a request that starts between 19.5 s and 20 s
+  and hangs times out as `network` just before the 30 s call deadline, so
+  `isCut` counts it a failure and `count_tickets`/`export_tickets` lose
+  the rows read instead of returning them `truncated` (fails safe, no
+  wrong data). Fix: treat a `network` error with no time left for a retry
+  as a cut, or have the client mark it a deadline expiry. Owner to say
+  go (rule 9: shared mechanism).
 
 - **Open doubts (owner):** see "Next action"; earlier: HANDOFF at
   `aff4666`, `c6dba4b`, `d1c7efe`, `fe81a3c`.
@@ -57,11 +60,15 @@
 - **Dead ends:** a bad `category` is refused by the SDK's input check, not
   the tool's `validation` (T-058 task file).
 
-- **Known red:** none (CI red on `1afbd08` fixed in `c23a682`, green on
-  `aff4666`).
+- **Known red:** none. CI was red on `91b6eec`
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45588346392,
+  a deadline-abort test: the settle loop counted real I/O as fake time);
+  fixed in `1d51e20` (15 timing tests made deterministic,
+  `test/support/slow-replies.ts`). Earlier red on `1afbd08`, fixed in
+  `c23a682`.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `f0f9869`:
+  orchestrator on `f0f9869`; the builder on `1d51e20` (2591 tests):
   - vitest "Test Files 39 passed (39)", "Tests 2591 passed (2591)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
