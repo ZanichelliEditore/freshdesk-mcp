@@ -38,6 +38,8 @@ the owner's release decisions and decides how a publish is authorised.
 - `docs/rfc/proposed/` → `docs/rfc/active/`
 - `docs/tasks/PLAN.md` and `docs/tasks/T-045-release-workflow.md`
   (acceptance amendment only)
+- `SPEC.md` §11 (the first-release line, on the owner's word with the flip
+  to Active)
 
 ## Wireframes
 `none`

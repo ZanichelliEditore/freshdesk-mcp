@@ -79,11 +79,22 @@ No npm token is stored anywhere, ever.
   local tree (the stale-`dist/` park, `docs/improvements.md`, entry
   82ab7a6). It keeps `--provenance --access public`.
 - **Pins.** Every `uses:` by commit SHA (read 2026-11-25 with
-  `git ls-remote`; both are lightweight tags, so the SHA is the commit):
+  `git ls-remote`; all three are lightweight tags, so the SHA is the
+  commit). The chain needs all three: the quality job runs ruff and the
+  Python checks, and the gitleaks job runs `pre-commit`, both after
+  `actions/setup-python`.
   - `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1,
     released 2026-07-20)
   - `actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1` (v7.1.0,
     released 2026-10-08)
+  - `actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0`
+    (v7.1.0, released 2026-10-22)
+
+  `release.yml` copies the quality and gitleaks jobs from `quality.yml`
+  rather than calling it: a local reusable workflow is referenced as
+  `uses: ./.github/workflows/quality.yml`, a path that cannot carry a SHA,
+  and T-045 requires a 40-hex SHA on every `uses:`. The copy can drift from
+  `quality.yml`; T-045's checks name the jobs the publish `needs`.
 
   T-045 rechecks these against the current releases when it writes the
   workflow, and adds any other action only with its SHA.
@@ -91,15 +102,24 @@ No npm token is stored anywhere, ever.
 **Who can trigger a publish:** whoever can create a `v*` tag under the
 ruleset (its bypass list), plus repository admins, who can change the
 ruleset and the environment. That set is "the users allowed to run the
-pipeline". The tag must also point at a commit on `origin/main` and match
-`package.json` (T-045's checks), so what is published went through `main`.
+pipeline". T-045's checks (the tagged commit is an ancestor of
+`origin/main`, the tag equals `package.json`) guard against mistakes, not
+against the people on the bypass list: the checks live in `release.yml`,
+and the run uses the `release.yml` of the tagged commit. A bypass-list user
+can tag a branch commit whose `release.yml` drops the check, and publish any
+code, with provenance that names that commit. `main` itself is not protected
+(read 2026-11-25 from the public API: `branches/main` reports
+`protected: false`, and no ruleset applies to `main`), so "on `main`" does
+not mean "reviewed" either. Protecting `main` is a separate owner decision,
+not part of this RFC.
 
 **What a leaked credential allows:** there is no stored npm credential to
 leak. The OIDC token lives for minutes, inside one job, and npm accepts it
 only for this package from this workflow in this environment. A leaked
-GitHub credential of someone on the bypass list can push a tag, which
-publishes a commit already on `main`; that is the same power the owner's
-rule gives that person. A leaked credential of a writer not on the list
+GitHub credential of someone on the bypass list can publish any code, as
+above, with provenance pointing at the commit it tagged; that is the same
+power the owner's rule gives that person, and the provenance shows what was
+published. A leaked credential of a writer not on the list
 cannot push a `v*` tag or enter the environment. A leaked npm session of a
 package maintainer can still publish by hand with 2FA; that is outside CI
 and outside this RFC.
@@ -122,15 +142,21 @@ approves that reading with this RFC.
 - Who may publish is one GitHub setting (the ruleset's bypass list), in line
   with the owner's rule; no reviewer has to be online to release.
 - `@zanichelli/freshdesk-mcp@0.0.0` stays on npm, deprecated. Unpublishing
-  it would block the name for 24 hours and is not worth it.
+  every version blocks any new publish of the package for 24 hours (npm
+  unpublish policy), which is not worth it.
+- SPEC §11 says "the first publish is 0.1.0". On the owner's approval, with
+  the flip to Active, it is amended to "the first release is 0.1.0; a
+  deprecated 0.0.0 placeholder precedes it (RFC 2026-11-25)". SPEC is not
+  edited before that.
 - Setting up depends on the owner, by hand, in an order (below). npm does
   not validate a trusted publisher when it is saved: a typo shows only as a
   failed publish.
 - `package.json` needs `repository.url`
   (`https://github.com/ZanichelliEditore/freshdesk-mcp`), `"license": "MIT"`
-  and a `LICENSE` file before 0.1.0. T-045 removes `private: true` and is the
-  natural place for them; T-045's scope does not list them today (owner to
-  confirm).
+  (owner, 2026-11-25) and a root `LICENSE` file before 0.1.0. T-045 adds all
+  three (orchestrator, 2026-11-25). The `LICENSE` copyright holder is
+  "Zanichelli", the name the repository already uses (SPEC §1); the owner
+  confirms or corrects the legal name before 0.1.0.
 - The tag ruleset and the environment are GitHub settings, not code: no
   test in the repository can prove them. T-045 tests the workflow side
   (`environment: npm`, no secret); the owner confirms the settings.
@@ -139,6 +165,8 @@ approves that reading with this RFC.
 
 ### Owner's manual steps, in order
 
+0. Before anything else: confirm the repository is public (provenance and
+   trusted publishing need it; the public API showed `public` on 2026-11-25).
 1. Before T-045's first tag: GitHub, repository settings. Create
    environment `npm`: no reviewers, no secrets, "Selected branches and
    tags", add tag rule `v*`.
@@ -169,13 +197,13 @@ approves that reading with this RFC.
   npm checks only the workflow file name, so a writer can publish from a
   branch copy of `release.yml`, around the tag ruleset. Rejected: the
   environment costs one setting and closes it.
-- **Staged publishing (stage-only token or OIDC `npm stage publish`, then a
-  maintainer's 2FA approval).** It can create a new package from CI, so 0.1.0
-  would be the very first upload (npm still publishes a public
-  `0.0.0-stage` placeholder). Rejected for now: it puts a token in the
-  workflow for the bootstrap and adds a human approval to every release,
-  which the owner's rule does not ask for. It stays available if the owner
-  later wants a second person on each release.
+- **Staged publishing (`npm stage publish`, then a maintainer's 2FA
+  approval).** A new package can be created by staging only with a local
+  session or a granular (stage-only) token, not OIDC; and staging a new
+  package publishes a public `0.0.0-stage` placeholder, so it does not avoid
+  a placeholder either. The deciding reason: it adds a human approval to
+  every release, which the owner's rule does not ask for. It stays available
+  if the owner later wants a second person on each release.
 - **The owner publishes 0.1.0 by hand, then CI from 0.1.1.** Rejected:
   breaks decision 3 for the first release and risks a stale local `dist/`.
 - **A one-time token secret for 0.1.0 only, then trusted publishing.**
@@ -194,4 +222,32 @@ approves that reading with this RFC.
 - <https://github.blog/changelog/2025-11-05-npm-security-update-classic-token-creation-disabled-and-granular-token-changes/>
 - <https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments>
 - <https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets>
+- <https://docs.npmjs.com/policies/unpublish>
 - <https://nodejs.org/dist/index.json> (Node 24.22.3 bundles npm 11.19.1)
+- `https://api.github.com/repos/ZanichelliEditore/freshdesk-mcp` and its
+  `branches/main` and `rules/branches/main` (visibility, protection)
+
+## Review
+
+`rfc-reviewer` on the draft (2026-11-25): decision sound; 1 High, 3 Medium,
+2 Low, all text. Resolutions:
+
+1. High: T-045's Gates and In scope still offered a token or a reviewer.
+   Resolved: rewritten to this RFC (`environment: npm`, no secret; the
+   owner's steps 0-2 before the first tag, 3-6 on the go); T-045 also adds
+   `repository.url`, `"license": "MIT"` and `LICENSE` (scope, files and
+   acceptance, task file and PLAN row); the license line here closed with
+   the owner's MIT decision of 2026-11-25.
+2. Medium: SPEC §11 says "first publish is 0.1.0". Resolved: the amendment
+   is stated under Consequences, made on the owner's word with the flip to
+   Active; `SPEC.md` added to T-048's files expected.
+3. Medium: `actions/setup-python` was not pinned. Resolved: pinned above,
+   with the consequence that `release.yml` copies the quality jobs.
+4. Medium: the RFC claimed the `main` check means what is published went
+   through `main`. Resolved: corrected under "Who can trigger"; `main`
+   protection stated as read.
+5. Low: staged publishing claimed an OIDC bootstrap. Resolved: OIDC
+   dropped; the placeholder is shared, the deciding reason is the approval
+   on every release.
+6. Low: no step confirms the repository is public; the 24-hour claim had no
+   source. Resolved: step 0 added; npm unpublish policy cited.

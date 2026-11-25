@@ -5,10 +5,11 @@
 - **Status:** todo (2026-11-23)
 - **Depends on:** T-038, T-048
 - **Created:** 2026-11-23
-- **Gates:** The owner sets up what T-048 chose (the environment and its
-  reviewer, or the npm trusted publisher; a token secret only if T-048 keeps
-  one) before the first tag; the first publish is the owner's explicit go,
-  after T-039, outside this task.
+- **Gates:** Before the first tag the owner does steps 0-2 of RFC
+  2026-11-25 (release on npm): repository public, environment `npm` (no
+  reviewer, no secret, tags `v*` only), `v*` tag ruleset. Steps 3-6
+  (placeholder `0.0.0`, trusted publisher, tag `v0.1.0`, disallow tokens)
+  are the owner's, on the explicit go, after T-039, outside this task.
 
 ## Goal
 A workflow that publishes the package to public npm from CI when a version
@@ -20,9 +21,14 @@ publish is 0.1.0, only after T-039 and on the owner's explicit go.
 - `.github/workflows/release.yml`: a publish only on the push of a `v*` tag;
   the publish job `needs` the quality and gitleaks jobs (jobs, not steps)
   and the build; `npm publish --provenance --access public`.
-- The publish job is gated by the mechanism T-048 chose, in the workflow
-  itself, not in prose. A token, if T-048 keeps one, is in the publish
-  step's `env` only.
+- The publish job uses npm trusted publishing (RFC 2026-11-25, release on
+  npm): it declares `environment: npm`, and no job references an npm token
+  or a secret. The quality and gitleaks jobs are copied from `quality.yml`,
+  not called (a local reusable workflow cannot carry a SHA).
+- `package.json`: `repository.url`
+  `https://github.com/ZanichelliEditore/freshdesk-mcp` and
+  `"license": "MIT"` (owner, 2026-11-25); a root `LICENSE` (MIT, copyright
+  holder "Zanichelli"; the owner confirms the legal name before 0.1.0).
 - `permissions: contents: read` for the workflow; `id-token: write` on the
   publish job only. Every action pinned by commit SHA.
 - The tagged commit must be an ancestor of `origin/main`; the tag must equal
@@ -49,6 +55,7 @@ publish is 0.1.0, only after T-039 and on the owner's explicit go.
 - `tools/checks/test_release_workflow.py`
 - `tools/checks/release_version.py` and its test
 - `package.json`
+- `LICENSE`
 - `CHANGELOG.md`
 - `README.md`
 
@@ -65,9 +72,10 @@ chain built; a step before the publish runs the version script on the tag
 and fails on a mismatch; it publishes by npm trusted publishing (RFC
 2026-11-25, release on npm): the publish job declares `environment: npm`,
 and no job references an npm token or a secret; `package.json`
-`repository.url` is `https://github.com/ZanichelliEditore/freshdesk-mcp`;
-workflow `permissions` are `contents: read`, and `id-token: write` appears
-on the publish job only; the dry-run job references no secret; every `uses:`
+`repository.url` is `https://github.com/ZanichelliEditore/freshdesk-mcp` and
+`license` is `MIT`, and a root `LICENSE` holds the MIT text; workflow
+`permissions` are `contents: read`, and `id-token: write` appears on the
+publish job only; the dry-run job references no secret; every `uses:`
 carries a 40-hex commit SHA; a step before the publish fails unless the
 tagged commit is an ancestor of `origin/main`; the publish carries
 `--provenance` and `--access public`. The version script's unit test runs it
