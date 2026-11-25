@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-037, T-038
 - **Created:** 2026-11-25
 
@@ -101,20 +101,54 @@ or env"; SPEC §10 says "flag or env"; `package.json`,
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `1d4463b`: `parseCliArgs` (`src/config.ts`; `util.parseArgs` with
+  `strict: false, tokens: true`, each token checked here so no message quotes
+  one), `loadConfig(env, args)` (flag, else `FRESHDESK_EXPORT_DIR`),
+  `src/cli.ts` parses before reading env (`--version` anywhere, a refusal
+  wins); `export_tickets` messages and description name "the export
+  directory" and both ways to set it; README, SPEC §10, OD-5, overview,
+  CHANGELOG 0.2.0 (unreleased), `package.json`/lock, `src/version.ts`; RFC
+  Implemented box ticked.
+- `16c6ff4`: full-round fixes (refusal reasons asserted exactly; ending names
+  `--version`; comment; overview line 49; CHANGELOG).
+- Tests (vitest 2604 → 2645):
+  - `test/config.test.ts` › "command-line arguments (T-060, …)": both flag
+    forms, precedence, `--version` anywhere, refusals by reason ("is refused
+    naming --export-dir as the cause", "is refused without quoting it"), "an
+    unknown token holding %s is not in the message" (API key, arbitrary).
+  - `test/server.test.ts` › "the built cli" › "command line (T-060)": exit 1,
+    stderr, stdout empty, token unquoted, no `FRESHDESK_API_KEY` in stderr
+    (parse before env); `--version` prints `0.2.0` alone, after
+    `--export-dir /a`, before `--export-dir=/a`, with env `{}`.
+  - `test/tools/core/export-tickets.test.ts` › "a directory given by
+    --export-dir (T-060)": written to; relative, missing, symlink refused, no
+    request; unset refusal and description name both ways.
+  - `test/package.test.ts` › "sets the export directory with --export-dir
+    (T-060)": Claude Code (both forms), Claude Desktop, fallback row, `~`.
+- Red first: config tests 27 failing before `parseCliArgs`; server
+  `--version` 3 failing before the bump; export-tickets 7 failing before the
+  wording; package 3 failing before README. Reason assertions shown able to
+  fail: missing-value reason mutated to "an unknown option" → 5 failing.
+- `make quality` on `16c6ff4`: vitest 39 files / 2645 tests passed,
+  `tools/checks` 87 tests OK, exit 0.
 
 ## Dead ends
-none
+- `util.parseArgs` in strict mode: its messages quote the token
+  (`Unknown option '--<token>'`), and its error codes do not say which option
+  an invalid value belongs to (`--version=1` and a missing `--export-dir`
+  value share `ERR_PARSE_ARGS_INVALID_OPTION_VALUE`). Replaced by lenient
+  tokens checked one by one.
 
 ## Open doubts
-none
+- README snippets are unpinned (`npx -y @zanichelli/freshdesk-mcp
+  --export-dir …`), as the rest of the README and `test/package.test.ts`;
+  the In-scope line wrote `@<v>`. Owner to say if pinned snippets are wanted.
+- `--export-dir -` (a lone dash, separate) is refused as a missing value;
+  `--export-dir=-x` is kept and refused by the tool as relative. Deliberate.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Build in a fresh session (`/pickup`). The RFC is done: `docs/rfc/active/2026-11-25-export-dir-flag.md`, Active (owner, 2026-11-25), commits `89fb9cf`, `a3f5c94`, `1ed19e8`. No code written yet (owner stopped the build to start a proper session, 2026-11-25).
-
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: done. The 0.2.0 release (tag `v0.2.0`, `release.yml`) waits for the
+owner's explicit go.
