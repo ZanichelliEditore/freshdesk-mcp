@@ -21,6 +21,13 @@ review, 2026-11-23).
   `update-types: semver-major`, so the file shows which pin each rule holds.
 - `tools/checks/test_dependabot_config.py`, standard library, text-level
   (no YAML parser in the standard library), as `test_release_workflow.py`.
+- Confirm against GitHub's Dependabot documentation whether `ignore`
+  also mutes security updates for those versions; each rule's comment says
+  so if it does (both packages are dev-only, the ranges bounded).
+- Not testable in the repository: whether Dependabot stops proposing
+  them. The owner's observation after the next weekly run (no
+  `@types/node` 23 or later, no `typescript` 7 or later proposed) goes in
+  HANDOFF, not in the acceptance.
 - Check at session start that `typescript-eslint`'s current peer range
   still refuses TypeScript 7 (`npm view typescript-eslint peerDependencies`);
   if it accepts it, stop and ask the owner before writing the
@@ -42,14 +49,7 @@ review, 2026-11-23).
 `none`
 
 ## Acceptance
-`tools/checks/test_dependabot_config.py` (standard library, text-level, as
-`test_release_workflow.py`): `.github/dependabot.yml`'s npm entry ignores
-`@types/node` `versions: [">=23"]` and `typescript` `versions: [">=7"]`,
-each with a comment naming what lifts it (an RFC moving the Node types off
-`^22`; a `typescript-eslint` release whose peer range accepts TypeScript
-7); the github-actions entry has no `ignore`; a fixture file without the
-rules fails the test; `make quality` green. Closing PR #3 stays the
-owner's.
+`tools/checks/test_dependabot_config.py` (standard library, text-level, as `test_release_workflow.py`): `.github/dependabot.yml`'s npm entry ignores `@types/node` `versions: [">=23"]` and `typescript` `versions: [">=7"]`, each with a comment naming what lifts it, the test checking the token `RFC` in the first and `typescript-eslint` in the second (an RFC moving the Node types off `^22`; a `typescript-eslint` release whose peer range accepts TypeScript 7); the github-actions entry has no `ignore`; a fixture file without the rules fails the test; `make quality` green. Closing PR #3 stays the owner's.
 
 ---
 *Filled at `/handoff`:*

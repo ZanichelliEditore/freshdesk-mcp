@@ -25,8 +25,12 @@ gets the version npm serves now and not npm's cached metadata (owner,
   release) hit a pinned `npx`.
 - `test/package.test.ts`: the existing assertions on `npx -y ${pkg.name}`
   and on `ARGS` changed to the new text; one new case that fails if any
-  `npx` command in the README lacks `--prefer-online`, or any `"args"`
-  array starting with `"-y"` lacks `"--prefer-online"` right after it.
+  `npx -y` in the README (the shell form) is not followed by
+  ` --prefer-online`, or any `"args"` array starting with `"-y"` lacks
+  `"--prefer-online"` right after it. `"command": "npx"` lines carry no
+  flag by design: the `"args"` rule covers them.
+- If the owner removes the "Not yet published" block first, its line
+  leaves this list.
 
 ## Out of scope
 - Removing or rewriting the "Not yet published" block (stale since 0.1.0
@@ -45,15 +49,7 @@ gets the version npm serves now and not npm's cached metadata (owner,
 `none`
 
 ## Acceptance
-`test/package.test.ts`: the README contains `npx -y --prefer-online ${pkg.name}`,
-the pinned form `npx -y --prefer-online ${pkg.name}@<version>`, and in the
-Claude Code and Claude Desktop sections
-`-- npx -y --prefer-online ${pkg.name} --export-dir /absolute/path/to/exports`
-and `"args": ["-y", "--prefer-online", "${pkg.name}", "--export-dir", "/absolute/path/to/exports"]`;
-a new case fails if any `npx` command in the README lacks `--prefer-online`
-or any `"args"` array starting with `"-y"` lacks `"--prefer-online"` right
-after it (shown failing on the README of the commit T-061 starts from);
-the pin advice stays; `make quality` green.
+`test/package.test.ts`: the README contains `npx -y --prefer-online ${pkg.name}`, the pinned form `npx -y --prefer-online ${pkg.name}@<version>`, and in the Claude Code and Claude Desktop sections `-- npx -y --prefer-online ${pkg.name} --export-dir /absolute/path/to/exports` and `"args": ["-y", "--prefer-online", "${pkg.name}", "--export-dir", "/absolute/path/to/exports"]`; a new case fails if any `npx -y` in the README is not followed by ` --prefer-online` (the shell form; `"command": "npx"` lines are checked by the `"args"` rule) or any `"args"` array starting with `"-y"` lacks `"--prefer-online"` right after it (shown failing on the README of the commit T-061 starts from); the pin advice stays; `make quality` green.
 
 ---
 *Filled at `/handoff`:*
