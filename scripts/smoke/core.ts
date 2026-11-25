@@ -19,10 +19,13 @@
 //   - Never printed: ticket text, a label, a name, an id, the domain or the
 //     key. Ids and the search term are taken from the run (the first ticket
 //     of `list_tickets`; the first article of `list_solution_tree` and its
-//     title's first word, or, when the tree has no article, the first word
-//     of its first folder's name and the first article `search_solutions`
-//     finds with it; the first canned response of `list_canned_responses`)
-//     and only sent, never printed.
+//     title's first word, or, when the tree has no article, the first
+//     article of `list_solution_tree` called again with `category`, the
+//     first category that has a folder (line `list_solution_tree category`,
+//     T-058; no line when the tree has an article), or, when that has none
+//     either, the first word of the first folder's name and the first
+//     article `search_solutions` finds with it; the first canned response of
+//     `list_canned_responses`) and only sent, never printed.
 //   - The period of `count_tickets` and `export_tickets` is the last `days`
 //     UTC days, today included (7 by default; `--days` narrows it).
 //   - `export_tickets` writes into a fresh temporary directory of mode 0700,
@@ -121,6 +124,7 @@ function text(value: { text: string | null }) {
 const treeShape = z.object({
   categories: z.array(
     z.object({
+      id,
       folders: z
         .array(
           z.object({
@@ -406,10 +410,22 @@ export async function runCore(
     const tree = (await run("list_solution_tree", "list_solution_tree", {})) as
       z.output<typeof treeShape> | undefined;
     // The tree's first article when it has one; else (a large knowledge base
-    // can exhaust the tree's list cap on folders) the first folder's name
-    // for the term and the first search hit for the article.
-    const folders = tree?.categories.flatMap((category) => category.folders ?? []) ?? [];
-    const article = folders.flatMap((folder) => folder.articles ?? [])[0];
+    // can exhaust the tree's list cap on folders) the tree of the first
+    // category with a folder; else the first folder's name for the term and
+    // the first search hit for the article.
+    const foldersOf = (outline: z.output<typeof treeShape> | undefined) =>
+      outline?.categories.flatMap((category) => category.folders ?? []) ?? [];
+    const firstArticle = (outline: z.output<typeof treeShape> | undefined) =>
+      foldersOf(outline).flatMap((folder) => folder.articles ?? [])[0];
+    const folders = foldersOf(tree);
+    let article = firstArticle(tree);
+    const category = tree?.categories.find((each) => (each.folders?.length ?? 0) > 0)?.id;
+    if (article === undefined && category !== undefined) {
+      const one = (await run("list_solution_tree category", "list_solution_tree", {
+        category,
+      })) as z.output<typeof treeShape> | undefined;
+      article = firstArticle(one);
+    }
     const term = firstWord(article?.title) ?? firstWord(folders[0]?.name);
     const hits = (await run(
       "search_solutions",

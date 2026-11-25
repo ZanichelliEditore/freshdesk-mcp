@@ -44,6 +44,13 @@
 //     A failed list fails the call. Every list is `expensive` for the limiter
 //     (the walk is the costliest read here): below the reserve the next list
 //     is refused, nothing sent, and the call is `rate_limited`.
+//     With the optional `category` (an id, T-058) the categories list is not
+//     read: that one category is (`getCategory`, `expensive` too, the first
+//     of MAX_LISTS), then its folders and their articles as above, so a
+//     knowledge base with more categories than MAX_LISTS still shows
+//     articles. A 404 for it is `not_found`, nothing more sent: one request,
+//     where checking the categories list would cost up to 10 and miss a
+//     category past `listAll`'s cap. Without `category` nothing changes.
 //   - `updated_at` through rows.ts's `isoUpdated`: a UTC instant, as the
 //     ticket tools give dates, or `null`.
 //   - One deadline for the whole call, CALL_DEADLINE_MS from its start.
@@ -52,6 +59,7 @@
 import { z } from "zod";
 import {
   getArticle,
+  getCategory,
   getFolder,
   listArticles,
   listCategories,
@@ -61,6 +69,7 @@ import {
 } from "../../../client/resources/solutions.js";
 import { NAME_CAP, plainName, untrusted } from "../../format.js";
 import { listEnvelope, readCursor } from "../../list.js";
+import type { AppContext } from "../../context.js";
 import { isoUpdated } from "../../rows.js";
 import type { Tool } from "../index.js";
 
@@ -230,13 +239,15 @@ interface TreeCategory {
   folders: TreeFolder[] | null;
 }
 
-const treeInput = z.object({});
+const treeInput = z.object({ category: z.number().int().positive().optional() });
 
 export const listSolutionTreeTool: Tool<typeof treeInput> = {
   name: "list_solution_tree",
   description: [
     "The knowledge base's outline: categories, each with its folders (name and visibility: all users, logged-in users, agents only, selected companies, or null), each with its articles' ids, titles, status (draft, published, or null), customer_safe and last update. No article text: get_solution_article gives it.",
-    `It reads at most ${MAX_LISTS} lists a call (the categories, one per category for its folders, one per folder for its articles), categories and folders first: a category or folder past that has folders: null or articles: null, and truncated is true. truncated is true too when a list was longer than 1,000 entries and cut. Subfolders are not shown: an article in a subfolder is found only through search_solutions. Every list is sent as an expensive operation: paced (2 requests a second by default), so a full walk of single-page lists takes about 10 s, and refused with rate_limited when the account's API budget is low (the call then fails). A walk that cannot finish within 30 s fails as network.`,
+    `It reads at most ${MAX_LISTS} lists a call (the categories, one per category for its folders, one per folder for its articles), categories and folders first: a category or folder past that has folders: null or articles: null, and truncated is true. truncated is true too when a list was longer than 1,000 entries and cut.`,
+    "category (optional, a category id from this outline) reads that category alone in place of the categories list: its folders and their articles. When the outline comes back truncated: true with no articles, call again with category set to one category's id. An unknown category is not_found.",
+    `Subfolders are not shown: an article in a subfolder is found only through search_solutions. Every list is sent as an expensive operation: paced (2 requests a second by default), so a full walk of single-page lists takes about 10 s, and refused with rate_limited when the account's API budget is low (the call then fails). A walk that cannot finish within 30 s fails as network.`,
     FOR_THE_AGENT,
     NAMES,
     "api_calls_used counts every request sent, retries included.",
@@ -245,10 +256,13 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
   annotations: ANNOTATIONS,
   cost: `1 API call per list of up to 100 entries, at most ${MAX_LISTS} lists of at most 10 calls each, within 30 s, plus one per retry after an error`,
   customerText: false,
-  async handler(_args, context) {
+  async handler(args, context) {
     const deadline = Date.now() + CALL_DEADLINE_MS;
     let lists = 1;
-    const listed = await listCategories(context.http, deadline, "expensive");
+    const listed =
+      args.category === undefined
+        ? await listCategories(context.http, deadline, "expensive")
+        : await oneCategory(context, args.category, deadline);
     if (!listed.ok) return listed;
     let calls = listed.attempts;
     let truncated = listed.truncated;
@@ -301,3 +315,10 @@ export const listSolutionTreeTool: Tool<typeof treeInput> = {
     return { ok: true, value: { categories, truncated, api_calls_used: calls } };
   },
 };
+
+/** The one category asked for, in `listCategories`' result shape. */
+async function oneCategory(context: AppContext, id: number, deadline: number) {
+  const got = await getCategory(context.http, id, deadline, "expensive");
+  if (!got.ok) return got;
+  return { ok: true as const, items: [got.category], truncated: false, attempts: got.attempts };
+}

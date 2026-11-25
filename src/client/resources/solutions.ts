@@ -11,6 +11,9 @@
 //     unless given; `expensive` for `list_solution_tree`'s walk, T-032).
 //     Subfolders (`GET /solutions/folders/{id}/subfolders`) are not read:
 //     an article in a subfolder is reached only through search.
+//   - `getCategory`: `GET /solutions/categories/{id}`, the one category
+//     `list_solution_tree` is asked for (T-058): a 404 is `not_found`. It
+//     takes the same optional trailing cost class as the lists.
 //   - `getArticle`: `GET /solutions/articles/{id}`.
 //   - `getFolder`: `GET /solutions/folders/{id}`, for the visibility of a
 //     viewed article's folder (T-032).
@@ -45,10 +48,11 @@
 // sent.
 //
 // `attempts` is the requests sent, retries included: what a tool reports as
-// API calls. A `getArticle` or `searchArticles` that fails after its values
-// were accepted carries it too (0 when nothing was sent). `deadline` (epoch
-// ms, optional) is the caller's: see `requestWithRetry` and `paginate`. Every
-// request is `cheap`: each tool call is a bounded number of them.
+// API calls. A `getArticle`, `getCategory` or `searchArticles` that fails
+// after its values were accepted carries it too (0 when nothing was sent).
+// `deadline` (epoch ms, optional) is the caller's: see `requestWithRetry` and
+// `paginate`. Every request is `cheap` unless its caller gives a cost class
+// (the lists and `getCategory`): each tool call is a bounded number of them.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
@@ -117,6 +121,10 @@ export interface Article extends ArticleSummary {
 
 export type ArticleResult =
   | { ok: true; article: Article; attempts: number }
+  | { ok: false; error: FreshdeskError; attempts?: number };
+
+export type CategoryResult =
+  | { ok: true; category: SolutionCategory; attempts: number }
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export type FolderResult =
@@ -203,6 +211,25 @@ export async function getArticle(
     article: { id: parsed.data.id, title, text: description_text, status, updated_at, folder_id },
     attempts: result.attempts,
   };
+}
+
+export async function getCategory(
+  http: HttpClient,
+  id: number,
+  deadline?: number,
+  cost?: CostClass,
+): Promise<CategoryResult> {
+  if (!isPositiveInt(id)) return refused("category id");
+  const result = await http.requestWithRetry(
+    { path: "/solutions/categories/{id}", params: { id }, ...(cost === undefined ? {} : { cost }) },
+    deadline,
+  );
+  if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
+  const parsed = named.safeParse(result.body);
+  if (!parsed.success) {
+    return { ...malformed("a solution category", result.status), attempts: result.attempts };
+  }
+  return { ok: true, category: toNamed(parsed.data), attempts: result.attempts };
 }
 
 export async function getFolder(

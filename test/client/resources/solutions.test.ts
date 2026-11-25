@@ -3,6 +3,7 @@ import { HttpClient } from "../../../src/client/http.js";
 import { RateLimiter } from "../../../src/client/rate-limit.js";
 import {
   getArticle,
+  getCategory,
   getFolder,
   listArticles,
   listCategories,
@@ -371,6 +372,71 @@ describe("getArticle", () => {
       http_status: null,
     });
     expect(urls()).toHaveLength(0);
+  });
+});
+
+describe("getCategory", () => {
+  const CATEGORY = "/api/v2/solutions/categories/3101";
+
+  it("returns id and name, nothing else (visible_in_portals dropped)", async () => {
+    reply(CATEGORY, 200, categoryPages[0][0]);
+
+    const result = ok(await getCategory(http, 3101));
+
+    expect(result.category).toEqual({ id: 3101, name: "Widget Basics" });
+    expect(result.attempts).toBe(1);
+    expect(urls().map((url) => url.pathname + url.search)).toEqual([CATEGORY]);
+  });
+
+  it.each(BAD_IDS)("refuses the category id %s with nothing sent", async (id) => {
+    expectRefused(await getCategory(http, id as number), "category id");
+  });
+
+  it("returns a 404 as not_found, with its attempts", async () => {
+    reply(CATEGORY, 404, { message: CANARY });
+
+    const result = await getCategory(http, 3101);
+
+    expect(failure(result).code).toBe("not_found");
+    expect(result).toMatchObject({ ok: false, attempts: 1 });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
+  it("refuses a missing name as server, with no body text and its attempts", async () => {
+    reply(CATEGORY, 200, { ...categoryPages[0][0], name: undefined, description: CANARY });
+
+    const result = await getCategory(http, 3101);
+
+    expectMalformed(result, "a solution category");
+    expect(result).toMatchObject({ attempts: 1 });
+  });
+
+  it("passes the deadline on: one already passed sends nothing and is network", async () => {
+    reply(CATEGORY, 200, categoryPages[0][0]);
+
+    expect(failure(await getCategory(http, 3101, Date.now() - 1))).toMatchObject({
+      code: "network",
+      http_status: null,
+    });
+    expect(urls()).toHaveLength(0);
+  });
+
+  it("given expensive is refused below the reserve, nothing sent; cheap unless given", async () => {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: ARTICLE, method: "GET" })
+      .reply(200, articleView, {
+        headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
+      });
+    ok(await getArticle(http, 3301));
+
+    expect(failure(await getCategory(http, 3101, undefined, "expensive")).code).toBe(
+      "rate_limited",
+    );
+    expect(urls()).toHaveLength(1);
+    reply(CATEGORY, 200, categoryPages[0][0]);
+    ok(await getCategory(http, 3101));
+    expect(urls()).toHaveLength(2);
   });
 });
 

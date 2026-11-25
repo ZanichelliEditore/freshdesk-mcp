@@ -1318,6 +1318,8 @@ function serveCore(account: CoreAccount, onPeriodSearch?: () => void) {
         return answer(account.folders ?? folderPages[0]);
       if (/^\/solutions\/folders\/\d+\/articles$/.test(path))
         return answer(account.articles ?? articlePages[0]);
+      const category = /^\/solutions\/categories\/(\d+)$/.exec(path);
+      if (category) return answer({ ...categoryPages[0]![0], id: Number(category[1]) });
       if (/^\/solutions\/folders\/\d+$/.test(path)) return answer(folderView);
       if (/^\/solutions\/articles\/\d+$/.test(path)) return answer(articleView);
       if (path === "/search/solutions") return answer(searchHits);
@@ -1581,12 +1583,47 @@ describe("smoke core: where the solutions term and article come from", () => {
     expect(toolLine(lines, "get_solution_article")).toMatch(/: pass, text yes, /);
   });
 
-  it("a tree with folders but no article: the first folder's name word, the first hit's id", async () => {
+  it("a tree with articles: no tree with category", async () => {
+    const { lines } = await core(HEALTHY);
+    expect(
+      requestUrls().filter((url) => /^\/api\/v2\/solutions\/categories\/\d+$/.test(url.pathname)),
+    ).toEqual([]);
+    expect(lines.some((line) => line.startsWith("tool list_solution_tree category: "))).toBe(false);
+  });
+
+  it("22 categories (the walk spends its lists on folders): the tree with category gives the article, before any search", async () => {
+    const categories = Array.from({ length: 22 }, (_, i) => ({
+      ...categoryPages[0]![0],
+      id: 6001 + i,
+      name: `Topic ${i + 1}`,
+    }));
+    const { lines } = await core({ ...HEALTHY, categories });
+    // The first category with a folder, 6001; its first article "Fitting a new sprocket", 3301.
+    const paths = requestUrls().map((url) => url.pathname);
+    const one = paths.indexOf("/api/v2/solutions/categories/6001");
+    expect(one).toBeGreaterThan(-1);
+    expect(one).toBeLessThan(paths.indexOf("/api/v2/search/solutions"));
+    expect(solutionRequests()).toEqual({ terms: ["Fitting"], articles: ["3301"] });
+    expect(toolLine(lines, "list_solution_tree")).toMatch(
+      /: pass, categories 22, folders 38, articles 0, /,
+    );
+    expect(toolLine(lines, "list_solution_tree category")).toMatch(
+      /^tool list_solution_tree category: pass, categories 1, folders 2, articles 4, calls 4$/,
+    );
+    expect(toolLine(lines, "get_solution_article")).toMatch(/: pass, text yes, /);
+    expect(caseLine(lines, "C9")).toMatch(/: pass$/);
+    expect(lines.at(-1)).toBe("smoke core: ok");
+  });
+
+  it("a tree with folders but no article, nor with category: the first folder's name word, the first hit's id", async () => {
     const { lines } = await core({ ...HEALTHY, articles: [] });
     // "Getting Started": the first folder; 3302: the first search hit.
     expect(solutionRequests()).toEqual({ terms: ["Getting"], articles: ["3302"] });
     expect(toolLine(lines, "list_solution_tree")).toMatch(
       /: pass, categories 2, folders 4, articles 0, /,
+    );
+    expect(toolLine(lines, "list_solution_tree category")).toMatch(
+      /: pass, categories 1, folders 2, articles 0, /,
     );
     expect(toolLine(lines, "search_solutions")).toMatch(/: pass, items 2, /);
     expect(toolLine(lines, "get_solution_article")).toMatch(/: pass, text yes, /);

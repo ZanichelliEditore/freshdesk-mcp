@@ -44,6 +44,7 @@ const SEARCH = `/api/v2/search/solutions?term=${TERM}`;
 const CATEGORIES = "/api/v2/solutions/categories?per_page=100";
 const foldersOf = (id: number) => `/api/v2/solutions/categories/${id}/folders?per_page=100`;
 const articlesOf = (id: number) => `/api/v2/solutions/folders/${id}/articles?per_page=100`;
+const categoryOf = (id: number) => `/api/v2/solutions/categories/${id}`;
 const ARTICLE = "/api/v2/solutions/articles/3301";
 const FOLDER = "/api/v2/solutions/folders/3201";
 /** Budget headers below the default reserve of 20 %. */
@@ -198,6 +199,22 @@ describe("the listing", () => {
     expect(text("get_solution_article")).toContain(`${ARTICLE_CAP.toLocaleString("en-US")}`);
     expect(text("list_solution_tree")).toContain(`at most ${MAX_LISTS} lists`);
     expect(text("list_solution_tree")).toContain("expensive");
+  });
+
+  it("list_solution_tree takes an optional category; its description says when to pass it", async () => {
+    const tools = (await listTools(await session())) as unknown as {
+      name: string;
+      description: string;
+      inputSchema: { properties?: Record<string, unknown>; required?: string[] };
+    }[];
+    const tree = tools.find((tool) => tool.name === "list_solution_tree")!;
+    expect(Object.keys(tree.inputSchema.properties ?? {})).toEqual(["category"]);
+    expect(tree.inputSchema.required ?? []).not.toContain("category");
+    expect(tree.description).toContain(
+      "When the outline comes back truncated: true with no articles, call again with category set to one category's id",
+    );
+    expect(tree.description).toContain("An unknown category is not_found.");
+    expect(tree.description).not.toContain("  ");
   });
 });
 
@@ -712,5 +729,176 @@ describe("list_solution_tree", () => {
     expect(
       refusal(await paced(async () => callTool(await session(), "list_solution_tree", {}))).code,
     ).toBe("forbidden");
+  });
+
+  describe("with category", () => {
+    /**
+     * The real account's shape (T-039, 2026-11-25): 22 categories, each with
+     * the fixture's two folders. Every list of it is queued, so a request the
+     * call should not send is answered rather than refused by MockAgent.
+     */
+    const ACCOUNT = Array.from({ length: 22 }, (_, i) => ({
+      ...categoryPages[0][0],
+      id: i === 0 ? 3101 : 6001 + i,
+      name: `Topic ${i + 1}`,
+    }));
+
+    function queueAccount() {
+      reply(CATEGORIES, ACCOUNT);
+      for (const category of ACCOUNT) reply(foldersOf(category.id), folderPages[0]);
+      reply(articlesOf(3201), articlePages[0]);
+      reply(articlesOf(3202), articlePages[1]);
+    }
+
+    function paths(): string[] {
+      return (mock.getCallHistory()?.calls() ?? []).map((call) => {
+        const url = new URL(call.fullUrl);
+        return url.pathname + url.search;
+      });
+    }
+
+    it("without category, 22 categories spend every list on folders: no article, truncated", async () => {
+      queueAccount();
+      const result = ok<{
+        categories: { folders: { articles: unknown[] | null }[] | null }[];
+        truncated: boolean;
+      }>(await paced(async () => callTool(await session(), "list_solution_tree", {})));
+      const folders = result.categories.flatMap((category) => category.folders ?? []);
+      expect(folders.filter((folder) => folder.articles !== null)).toEqual([]);
+      expect(result.truncated).toBe(true);
+      expect(sent()).toBe(MAX_LISTS);
+    });
+
+    it("with 22 categories, reads only that category's folders and their articles, and returns articles", async () => {
+      queueAccount();
+      reply(categoryOf(3101), ACCOUNT[0]);
+      const result = ok(
+        await paced(async () =>
+          callTool(await session(), "list_solution_tree", { category: 3101 }),
+        ),
+      );
+      expect(paths()).toEqual([
+        categoryOf(3101),
+        foldersOf(3101),
+        articlesOf(3201),
+        articlesOf(3202),
+      ]);
+      expect(result).toEqual({
+        categories: [
+          {
+            id: 3101,
+            name: "Topic 1",
+            folders: [
+              {
+                id: 3201,
+                name: "Getting Started",
+                visibility: "all users",
+                articles: [
+                  {
+                    id: 3301,
+                    title: "Fitting a new sprocket",
+                    status: "published",
+                    updated_at: "2026-01-03T10:00:00.000Z",
+                    customer_safe: true,
+                  },
+                  {
+                    id: 3302,
+                    title: "Quieting a squeak",
+                    status: "draft",
+                    updated_at: "2026-01-03T10:00:00.000Z",
+                    customer_safe: false,
+                  },
+                ],
+              },
+              {
+                id: 3202,
+                name: "Squeaks and Rattles",
+                visibility: "agents only",
+                articles: [
+                  {
+                    id: 3303,
+                    title: "Storing spanners",
+                    status: "published",
+                    updated_at: "2026-01-03T10:00:00.000Z",
+                    customer_safe: false,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        truncated: false,
+        api_calls_used: 4,
+      });
+      expect(result.api_calls_used).toBe(sent());
+    });
+
+    it("the category's name goes through the name helper", async () => {
+      reply(categoryOf(3101), { ...ACCOUNT[0], name: "<b>Widget</b> Basics" });
+      reply(foldersOf(3101), []);
+      const result = ok<{ categories: { name: string; folders: unknown[] }[] }>(
+        await paced(async () =>
+          callTool(await session(), "list_solution_tree", { category: 3101 }),
+        ),
+      );
+      expect(result.categories).toEqual([{ id: 3101, name: "Widget Basics", folders: [] }]);
+    });
+
+    it("an unknown category is isError not_found: one request, no folder read", async () => {
+      reply(categoryOf(9999), { message: "gone" }, 404);
+      const error = refusal(
+        await paced(async () =>
+          callTool(await session(), "list_solution_tree", { category: 9999 }),
+        ),
+      );
+      expect(error.code).toBe("not_found");
+      expect(paths()).toEqual([categoryOf(9999)]);
+    });
+
+    it(`stays within ${MAX_LISTS} lists, the category read the first: truncated, the rest articles: null`, async () => {
+      const folders = Array.from({ length: MAX_LISTS }, (_, i) => ({
+        ...folderPages[0][0],
+        id: 5001 + i,
+        name: `Shelf ${i + 1}`,
+      }));
+      reply(categoryOf(3101), ACCOUNT[0]);
+      reply(foldersOf(3101), folders);
+      for (let i = 0; i < MAX_LISTS - 2; i += 1) reply(articlesOf(5001 + i), []);
+      const result = ok<{
+        categories: { folders: { articles: unknown[] | null }[] }[];
+        truncated: boolean;
+        api_calls_used: number;
+      }>(
+        await paced(async () =>
+          callTool(await session(), "list_solution_tree", { category: 3101 }),
+        ),
+      );
+      const unread = result.categories[0].folders.filter((folder) => folder.articles === null);
+      expect(unread).toHaveLength(2);
+      expect(result.truncated).toBe(true);
+      expect(sent()).toBe(MAX_LISTS);
+      expect(result.api_calls_used).toBe(sent());
+    });
+
+    it("the category read is expensive: below the reserve the call is rate_limited, nothing more sent", async () => {
+      const one = await session();
+      reply(SEARCH, searchHits, 200, LOW);
+      ok(await callTool(one, "search_solutions", { term: TERM }));
+      const error = refusal(
+        await paced(async () => callTool(one, "list_solution_tree", { category: 3101 })),
+      );
+      expect(error.code).toBe("rate_limited");
+      expect(sent()).toBe(1);
+    });
+
+    it.each([0, -1, 1.5, "3101", null])(
+      "category %s is refused by the input schema, nothing sent",
+      async (category) => {
+        const result = await callTool(await session(), "list_solution_tree", { category });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/^Input validation error/);
+        expect(sent()).toBe(0);
+      },
+    );
   });
 });
