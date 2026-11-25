@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T17:44:58+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by
-  the stamp commit.
+- **Describes commit:** `35c5522` (the M2 plan handoff commit), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45657572435
+  (workflow `quality`, ran on `35c5522`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** `/decompose M2` (a plan session, owner's go and
   approval of the plan as is, 2026-11-25) `done (2026-11-25)`. Plan
