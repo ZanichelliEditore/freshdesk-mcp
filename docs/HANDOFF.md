@@ -4,43 +4,49 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T14:29:13+01:00`
-- **Describes commit:** `d4e95ed`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the handoff commit). **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45624198196
-  (workflow `quality`, ran on `d4e95ed`: `quality (22.19)`, `quality (24)`,
-  `checks` all success). This file's hash and CI line arrive in the commit
-  right after it.
+- **Written:** `2026-11-25T14:39:10+01:00`
+- **Describes commit:** filled by the stamp commit right after the handoff
+  commit. **CI:** filled there too.
 
-- **Current task:** plan session (`/decompose` scoped to one owner row, by
-  the owner's delegation to the orchestrator) `done (2026-11-25)`. Commit
-  `d70d868` (plan), then the handoff commit (review fixes). See the dated
-  note above "### Not sized" in `docs/tasks/PLAN.md`.
+- **Current task:** plan session (`/decompose` scoped to owner rows, by the
+  owner's delegation to the orchestrator) `done (2026-11-25)`. T-062:
+  `d70d868`, review fixes `d4e95ed`, stamp `06088a6`. T-063 (owner's scope
+  addition): `f6d07d3`, then the handoff commit (review fixes). See the
+  dated notes above "### Not sized" in `docs/tasks/PLAN.md`.
 
 - **Next action:** `/pickup` takes T-062 (the Makefile asks for GNU Make 4
-  and says how to get it; first `todo` in PLAN order, before T-040).
+  and says how to get it; first `todo` in PLAN order). Then T-063, then
+  T-040.
 
 - **Read before anything else:** `docs/tasks/T-062-gnu-make-guard.md`.
 
-- **Reviews:**
-  - Full round, R1 = `d70d868`, range `733b02a..d70d868`, diff file in the
-    handoff format. All three quoted base, HEAD, the stat line and the
-    trailer correctly.
-    - `code-reviewer`: no blocker. Medium: T-062's task file would close
-      all of `5005334` (fixed: the GNU Make part only). Lows fixed:
-      `gnubin` and the asserting test named in the docs clause; the guard
-      placed by line numbers; M2 intro says T-062 is tooling, not a gate.
-      Info fixed: T-062 in the sizing calibration.
-    - `security-reviewer`: no finding. Info: an empty `MAKE_VERSION`
-      passes a `filter 0 1 2 3` guard (harmless; left to the builder in the
-      task file's notes); `MCP Test` is a group name on the account, in
-      prose as the brief allows (the `account-patterns` hook passed).
-    - `compliance-reviewer`: wireframes `none`, complete.
-  - No scoped round: the fixes change rows' wording only, no mechanism.
+- **Reviews:** (full rounds; no scoped rounds: the fixes change rows'
+  wording only, no mechanism)
+  - T-062, R1 = `d70d868`, range `733b02a..d70d868`. All three quoted
+    base, HEAD, stat line and trailer correctly. `code-reviewer`: Medium
+    (task file closed all of `5005334`) and four lows, all fixed in
+    `d4e95ed`. `security-reviewer`: no finding; empty `MAKE_VERSION` info
+    left to the builder. `compliance-reviewer`: wireframes `none`.
+  - T-063, R1 = `f6d07d3`, range `06088a6..f6d07d3`. All three quoted
+    correctly. `code-reviewer`: three mediums (same-second tie-break never
+    measured: the probe now asks it; step-back fixture must make id and
+    pair disagree; missing `created_at` untested) and lows (overstated
+    "created since", old cursors from `mint`, third call has no cursor,
+    count named 3, CHANGELOG), all fixed in the acceptance. It ran two
+    read-only Bash calls (`echo`, `git grep`) against rule 8.
+    `security-reviewer`: two mediums (missing `created_at` fail-open;
+    overflow result read as a retry) and two lows (form tag placement and
+    forged cursors; probe leak bounds), all fixed in the acceptance.
+    `compliance-reviewer`: wireframes `none`.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
+  - T-063 refuses cursors minted before it (search and list) once; the
+    planning session decided this under the owner's delegation (reading
+    them keeps the id-only path). Owner may overrule before T-063 starts.
+  - T-063's acceptance is large; its split point (the smoke probe) is
+    likely to be taken.
   - Time triggers on `mcp-test` tickets: the owner checks the activity log
     on 2026-11-26 (T-040 task file, "Owner's evidence (2026-11-25)").
   - T-040's RFC takes up the proposed reading of M2's "automations
