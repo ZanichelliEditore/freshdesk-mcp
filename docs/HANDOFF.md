@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T16:30:48+01:00`
-- **Describes commit:** `<hash>` (filled by the stamp commit). **CI:**
-  `<run>`.
+- **Describes commit:** `1df732c`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the T-040 handoff commit). **CI:**
+  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45646289679
+  (workflow `quality`, ran on `1df732c`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-040 (RFC: write safety core; per-tool writable
   fields) `done (2026-11-25)`. RFC
