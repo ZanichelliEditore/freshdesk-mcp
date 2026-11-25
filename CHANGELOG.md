@@ -3,6 +3,25 @@
 All notable changes to `@zanichelli/freshdesk-mcp`. Versions follow semver
 and stay 0.x until milestone M4, then 1.0.0.
 
+## Unreleased
+
+- **Fixed:** `export_tickets` resumed with `next_cursor` on a period of 300
+  matches or fewer is no longer refused ("out of its own order") when
+  tickets created in the same second come back with their ids rising, which
+  Freshdesk's search does. 0.3.0 did not fix this. The cursor now holds the
+  `created_at` second of the last ticket written and the ids already written
+  in that second, so ties in any order are each written once. A cursor is
+  longer (at most 570 characters) and shows those ids.
+- **Changed:** cursors given by `export_tickets` 0.3.0 and earlier are
+  refused, once: "Call again without a cursor to start over". This holds for
+  both kinds of cursor. Start the export of that period again.
+- When more than 30 tickets written share the last `created_at` second, the
+  call keeps its file and says `truncated: true` with no `next_cursor`, and
+  a `note` asks you not to reuse the cursor and to export the period without
+  `max_tickets` (up to 300 matching tickets fit one call) or in shorter
+  periods. This replaces 0.3.0's very-large-id case, which no longer
+  happens.
+
 ## 0.3.0 (2026-11-25)
 
 - **Fixed:** `export_tickets` resumed with `next_cursor` on a period of 300

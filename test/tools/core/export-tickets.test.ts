@@ -20,9 +20,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig, parseCliArgs } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { type AppContext, createContext } from "../../../src/tools/context.js";
-import { listEnvelope } from "../../../src/tools/list.js";
+import { idsCursor, listEnvelope } from "../../../src/tools/list.js";
 import { LIST_PAGE_SIZE } from "../../../src/tools/toolsets/core/count-tickets.js";
-import { MAX_TICKETS } from "../../../src/tools/toolsets/core/export-tickets.js";
+import { MAX_CURSOR_IDS, MAX_TICKETS } from "../../../src/tools/toolsets/core/export-tickets.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../../fixtures/schema.js";
 import { ticketFieldsPayload } from "../../fixtures/ticket-fields.js";
@@ -1062,8 +1062,12 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     };
   }
 
-  /** A cursor this server gives for `args` at `position` (tests only: the digest is unkeyed). */
-  function mint(args: Record<string, unknown>, position: number): string {
+  /** A cursor this server gives for `args` at `position` with `ids` (T-066's form 3; tests only: the digest is unkeyed). */
+  function mint(args: Record<string, unknown>, position: number, ids: number[] = []): string {
+    return idsCursor({ tool: TOOL, args: { ...args, cursor_form: 3 } }, position, ids, 30);
+  }
+  /** A cursor as `dd33b08` (T-063, 0.3.0) gave it: form 2, a plain cursor. */
+  function mintTwo(args: Record<string, unknown>, position: number): string {
     return mintAs({ ...args, cursor_form: 2 }, position);
   }
   /** A cursor as `06088a6` gave it, before T-063's form: the arguments alone. */
@@ -1074,16 +1078,27 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
   /** PERIOD's first second and length in seconds (31 days). */
   const FIRST_S = Date.parse(`${PERIOD.from}T00:00:00Z`) / 1000;
   const PERIOD_S = 31 * 86_400;
+  /** A form-2 search position (T-063, `dd33b08`): the pair (`created`, `id`) and `page`. */
+  const formTwoAt = (id: number, page: number, created = "2026-01-02T10:00:00Z") =>
+    2 * ((id * PERIOD_S + (Date.parse(created) / 1000 - FIRST_S)) * 10 + page - 1) + 1;
   /**
-   * A search position (T-063): the pair (`created`, `id`) of the last ticket
+   * A search position (T-066): the second `created` of the last ticket
    * written, on `page`; computed here apart from the code under test.
    */
-  const searchAt = (id: number, page: number, created = "2026-01-02T10:00:00Z") =>
-    2 * ((id * PERIOD_S + (Date.parse(created) / 1000 - FIRST_S)) * 10 + page - 1) + 1;
+  const searchAt = (page: number, created = "2026-01-02T10:00:00Z") =>
+    2 * ((Date.parse(created) / 1000 - FIRST_S) * 10 + page - 1) + 1;
 
-  /** Search's order (measured 2026-11-25): created_at descending, id descending; `top` first. */
+  /** `down`'s created_at for `id`: 2026-01-02T10:00:00Z plus `id - 4000` seconds, so each its own second. */
+  const createdOf = (id: number) =>
+    new Date(Date.parse("2026-01-02T10:00:00Z") + (id - 4000) * 1000)
+      .toISOString()
+      .replace(/\.000Z$/, "Z");
+
+  /** Search's order: created_at descending, `top` first; each ticket its own second (no ties: T-066's bound). */
   function down(top: number, count: number) {
-    return Array.from({ length: count }, (_, i) => ticket(top - i));
+    return Array.from({ length: count }, (_, i) =>
+      ticket(top - i, { created_at: createdOf(top - i) }),
+    );
   }
 
   function idsOf(tickets: { id: number }[]): number[] {
@@ -1504,7 +1519,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       const args = jsonl({ max_tickets: 2 });
       for (let n = 1; n <= 10; n++) reply(searchPath(PERIOD_QUERY, n), found([], 0));
       const result = page(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4301, 10)) }),
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(10), [4301]) }),
       );
       expect(sent()).toBe(2);
       expect(result.rows).toBe(0);
@@ -1512,12 +1527,18 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       expect(result).not.toHaveProperty("next_cursor");
     });
 
-    it("resumed: ids out of order on a page are refused, not silently dropped; nothing kept", async () => {
+    it("resumed: a created_at that rises on a page is refused, not silently dropped; nothing kept", async () => {
       const { session } = await warm();
       const args = jsonl({ max_tickets: 2 });
-      reply(searchPath(PERIOD_QUERY), found([4305, 4310, 4304].map((id) => ticket(id))));
+      reply(
+        searchPath(PERIOD_QUERY),
+        found([4305, 4310, 4304].map((id) => ticket(id, { created_at: createdOf(id) }))),
+      );
       const error = refusal(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4306, 1)) }),
+        await callTool(session, TOOL, {
+          ...args,
+          cursor: mint(args, searchAt(1, createdOf(4306)), [4306]),
+        }),
       );
       expect(error.code).toBe("validation");
       expect(error.message).toContain("out of its own order");
@@ -1530,25 +1551,31 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       reply(searchPath(PERIOD_QUERY, 2), found(down(4309, 9), 39));
       reply(searchPath(PERIOD_QUERY, 1), found(down(4300, 30), 39));
       const error = refusal(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4311, 2)) }),
+        await callTool(session, TOOL, {
+          ...args,
+          cursor: mint(args, searchAt(2, createdOf(4311)), [4311]),
+        }),
       );
       expect(error.message).toContain("out of its own order");
       expect(readdirSync(out)).toEqual([]);
     });
 
-    it("fresh: ids out of order are written, and the stop gives no next_cursor: truncated: true", async () => {
+    it("fresh: a created_at that rises is written, and the stop gives no next_cursor: truncated: true", async () => {
       const { session } = await warm();
-      reply(searchPath(PERIOD_QUERY), found([4305, 4310, 4304].map((id) => ticket(id))));
+      reply(
+        searchPath(PERIOD_QUERY),
+        found([4305, 4310, 4304].map((id) => ticket(id, { created_at: createdOf(id) }))),
+      );
       const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 2 })));
       expect(ids(result.path)).toEqual([4305, 4310]);
       expect(result.truncated).toBe(true);
       expect(result).not.toHaveProperty("next_cursor");
     });
 
-    it("a search position below id 1 is refused before any request", async () => {
+    it("ids on the start position are refused before any request", async () => {
       const { session } = await cold();
       const args = jsonl({ max_tickets: 2 });
-      const result = await callTool(session, TOOL, { ...args, cursor: mint(args, 1) });
+      const result = await callTool(session, TOOL, { ...args, cursor: mint(args, 0, [5]) });
       expect(result.isError).toBe(true);
       expect(sent()).toBe(0);
       expect(readdirSync(out)).toEqual([]);
@@ -1593,20 +1620,6 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       expect(third).not.toHaveProperty("truncated");
     });
 
-    it("same second: a lower id is written, a higher id (or the same) is skipped", async () => {
-      const { session } = await warm();
-      const args = jsonl({ max_tickets: 5 });
-      reply(
-        searchPath(PERIOD_QUERY),
-        found([at(5001, "10:00:00"), at(5000, "10:00:00"), at(4999, "10:00:00")]),
-      );
-      const result = page(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(5000, 1)) }),
-      );
-      expect(ids(result.path)).toEqual([4999]);
-      expect(result).not.toHaveProperty("truncated");
-    });
-
     it("created since: a later created_at is left out, a back-dated one (higher id, older created_at) is written", async () => {
       const { session } = await warm();
       const args = jsonl({ max_tickets: 5 });
@@ -1620,15 +1633,15 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
         ]),
       );
       const result = page(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(5000, 1)) }),
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(1), [5000]) }),
       );
       expect(ids(result.path)).toEqual([9998, 4000]);
     });
 
-    it("the step-back follows the pair: the page starts with a higher id but an older created_at", async () => {
+    it("the step-back follows the second: the page starts with a higher id but an older created_at", async () => {
       const { session } = await warm();
       const args = jsonl({ max_tickets: 20 });
-      // 5000 was the last written, on page 2; tickets written since left: it is on page 1 now.
+      // 5027 to 5000 were written in 10:00:00, the last on page 2; tickets written since left: page 1 now.
       const pageOne = [
         ...Array.from({ length: 28 }, (_, i) => at(5027 - i, "10:00:00")),
         at(4999, "10:00:00"),
@@ -1641,8 +1654,9 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 39));
       reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 39));
       reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 39));
+      const written = Array.from({ length: 28 }, (_, i) => 5000 + i);
       const result = page(
-        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(5000, 2)) }),
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(2), written) }),
       );
       expect(ids(result.path)).toEqual([4999, 4998, 6000, ...idsOf(pageTwo.slice(1))]);
       expect(result).not.toHaveProperty("next_cursor");
@@ -1661,7 +1675,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       const error = refusal(
         await callTool(session, TOOL, {
           ...args,
-          cursor: mint(args, searchAt(5000, 1, "2026-01-02T11:00:00Z")),
+          cursor: mint(args, searchAt(1, "2026-01-02T11:00:00Z")),
         }),
       );
       expect(error.code).toBe("validation");
@@ -1707,7 +1721,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
           ]),
         );
         const error = refusal(
-          await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4306, 1)) }),
+          await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(1), [4306]) }),
         );
         expect(error.message).toContain("without a readable created_at");
         expect(readdirSync(out)).toEqual([]);
@@ -1729,7 +1743,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
           const error = refusal(
             await callTool(session, TOOL, {
               ...args,
-              cursor: mint(args, searchAt(4306, 1, "2026-01-02T11:00:00Z")),
+              cursor: mint(args, searchAt(1, "2026-01-02T11:00:00Z")),
             }),
           );
           expect(error.code).toBe("validation");
@@ -1746,32 +1760,15 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
           found([ticket(4400, { created_at: created }), ...down(4339, 29)], 39),
         );
         const error = refusal(
-          await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4311, 2)) }),
+          await callTool(session, TOOL, {
+            ...args,
+            cursor: mint(args, searchAt(2, createdOf(4311)), [4311]),
+          }),
         );
         expect(error.code).toBe("validation");
         expect(sent()).toBe(2);
         expect(readdirSync(out)).toEqual([]);
       });
-    });
-
-    it("a pair the position cannot hold: the file is kept, truncated: true, no next_cursor, a note to narrow the period", async () => {
-      const { session } = await warm();
-      // 31 days: an id past about 1.68e8 does not fit a safe integer with its second and page.
-      reply(
-        searchPath(PERIOD_QUERY),
-        found([at(200_000_001, "10:00:00"), at(200_000_000, "09:00:00")]),
-      );
-      const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 1 })));
-      expect(ids(result.path)).toEqual([200_000_001]);
-      expect(result.truncated).toBe(true);
-      expect(result).not.toHaveProperty("next_cursor");
-      const note = (result as { note?: string }).note;
-      expect(note).toContain("Do not call again with the same cursor");
-      expect(note).toContain("shorter periods");
-      const tools = await listTools(session);
-      expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
-        "cannot be held in a cursor over a period this long (the result's note says so), so no position can be given: do not call again with the same cursor; export the rest in shorter periods",
-      );
     });
 
     it("a position outside the search (an id below 1 taken) still fails the call: no file", async () => {
@@ -1787,28 +1784,6 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       expect(readdirSync(out)).toEqual([]);
     });
 
-    it("the largest id a 31-day cursor holds: next_cursor given, and it resumes after that ticket", async () => {
-      const { session } = await warm();
-      const tick = clock();
-      const args = jsonl({ max_tickets: 1 });
-      // The page-10 slot of the last second must stay a safe integer; computed apart from the code.
-      const top = Math.floor(((Number.MAX_SAFE_INTEGER - 1) / 2 - 9) / 10 / PERIOD_S) - 1;
-      expect(searchAt(top, 10, "2026-01-31T23:59:59Z")).toBeLessThanOrEqual(
-        Number.MAX_SAFE_INTEGER,
-      );
-      const results = () =>
-        reply(searchPath(PERIOD_QUERY), found([at(top, "10:00:00"), at(top - 1, "09:00:00")]));
-      results();
-      const first = page(await callTool(session, TOOL, args));
-      expect(first.next_cursor).toEqual(expect.any(String));
-      expect(first).not.toHaveProperty("truncated");
-      await tick();
-      results();
-      const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
-      expect(ids(second.path)).toEqual([top - 1]);
-      expect(second).not.toHaveProperty("next_cursor");
-    });
-
     describe("cursors refused: no request, no file", () => {
       const args = jsonl({ max_tickets: 2 });
       it.each([
@@ -1818,24 +1793,299 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
         ],
         ["a list cursor as 06088a6 gave it", () => ({ ...args, cursor: mintAs(args, 2) })],
         [
-          "a valid new-form search position with no form tag",
-          () => ({ ...args, cursor: mintAs(args, searchAt(4306, 1)) }),
-        ],
-        [
-          "an input with its own cursor_form",
+          "a form-3 search position with no form tag",
           () => ({
             ...args,
-            cursor_form: 1,
-            cursor: mintAs({ ...args, cursor_form: 1 }, searchAt(4306, 1)),
+            cursor: idsCursor({ tool: TOOL, args }, searchAt(1), [4306], 30),
           }),
         ],
         [
-          "a new-form position forged at id 0",
-          () => ({ ...args, cursor: mint(args, searchAt(0, 3)) }),
+          "an input with its own cursor_form (a later form claimed)",
+          () => ({
+            ...args,
+            cursor_form: 4,
+            cursor: idsCursor(
+              { tool: TOOL, args: { ...args, cursor_form: 4 } },
+              searchAt(1),
+              [4306],
+              30,
+            ),
+          }),
+        ],
+        [
+          "a form-2 search cursor (as dd33b08 gave it)",
+          () => ({ ...args, cursor: mintTwo(args, formTwoAt(4306, 1)) }),
+        ],
+        [
+          "a form-2 list cursor (as dd33b08 gave it)",
+          () => ({ ...args, cursor: mintTwo(args, 2) }),
         ],
       ])("%s", async (_what, input) => {
         const { session } = await cold();
         const result = await callTool(session, TOOL, input());
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("cursor");
+        expect(sent()).toBe(0);
+        expect(readdirSync(out)).toEqual([]);
+      });
+    });
+  });
+
+  describe("T-066: a search position is the second and the ids written in it", () => {
+    /** A ticket of the period created at `time` on 2026-01-02 (UTC). */
+    const at = (id: number, time: string) => ticket(id, { created_at: `2026-01-02T${time}Z` });
+    /** `count` tickets, each its own second, newest first, all after 12:00:00. */
+    const newer = (top: number, count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        ticket(top - i, {
+          created_at: new Date(Date.parse("2026-01-02T13:00:00Z") - i * 1000).toISOString(),
+        }),
+      );
+    /** `count` tickets, each its own second, newest first, all before 12:00:00. */
+    const older = (top: number, count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        ticket(top - i, {
+          created_at: new Date(Date.parse("2026-01-02T11:00:00Z") - i * 1000).toISOString(),
+        }),
+      );
+
+    /**
+     * Calls with `args` from no cursor until a result has no next_cursor,
+     * `serve` queuing the replies before each call; every call must succeed.
+     */
+    async function resumeAll(
+      session: Session,
+      args: Record<string, unknown>,
+      serve: () => void,
+    ): Promise<Page[]> {
+      const tick = clock();
+      const results: Page[] = [];
+      let cursor: string | undefined;
+      for (let n = 0; n < 40; n++) {
+        serve();
+        const result = await callTool(
+          session,
+          TOOL,
+          cursor === undefined ? args : { ...args, cursor },
+        );
+        expect(result.isError ?? false, result.content[0].text).toBe(false);
+        results.push(page(result));
+        cursor = results.at(-1)!.next_cursor;
+        if (cursor === undefined) return results;
+        await tick();
+      }
+      throw new Error("no last call within 40");
+    }
+
+    describe("regression: a tie of 3 in one second, ids ascending, across pages 1 and 2", () => {
+      // Page 1: 28 tickets of their own seconds, then 5001 and 5002 at 12:00:00; page 2: 5003 at 12:00:00, then 4 older.
+      const pageOne = [...newer(7028, 28), at(5001, "12:00:00"), at(5002, "12:00:00")];
+      const pageTwo = [at(5003, "12:00:00"), ...older(6004, 4)];
+      const all = [...pageOne, ...pageTwo];
+      const serve = () => {
+        for (let n = 0; n < 3; n++) {
+          reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 35));
+          reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 35));
+        }
+      };
+
+      it.each([
+        ["max_tickets cuts just before the tie", 28],
+        ["max_tickets cuts inside the tie", 29],
+        ["max_tickets cuts inside the tie, after its second ticket", 15],
+      ])("%s: resumed until done, each written once, no refusal", async (_what, max) => {
+        const { session } = await warm();
+        const results = await resumeAll(session, jsonl({ max_tickets: max }), serve);
+        expect(results.flatMap((result) => ids(result.path))).toEqual(idsOf(all));
+        const last = results.at(-1)!;
+        expect(last).not.toHaveProperty("next_cursor");
+        expect(last).not.toHaveProperty("truncated");
+      });
+    });
+
+    it("ties descending too: resumed inside the tie, each written once", async () => {
+      const { session } = await warm();
+      const pageOne = [...newer(7028, 28), at(5003, "12:00:00"), at(5002, "12:00:00")];
+      const pageTwo = [at(5001, "12:00:00"), ...older(6004, 4)];
+      const serve = () => {
+        for (let n = 0; n < 3; n++) {
+          reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 35));
+          reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 35));
+        }
+      };
+      const results = await resumeAll(session, jsonl({ max_tickets: 29 }), serve);
+      expect(results.flatMap((result) => ids(result.path))).toEqual(
+        idsOf([...pageOne, ...pageTwo]),
+      );
+    });
+
+    describe("within the position's second", () => {
+      it("an id in the set is skipped; one not in it is written, higher or lower", async () => {
+        const { session } = await warm();
+        const args = jsonl({ max_tickets: 10 });
+        reply(
+          searchPath(PERIOD_QUERY),
+          found([5003, 5001, 5002, 4999].map((id) => at(id, "10:00:00"))),
+        );
+        const result = page(
+          await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(1), [5001]) }),
+        );
+        expect(ids(result.path)).toEqual([5003, 5002, 4999]);
+        expect(result).not.toHaveProperty("next_cursor");
+      });
+
+      it("across two resumes inside one tie run, the set is the union: each written once", async () => {
+        const { session } = await warm();
+        const tie = [5003, 5005, 5001, 5004, 5002].map((id) => at(id, "10:00:00"));
+        const results = await resumeAll(session, jsonl({ max_tickets: 2 }), () =>
+          reply(searchPath(PERIOD_QUERY), found(tie)),
+        );
+        expect(results.map((result) => ids(result.path))).toEqual([
+          [5003, 5005],
+          [5001, 5004],
+          [5002],
+        ]);
+      });
+
+      it("the set resets on an older second: 20 then 20 more of another second still give a cursor", async () => {
+        const { session } = await warm();
+        // 20 at 10:00:00, then 25 at 09:00:00: with no reset, the second call's set would hold 40.
+        const pageOne = [
+          ...Array.from({ length: 20 }, (_, i) => at(6020 - i, "10:00:00")),
+          ...Array.from({ length: 10 }, (_, i) => at(5025 - i, "09:00:00")),
+        ];
+        const pageTwo = Array.from({ length: 15 }, (_, i) => at(5015 - i, "09:00:00"));
+        const serve = () => {
+          for (let n = 0; n < 2; n++) {
+            reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 45));
+            reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 45));
+          }
+        };
+        const results = await resumeAll(session, jsonl({ max_tickets: 20 }), serve);
+        expect(results.map((result) => result.rows)).toEqual([20, 20, 5]);
+        expect(results.flatMap((result) => ids(result.path))).toEqual(
+          idsOf([...pageOne, ...pageTwo]),
+        );
+        // The second cursor holds the 20 ids of 09:00:00 only.
+        const second = results[1]!.next_cursor!;
+        expect(second.split(".")[1]!.split("-")).toHaveLength(20);
+        expect(
+          second
+            .split(".")[1]!
+            .split("-")
+            .map(Number)
+            .every((id) => id <= 5025),
+        ).toBe(true);
+      });
+    });
+
+    describe("the step-back", () => {
+      it("an unwritten tie ticket moved to the page before, the position's page starting in the second: written once", async () => {
+        const { session } = await warm();
+        const args = jsonl({ max_tickets: 20 });
+        // 5005, 5004 and 5003 were written, the last on page 2. One newer ticket left, and the
+        // tie came back in another order: 5001, unwritten, is now on page 1.
+        const pageOne = [
+          ...newer(7027, 27),
+          at(5005, "12:00:00"),
+          at(5001, "12:00:00"),
+          at(5004, "12:00:00"),
+        ];
+        const pageTwo = [at(5003, "12:00:00"), at(5002, "12:00:00"), ...older(6004, 4)];
+        reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 36));
+        reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 36));
+        reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 36));
+        const result = page(
+          await callTool(session, TOOL, {
+            ...args,
+            cursor: mint(args, searchAt(2, "2026-01-02T12:00:00Z"), [5003, 5004, 5005]),
+          }),
+        );
+        expect(ids(result.path)).toEqual([5001, 5002, ...idsOf(older(6004, 4))]);
+        expect(paths()).toEqual([
+          searchPath(PERIOD_QUERY, 2),
+          searchPath(PERIOD_QUERY, 1),
+          searchPath(PERIOD_QUERY, 2),
+        ]);
+      });
+
+      it("a page that starts with the last ticket written steps back one page: one more request", async () => {
+        const { session } = await warm();
+        const args = jsonl({ max_tickets: 20 });
+        const pageOne = newer(7030, 30);
+        const pageTwo = [at(5000, "12:00:00"), ...older(6004, 4)];
+        reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 35));
+        reply(searchPath(PERIOD_QUERY, 1), found(pageOne, 35));
+        reply(searchPath(PERIOD_QUERY, 2), found(pageTwo, 35));
+        const result = page(
+          await callTool(session, TOOL, {
+            ...args,
+            cursor: mint(args, searchAt(2, "2026-01-02T12:00:00Z"), [5000]),
+          }),
+        );
+        expect(ids(result.path)).toEqual(idsOf(older(6004, 4)));
+        expect(sent()).toBe(3);
+        expect(result.api_calls_used).toBe(3);
+      });
+    });
+
+    describe("the bound: 30 ids of one second", () => {
+      const tie = (count: number) =>
+        Array.from({ length: count }, (_, i) => at(5001 + i, "12:00:00"));
+
+      it("exactly 30 written in the second: next_cursor given, and it resumes after them", async () => {
+        const { session } = await warm();
+        const all = [...tie(30), ...older(6004, 4)];
+        const serve = () => {
+          reply(searchPath(PERIOD_QUERY, 1), found(all.slice(0, 30), 34));
+          reply(searchPath(PERIOD_QUERY, 2), found(all.slice(30), 34));
+        };
+        const results = await resumeAll(session, jsonl({ max_tickets: MAX_CURSOR_IDS }), serve);
+        expect(results.map((result) => result.rows)).toEqual([30, 4]);
+        expect(results.flatMap((result) => ids(result.path))).toEqual(idsOf(all));
+        expect(results[0]).not.toHaveProperty("truncated");
+      });
+
+      it("31: the file is kept, truncated: true, no next_cursor, a note not to reuse the cursor", async () => {
+        const { session } = await warm();
+        const all = [...tie(31), ...older(6004, 4)];
+        reply(searchPath(PERIOD_QUERY, 1), found(all.slice(0, 30), 35));
+        reply(searchPath(PERIOD_QUERY, 2), found(all.slice(30), 35));
+        const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 31 })));
+        expect(ids(result.path)).toEqual(idsOf(tie(31)));
+        expect(result.truncated).toBe(true);
+        expect(result).not.toHaveProperty("next_cursor");
+        const note = (result as { note?: string }).note;
+        expect(note).toContain("Do not call again with the same cursor");
+        expect(note).toContain("without max_tickets");
+        expect(note).toContain("shorter periods");
+        const tools = await listTools(session);
+        expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
+          "more than 30 tickets written share the last created_at second (the result's note says so): do not call again with the same cursor; export the period without max_tickets, or in shorter periods",
+        );
+      });
+    });
+
+    describe("cursors refused: no request, no file", () => {
+      const args = jsonl({ max_tickets: 2 });
+      it("the next position after the period's last second, page 10, is the period's end", () => {
+        expect(searchAt(11, "2026-01-31T23:59:59Z")).toBe(searchAt(1, "2026-02-01T00:00:00Z"));
+      });
+      it.each([
+        [
+          "a second at the period's end",
+          () => mint(args, searchAt(1, "2026-02-01T00:00:00Z"), [5]),
+        ],
+        ["a second past the period's end", () => mint(args, searchAt(3, "2026-02-03T00:00:00Z"))],
+        ["ids on position 0", () => mint(args, 0, [5])],
+        ["ids on a list position", () => mint(args, 2, [5])],
+        [
+          "an ids cursor whose digest does not match",
+          () => mint(args, searchAt(1), [5, 6]).replace(".5-6.", ".5-7."),
+        ],
+      ])("%s", async (_what, cursor) => {
+        const { session } = await cold();
+        const result = await callTool(session, TOOL, { ...args, cursor: cursor() });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain("cursor");
         expect(sent()).toBe(0);

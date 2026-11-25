@@ -5,9 +5,13 @@ import { RateLimiter } from "../../src/client/rate-limit.js";
 import {
   CURSOR_MAX_LENGTH,
   type CursorResult,
+  type IdsCursorResult,
+  idsCursor,
+  idsCursorMaxLength,
   type ListCall,
   listEnvelope,
   readCursor,
+  readIdsCursor,
 } from "../../src/tools/list.js";
 import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
 
@@ -413,5 +417,164 @@ describe("readCursor before a request: nothing is sent on a refusal", () => {
     const error = await fakeTool(withCursor(CALL, cursor));
     expect(error).toMatchObject({ code: "validation", http_status: null });
     expect(sent()).toBe(0);
+  });
+});
+
+describe("the ids form (T-066)", () => {
+  const BOUND = 30;
+  const MAX = Number.MAX_SAFE_INTEGER;
+  /** The 30 highest safe ids, ascending. */
+  const TOP = Array.from({ length: BOUND }, (_, i) => MAX - (BOUND - 1) + i);
+
+  function read(cursor: unknown, max = ANY): IdsCursorResult {
+    return readIdsCursor(withCursor(CALL, cursor), max, BOUND);
+  }
+
+  function idsRefused(cursor: unknown, max = ANY): FreshdeskError {
+    const result = read(cursor, max);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("validation");
+    expect(result.error.http_status).toBeNull();
+    expect(result.error.retryable).toBe(false);
+    // A cursor long enough to be told apart from the message's own words is never quoted.
+    if (typeof cursor === "string" && cursor.length > 4) {
+      expect(result.error.message).not.toContain(cursor);
+    }
+    return result.error;
+  }
+
+  /** A cursor of the ids form whose digest is real for `position` and `ids`, written as `text`. */
+  function withDigest(position: number, ids: number[], text: string): string {
+    const digest = idsCursor(CALL, position, ids, BOUND).split(".").at(-1)!;
+    return `${text}.${digest}`;
+  }
+
+  describe("round trip", () => {
+    it("no cursor is position 0 and no ids", () => {
+      expect(read(undefined)).toEqual({ ok: true, position: 0, ids: [] });
+    });
+
+    it.each([
+      ["the empty set", 7, []],
+      ["one id", 7, [4306]],
+      ["three ids", 1, [4301, 4302, 9000]],
+    ])("%s", (_what, position, ids) => {
+      const cursor = idsCursor(CALL, position, ids, BOUND);
+      expect(read(cursor)).toEqual({ ok: true, position, ids });
+    });
+
+    it("the empty set is the plain shape: a position, a dot, the digest", () => {
+      expect(idsCursor(CALL, 7, [], BOUND)).toMatch(/^7\.[A-Za-z0-9_-]{43}$/);
+    });
+
+    it("the longest cursor round-trips; one character more is refused", () => {
+      const cursor = idsCursor(CALL, MAX, TOP, BOUND);
+      expect(cursor).toHaveLength(idsCursorMaxLength(BOUND));
+      expect(idsCursorMaxLength(BOUND)).toBe(570);
+      expect(read(cursor)).toEqual({ ok: true, position: MAX, ids: TOP });
+      idsRefused(`${cursor}A`);
+      idsRefused(`0${cursor}`);
+    });
+
+    it("the maximum position is accepted, one above it refused", () => {
+      const cursor = idsCursor(CALL, 41, [5], BOUND);
+      expect(read(cursor, 41).ok).toBe(true);
+      expect(idsRefused(cursor, 40).message).toContain("past the last position");
+    });
+  });
+
+  describe("refused before anything is sent, the cursor not quoted", () => {
+    it.each([
+      ["unsorted", withDigest(3, [5, 6], "3.6-5")],
+      ["duplicated", withDigest(3, [5, 6], "3.5-5")],
+      ["0", withDigest(3, [5], "3.0")],
+      ["past the safe range", withDigest(3, [5], "3.9007199254740992")],
+      ["a leading zero", withDigest(3, [5], "3.05")],
+      ["a sign", withDigest(3, [5], "3.+5")],
+      ["a minus sign", withDigest(3, [5], "3.-5")],
+      ["an empty set segment (..)", withDigest(3, [], "3.")],
+      ["an empty id (--)", withDigest(3, [5, 6], "3.5--6")],
+      ["a trailing dash", withDigest(3, [5], "3.5-")],
+      ["a leading zero on the position", withDigest(3, [5], "03.5")],
+    ])("ids %s", (_what, cursor) => {
+      idsRefused(cursor);
+    });
+
+    it("more ids than the bound", () => {
+      const ids = Array.from({ length: BOUND + 1 }, (_, i) => i + 1);
+      // Minted under a wider bound, so its digest is real: only the bound refuses it.
+      const wide = idsCursor(CALL, 3, ids, BOUND + 1);
+      expect(readIdsCursor(withCursor(CALL, wide), ANY, BOUND + 1).ok).toBe(true);
+      idsRefused(wide);
+    });
+
+    it("over the length cap", () => {
+      idsRefused(`1.${"1-".repeat(300)}1.${"A".repeat(43)}`);
+    });
+
+    it("an id edited", () => {
+      const cursor = idsCursor(CALL, 3, [5, 6], BOUND);
+      expect(idsRefused(cursor.replace("3.5-6.", "3.5-7.")).message).toContain(
+        "belongs to another call",
+      );
+    });
+
+    it("the position edited", () => {
+      const cursor = idsCursor(CALL, 3, [5, 6], BOUND);
+      expect(idsRefused(`1${cursor}`).message).toContain("belongs to another call");
+    });
+
+    it("an id dropped or added", () => {
+      const cursor = idsCursor(CALL, 3, [5, 6], BOUND);
+      idsRefused(cursor.replace("3.5-6.", "3.5."));
+      idsRefused(cursor.replace("3.5-6.", "3."));
+      idsRefused(cursor.replace("3.5-6.", "3.5-6-7."));
+    });
+
+    it("used with another call", () => {
+      const cursor = idsCursor(CALL, 3, [5], BOUND);
+      const other = { tool: CALL.tool, args: { ...CALL.args, status: "Closed", cursor } };
+      expect(readIdsCursor(other, ANY, BOUND).ok).toBe(false);
+    });
+
+    it("an ids cursor given to readCursor, the empty set included", () => {
+      for (const ids of [[5], []]) {
+        const cursor = idsCursor(CALL, 3, ids, BOUND);
+        refused(withCursor(CALL, cursor));
+      }
+    });
+
+    it("a plain cursor from listEnvelope given to the ids reader", () => {
+      idsRefused(cursorFor(CALL, 3));
+    });
+
+    it.each([
+      ["not a string", 3],
+      ["empty", ""],
+      ["no digest", "3.5"],
+    ])("%s", (_what, cursor) => {
+      idsRefused(cursor);
+    });
+  });
+
+  describe("the minter's own checks", () => {
+    it.each([
+      ["more ids than the bound", 3, Array.from({ length: BOUND + 1 }, (_, i) => i + 1)],
+      ["ids not strictly ascending", 3, [6, 5]],
+      ["a duplicated id", 3, [5, 5]],
+      ["an id below 1", 3, [0]],
+      ["a negative id", 3, [-5]],
+      ["an unsafe id", 3, [MAX + 1]],
+      ["a fractional id", 3, [1.5]],
+      ["a negative position", -1, [5]],
+    ])("%s throws a TypeError", (_what, position, ids) => {
+      expect(() => idsCursor(CALL, position, ids, BOUND)).toThrow(TypeError);
+    });
+
+    it("a bound below 1 throws, in the minter and the reader", () => {
+      expect(() => idsCursor(CALL, 3, [], 0)).toThrow(TypeError);
+      expect(() => readIdsCursor(CALL, ANY, 0)).toThrow(TypeError);
+    });
   });
 });

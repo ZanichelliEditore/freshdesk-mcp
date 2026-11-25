@@ -188,17 +188,19 @@ export interface PeriodRead {
 
 /**
  * A position in a period's read (export_tickets' cursor, T-057): its start;
- * on search, the last ticket taken as the pair search sorts by, `second`
- * (its `created_at`, epoch seconds, UTC) and `id` (search answers by
- * created_at descending, measured 2026-11-25, then id descending, not yet
- * measured: `make smoke-order-probe`, T-063;
- * what is left comes strictly after that pair), and `page`, the search page
- * that held it; on the list scan, the UTC second of the latest ticket taken
- * (epoch seconds) and how many tickets created in that second were taken.
+ * on search (T-066), `second`, the `created_at` of the last ticket taken
+ * (epoch seconds, UTC), `ids`, the ids taken in that second by this read and
+ * the ones it resumed (ascending), and `page`, the search page that held the
+ * last ticket taken. Search answers by created_at descending (measured
+ * 2026-11-25), ties in no order a position relies on (`make
+ * smoke-order-probe`, 2026-11-25: a tie with ids rising): what is left is
+ * every ticket older than `second`, and those of `second` not in `ids`. On
+ * the list scan, the UTC second of the latest ticket taken (epoch seconds)
+ * and how many tickets created in that second were taken.
  */
 export type Resume =
   | { path: "start" }
-  | { path: "search"; second: number; id: number; page: number }
+  | { path: "search"; second: number; ids: readonly number[]; page: number }
   | { path: "list"; second: number; ties: number };
 
 /**
@@ -211,27 +213,12 @@ export type PeriodResult =
   | { ok: true; truncated: boolean; next?: Resume; unordered?: true }
   | { ok: false; error: FreshdeskError };
 
-/** A search result's place in search's order: its `created_at` second and its id. */
-interface Key {
-  second: number;
-  id: number;
-}
-
-/** The ticket's key; `undefined` when its `created_at` does not read. */
-function keyOf(ticket: Ticket | undefined): Key | undefined {
-  const second = ticket === undefined ? undefined : createdSecond(ticket);
-  return second === undefined ? undefined : { second, id: ticket!.id };
-}
-
-/** Whether `b` comes strictly after `a` in search's order: created_at descending, then id descending. */
-function precedes(a: Key, b: Key): boolean {
-  return a.second > b.second || (a.second === b.second && a.id > b.id);
-}
-
-/** Whether every ticket's key reads and the keys fall strictly, as search's order gives them. */
-function falls(tickets: readonly Ticket[]): boolean {
-  const keys = tickets.map(keyOf);
-  return keys.every((key, i) => key !== undefined && (i === 0 || precedes(keys[i - 1]!, key)));
+/** Whether every ticket's `created_at` reads and none rises: search's own order, ties in any id order (T-066). */
+function ordered(tickets: readonly Ticket[]): boolean {
+  const seconds = tickets.map(createdSecond);
+  return seconds.every(
+    (second, i) => second !== undefined && (i === 0 || seconds[i - 1]! >= second),
+  );
 }
 
 function refused(problem: FieldError): { ok: false; error: FreshdeskError } {
@@ -433,8 +420,8 @@ export async function readPeriod(
 
   const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
   // A search position starts at the page that held its last ticket: that page is the probe.
-  const position: Key | undefined =
-    from.path === "search" ? { second: from.second, id: from.id } : undefined;
+  const position =
+    from.path === "search" ? { second: from.second, ids: new Set(from.ids) } : undefined;
   let firstPage = from.path === "search" ? from.page : 1;
   let probe = await searchTickets(context.http, query.query, firstPage, deadline, "expensive");
   if (!probe.ok) return probe;
@@ -446,16 +433,17 @@ export async function readPeriod(
       code: "validation",
       http_status: null,
       message:
-        "Freshdesk's search gave this period's tickets out of its own order (created_at, then id, both newest first), or one without a readable created_at, so it cannot be paged safely from a cursor: nothing was kept. Export it without max_tickets and without a cursor, in shorter periods.",
+        "Freshdesk's search gave this period's tickets out of its own order (created_at, newest first), or one without a readable created_at, so it cannot be paged safely from a cursor: nothing was kept. Export it without max_tickets and without a cursor, in shorter periods.",
       retryable: false,
     });
-  if (position !== undefined && !falls(probe.results)) return disordered();
-  /** Whether a page starts after the position (or is empty); its keys read (`falls` passed). */
-  const startsAfter = (results: readonly Ticket[]) =>
-    results.length === 0 || precedes(position!, keyOf(results[0])!);
-  // Tickets that left the results since moved the rest forward: while the page starts
-  // after the position (or is empty), the position is on an earlier page.
-  while (position !== undefined && firstPage > 1 && startsAfter(probe.results)) {
+  if (position !== undefined && !ordered(probe.results)) return disordered();
+  /** Whether a page is empty or starts no newer than the position's second; its seconds read (`ordered` passed). */
+  const reachesInto = (results: readonly Ticket[]) =>
+    results.length === 0 || createdSecond(results[0]!)! <= position!.second;
+  // Tickets that left the results since moved the rest forward, and the position's second may
+  // hold unwritten tickets on an earlier page in any id order: while the page is empty or starts
+  // no newer than that second, step back. The whole tie run of the second is then read.
+  while (position !== undefined && firstPage > 1 && reachesInto(probe.results)) {
     // Counted against the budget and the time limit like any later page; the position stays.
     if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return cut(from);
     firstPage -= 1;
@@ -474,9 +462,9 @@ export async function readPeriod(
     }
     meter.used += earlier.attempts;
     meter.requests += earlier.attempts;
-    // The earlier page, and its join to the page after it, must fall too.
+    // The earlier page, and its join to the page after it, must keep the order too.
     const after = probe.results[0];
-    if (!falls(after === undefined ? earlier.results : [...earlier.results, after])) {
+    if (!ordered(after === undefined ? earlier.results : [...earlier.results, after])) {
       return disordered();
     }
     probe = earlier;
@@ -504,15 +492,27 @@ export async function readPeriod(
       }) + (conversations ? Math.max(0, end - skipped) : 0);
     const refusal = checkBudget(context, estimate, args.confirm);
     if (refusal) return spent(refusal);
-    /** The last ticket taken (the lowest in search's order), and the page that held it. */
-    let lowest = from.path === "search" ? { ...position!, page: from.page } : undefined;
-    /** The result before, across every page read: a fresh read past a disorder gives no position. */
-    let previous: Key | undefined;
+    /** The last ticket taken: its second, every id taken in that second (resumed ones included), its page. */
+    let last =
+      from.path === "search"
+        ? { second: from.second, ids: new Set(from.ids), page: from.page }
+        : undefined;
+    /** The second of the result before, across every page read: a fresh read past a disorder gives no position. */
+    let previous: number | undefined;
     let unordered = false;
     const stopped = () =>
       unordered
         ? { ok: true as const, truncated: true, unordered: true as const }
-        : cut(lowest === undefined ? { path: "start" } : { path: "search", ...lowest });
+        : cut(
+            last === undefined
+              ? { path: "start" }
+              : {
+                  path: "search",
+                  second: last.second,
+                  ids: [...last.ids].sort((a, b) => a - b),
+                  page: last.page,
+                },
+          );
     const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
     let results = probe.results;
     for (let page = firstPage; ; page++) {
@@ -532,16 +532,22 @@ export async function readPeriod(
         results = found.results;
       }
       for (const ticket of results) {
-        const key = keyOf(ticket);
-        // A created_at that does not read is out of order too: no pair can be checked against it.
-        if (key === undefined || (previous !== undefined && !precedes(previous, key))) {
+        const second = createdSecond(ticket);
+        // A created_at that does not read is out of order too: no second can be checked against it.
+        if (second === undefined || (previous !== undefined && second > previous)) {
           // Resumed: the position may have dropped a ticket unseen. Fresh: nothing was skipped.
           if (position !== undefined) return disordered();
           unordered = true;
         }
-        previous = key;
-        // At or before the position: taken by an earlier call, or created since with a later created_at.
-        if (position !== undefined && !precedes(position, key!)) continue;
+        previous = second;
+        // Newer than the position's second (taken by an earlier call, or created or matching since),
+        // or taken in it: skipped. Ties come in any id order, so the ids are a set.
+        if (
+          position !== undefined &&
+          (second! > position.second || (second === position.second && position.ids.has(ticket.id)))
+        ) {
+          continue;
+        }
         if (!matchesLocal(query, ticket)) continue;
         // A ticket a later page repeats (it moved during the call) is taken once.
         if (seen.has(ticket.id)) continue;
@@ -549,9 +555,14 @@ export async function readPeriod(
         const taken = await take(ticket);
         if (taken === false) return stopped();
         if (taken !== true) return { ok: false, error: taken };
-        // Taken, so in the period: its created_at reads (matchesLocal).
-        if (key !== undefined && (lowest === undefined || precedes(lowest, key))) {
-          lowest = { ...key, page };
+        // Taken, so in the period: its created_at reads (matchesLocal). An older second starts the set again.
+        if (second !== undefined) {
+          if (last === undefined || second < last.second) {
+            last = { second, ids: new Set([ticket.id]), page };
+          } else if (second === last.second) {
+            last.ids.add(ticket.id);
+            last.page = page;
+          }
         }
       }
     }

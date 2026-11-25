@@ -417,8 +417,16 @@ describe("count_tickets: each ticket once, the group cap, shared names", () => {
     expect(result.groups).toEqual([{ values: { Status: "Open" }, count: 44 }]);
   });
 
-  // T-063: export_tickets' search position changed; count_tickets reads the same way and must not.
+  // T-063, T-066: export_tickets' search position changed; count_tickets reads the same way and must not.
   it.each([
+    [
+      "a tie in one second, ids ascending (T-066)",
+      [
+        ticket(4301, { created_at: "2026-01-02T10:00:00Z" }),
+        ticket(4302, { created_at: "2026-01-02T10:00:00Z" }),
+        ticket(4303, { created_at: "2026-01-02T10:00:00Z" }),
+      ],
+    ],
     [
       "ids and created_at in different orders",
       [

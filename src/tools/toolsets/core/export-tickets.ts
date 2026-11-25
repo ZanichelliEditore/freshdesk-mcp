@@ -64,45 +64,49 @@
 //     thread or not at all. In CSV the thread is one cell, its JSON.
 //   - Pages (T-057): `max_tickets` (1 to MAX_TICKETS) bounds the rows a
 //     call writes, and `cursor` resumes a period. The cursor is list.ts's
-//     (`readCursor`, checked first, before the directory, any request or
-//     any file; bound to every other argument, `max_tickets` and `confirm`
-//     included, and to the cursor form, `cursor_form: 2`, set after the
-//     arguments so no input reaches it: a cursor given before T-063 is
-//     refused, once, as one of another call). A position is 0, the start;
-//     odd, a search position; even, a list one (`Resume` in
-//     count-tickets.ts). Search answers by `created_at` descending, then id
-//     descending, the same order on two reads (the id tie-break within a
-//     `created_at` second not yet measured: `make smoke-order-probe`;
-//     measured 2026-11-25, real
-//     account, one day of 405 results, pages 1-3 read twice): a search
-//     position is the pair (`created_at`, id) of the last ticket written
-//     and the page that held it (T-063), as one safe integer,
-//     `2*((id*S + rel)*MAX_SEARCH_PAGE + page-1) + 1`, `S` the period's
-//     length in seconds and `rel` the `created_at` second minus the
-//     period's first. The next call starts at that page, goes back a page
-//     while the page starts after that pair (written tickets that left the
-//     results moved the rest forward; each step counted against the budget
-//     and the time limit, a cut there keeping the position), and writes
-//     only tickets strictly after the pair in search's order: a ticket
-//     created since with a later `created_at` (first in the results) is
-//     left out, a back-dated one (an older `created_at`, whatever its id)
-//     is written, none is written twice, and between two calls none that
-//     matched at the first call is skipped unless it left the filters.
-//     That holds only while search keeps that order: on every page a
-//     resumed call reads, step-backs included, the pairs must fall strictly
-//     and every `created_at` must read, else it is refused, nothing kept; a
-//     fresh call past a disorder writes on (nothing was skipped) but, if it
-//     stops early, gives no cursor and says `truncated: true`. A pair the
-//     position cannot hold (a very large id over a long period) gives no
-//     cursor either, after the file is kept: `truncated: true` and a `note`
-//     saying to narrow the period, not to call again with the same cursor.
+//     ids form (`readIdsCursor`, checked first, before the directory, any
+//     request or any file; bound to every other argument, `max_tickets` and
+//     `confirm` included, and to the cursor form, `cursor_form: 3`, set after
+//     the arguments so no input reaches it: a cursor given before T-066,
+//     0.3.0's form 2 included, is refused, once, as one of another call; a
+//     form-2 search cursor is not read as one id, which would write twice
+//     the ties 0.3.0 wrote). A position is 0, the start; odd, a search
+//     position; even, a list one (`Resume` in count-tickets.ts); ids only on
+//     a search position. Search answers by `created_at` descending, the same
+//     order on two reads (measured 2026-11-25, real account, one day of 405
+//     results, pages 1-3 read twice); ties within a second come in no order a
+//     position relies on (`make smoke-order-probe`, 2026-11-25: a tie with
+//     ids rising). A search position (T-066, RFC 2026-11-25, search cursor
+//     tie ids) is the `created_at` second `S` of the last ticket written, the
+//     ids written in `S` by this call and the ones it resumed (at most
+//     MAX_CURSOR_IDS, 30; the set starts again at each older second), and the
+//     page that held the last ticket written: `2*(rel*MAX_SEARCH_PAGE +
+//     page-1) + 1`, `rel` the second minus the period's first, the ids beside
+//     it in the cursor. The next call starts at that page, goes back a page
+//     while the page is empty or starts no newer than `S` (written tickets
+//     that left the results moved the rest forward, and the tie run of `S`
+//     may sit on an earlier page in any order; each step counted against the
+//     budget and the time limit, a cut there keeping the position), and
+//     writes every ticket older than `S` and those of `S` not in the set: a
+//     ticket created since with a later `created_at` (first in the results)
+//     is left out, a back-dated one is written, none is written twice, and
+//     between two calls none that matched at the first call is skipped
+//     unless it left the filters. That holds only while `created_at` does not
+//     rise: on every page a resumed call reads, step-backs included, every
+//     `created_at` must read and none may rise, else it is refused, nothing
+//     kept; a fresh call past a disorder writes on (nothing was skipped) but,
+//     if it stops early, gives no cursor and says `truncated: true`. More than
+//     30 ids written in the last second give no cursor either, after the
+//     file is kept: `truncated: true` and a `note` saying not to call again
+//     with the same cursor, and to export the period without `max_tickets`
+//     or in shorter periods.
 //     A list position is the UTC second of the
 //     latest ticket written and how many created in that second were
 //     written; it resumes with `updated_since` one second before that
 //     second, so the scan starts again at page 1 and its 300 pages count
 //     anew; tickets created before that second, and the first `ties`
-//     created in it, are skipped. Ties are skipped by count, not by id (a
-//     second and an id do not fit one cursor position): a tie that entered
+//     created in it, are skipped. Ties are skipped by count, not by id (the
+//     list scan keeps ties by count): a tie that entered
 //     or left the filters between calls makes one tie skipped or written
 //     twice, as the description says. `next_cursor` is in the result when
 //     the read stopped before the period's end and this call wrote a row:
@@ -112,7 +116,8 @@
 //     limit, page 300, the limiter, the deadline). A cut before any row
 //     gives no cursor, its position not having moved (else a caller loops):
 //     `truncated: true` alone; the description says to call again later
-//     with the same cursor, or narrow the period (which starts over). `truncated: true` is never set for `max_tickets`. Each call
+//     with the same cursor, or narrow the period (which starts over). `truncated: true` is never set for `max_tickets` alone (more than 30
+//     ids in the last second set it, above). Each call
 //     writes its own file under T-037's rules. A search cursor whose period
 //     has since grown past 300 matches is refused after its probe. With
 //     `max_tickets` the estimate counts that many tickets at most.
@@ -133,7 +138,7 @@ import type { Schema } from "../../../schema/index.js";
 import type { AppContext } from "../../context.js";
 import { csvRecord } from "../../csv.js";
 import { htmlToText } from "../../format.js";
-import { listEnvelope, readCursor } from "../../list.js";
+import { idsCursor, readIdsCursor } from "../../list.js";
 import type { Tool } from "../index.js";
 import {
   CALL_DEADLINE_MS,
@@ -149,8 +154,10 @@ import {
 
 /** The rows one call writes at most when the caller gives `max_tickets`. */
 export const MAX_TICKETS = 10_000;
-/** The cursor's form (T-063): bound into every cursor's digest, so an earlier form's cursor is refused. */
-const CURSOR_FORM = 2;
+/** The cursor's form (T-063, T-066): bound into every cursor's digest, so an earlier form's cursor is refused. */
+const CURSOR_FORM = 3;
+/** The ids of one second a search cursor holds at most (T-066): one search page. */
+export const MAX_CURSOR_IDS = SEARCH_PAGE_SIZE;
 /** List positions: one span per second of the period, a slot per ticket taken in that second. */
 const TIE_SPAN = 1_000_000;
 const DAY_S = 86_400;
@@ -184,9 +191,8 @@ function refused(message: string): { ok: false; error: FreshdeskError } {
   return { ok: false, error: { code: "validation", http_status: null, message, retryable: false } };
 }
 
-/** The result's note when the last ticket written cannot be held in a cursor. */
-const UNHELD =
-  "No next_cursor: the last ticket written cannot be held in a cursor over a period this long. Do not call again with the same cursor; export the rest in shorter periods (narrow created_between), which starts over.";
+/** The result's note when the tickets written in the last second are more than a cursor holds (T-066). */
+const UNHELD = `No next_cursor: more than ${MAX_CURSOR_IDS} tickets written share the last created_at second, more than a cursor holds. Do not call again with the same cursor; export the period without max_tickets (up to 300 matching tickets fit one call; confirm: true past the API budget), or in shorter periods (narrow created_between), which starts over.`;
 
 const HOW =
   "Set it to the absolute path of an existing directory (not a symlink) with --export-dir <dir> in the MCP server's args, or with FRESHDESK_EXPORT_DIR in its environment; the files are written there.";
@@ -285,57 +291,58 @@ function span(period: {
   return { first, seconds: last - first };
 }
 
-/** The last position a cursor of this period can hold: 0 (the start only) when the period does not read. */
+/** The last position a cursor of this period can hold (a list one: the larger); 0 (the start only) when the period does not read. */
 function maxPosition(period: { from: string; to: string }): number {
-  // A search position holds a ticket id, which the period does not bound; resumeAt checks a list one.
-  return span(period) === undefined ? 0 : Number.MAX_SAFE_INTEGER;
+  const at = span(period);
+  return at === undefined ? 0 : Math.min(2 * at.seconds * TIE_SPAN, Number.MAX_SAFE_INTEGER);
 }
 
-/** A cursor's position as a place in the read; `undefined` for one positionOf never gives. */
-function resumeAt(position: number, period: { from: string; to: string }): Resume | undefined {
-  if (position === 0) return { path: "start" };
+/** A cursor's position and ids as a place in the read; `undefined` for one positionOf never gives. */
+function resumeAt(
+  position: number,
+  ids: readonly number[],
+  period: { from: string; to: string },
+): Resume | undefined {
+  if (position === 0) return ids.length === 0 ? { path: "start" } : undefined;
   const half = Math.floor((position - 1) / 2);
   const at = span(period);
   if (at === undefined) return undefined;
   if (position % 2 === 1) {
-    const pair = Math.floor(half / MAX_SEARCH_PAGE);
-    const id = Math.floor(pair / at.seconds);
-    // positionOf never gives an id below 1.
-    if (id < 1) return undefined;
-    return {
-      path: "search",
-      second: at.first + (pair % at.seconds),
-      id,
-      page: (half % MAX_SEARCH_PAGE) + 1,
-    };
+    const rel = Math.floor(half / MAX_SEARCH_PAGE);
+    if (rel >= at.seconds) return undefined;
+    return { path: "search", second: at.first + rel, ids, page: (half % MAX_SEARCH_PAGE) + 1 };
   }
+  // A list position holds no ids.
+  if (ids.length > 0) return undefined;
   const rel = Math.floor(half / TIE_SPAN);
   if (rel >= at.seconds) return undefined;
   return { path: "list", second: at.first + rel, ties: (half % TIE_SPAN) + 1 };
 }
 
 /**
- * A place in the read as a cursor's position; `undefined` for a search pair
- * too large for one (the caller keeps the file and gives no cursor). Throws
- * for a place outside the period or the search (fails closed).
+ * A place in the read as a cursor's position and ids; `undefined` for a
+ * search second with more ids taken than a cursor holds (the caller keeps the
+ * file and gives no cursor). Throws for a place outside the period or the
+ * search (fails closed); `idsCursor` throws for bad ids.
  */
-function positionOf(next: Resume, period: { from: string; to: string }): number | undefined {
-  if (next.path === "start") return 0;
+function positionOf(
+  next: Resume,
+  period: { from: string; to: string },
+): { position: number; ids: readonly number[] } | undefined {
+  if (next.path === "start") return { position: 0, ids: [] };
   let position: number;
   if (next.path === "search") {
     const at = span(period);
     const rel = at === undefined ? -1 : next.second - at.first;
     if (
       at === undefined ||
-      !(Number.isSafeInteger(next.id) && next.id >= 1) ||
       !(Number.isSafeInteger(rel) && rel >= 0 && rel < at.seconds) ||
       !(next.page >= 1 && next.page <= MAX_SEARCH_PAGE)
     ) {
       throw new Error("export_tickets: a search position outside the period or the search");
     }
-    position = 2 * ((next.id * at.seconds + rel) * MAX_SEARCH_PAGE + next.page - 1) + 1;
-    // Past 2^53 the arithmetic rounds: the pair cannot be held, and no cursor is given.
-    return Number.isSafeInteger(position) ? position : undefined;
+    if (next.ids.length > MAX_CURSOR_IDS) return undefined;
+    return { position: 2 * (rel * MAX_SEARCH_PAGE + next.page - 1) + 1, ids: next.ids };
   } else {
     const at = span(period);
     const rel = at === undefined ? -1 : next.second - at.first;
@@ -346,7 +353,7 @@ function positionOf(next: Resume, period: { from: string; to: string }): number 
   }
   if (!Number.isSafeInteger(position))
     throw new Error("export_tickets: a position past a cursor's");
-  return position;
+  return { position, ids: [] };
 }
 
 interface Row {
@@ -417,7 +424,7 @@ export const exportTicketsTool: Tool<typeof input> = {
     `max_tickets (1 to ${MAX_TICKETS.toLocaleString("en-US")}) bounds the rows this call writes; without it a call writes what it reads within its limits. Each call writes its own new file: while the period has more tickets the result carries next_cursor; call again with the same arguments and cursor set to it for the next tickets, in another new file, never appended to an earlier one. The last call's result has no next_cursor. Across the files of one period no ticket is written twice, and between two calls none that matched at the first call is skipped unless it left the filters; a ticket created while the calls run is left out, unless its created_at is older than the last one written (back-dated): then it is written. Past 300 matches, two tickets created in the same second as the last one written, one of which entered or left the filters between two calls, are the exception: one can be skipped or written twice. A cursor used with other arguments, or edited, is refused with nothing sent and no file.`,
     `The file's name is generated (freshdesk-tickets-<UTC time>.jsonl or .csv) and it is never overwritten; it is created readable by its owner only, and no partial file is left when the call fails. Refused, with nothing sent, when the export directory is unset (neither --export-dir nor FRESHDESK_EXPORT_DIR), not an absolute path, not an existing directory, or a symlink.`,
     `It reads as count_tickets does: up to 300 matching tickets from Freshdesk's search, ${SEARCH_PAGE_SIZE} a request; above that the list of tickets updated since the period's start, ${LIST_PAGE_SIZE} a request. It first asks for one search page to learn the size, estimates the calls, (with conversations, one more per ticket), and is refused when the estimate is over the per-call API budget: narrow the period or the filters, or call again with confirm: true. confirm lifts the API budget only, not the time limit: no request is started after ${SCAN_START_MS / 1000} s.`,
-    `When the read was cut (the budget, Freshdesk's last list page, the time limit, a request cut off at the call's 30 s deadline, or the API rate limit), the file holds the rows read and the result says truncated: true, with next_cursor: call again with it for the rest (a call that stops at max_tickets is not truncated). truncated: true without next_cursor: the call was cut before it wrote a row (call again later with the same cursor, or narrow the period, which starts over), or Freshdesk gave the tickets out of order, or the last ticket written cannot be held in a cursor over a period this long (the result's note says so), so no position can be given: do not call again with the same cursor; export the rest in shorter periods. It counts as an expensive operation and is refused when the API budget is low.`,
+    `When the read was cut (the budget, Freshdesk's last list page, the time limit, a request cut off at the call's 30 s deadline, or the API rate limit), the file holds the rows read and the result says truncated: true, with next_cursor: call again with it for the rest (a call that stops at max_tickets is not truncated). truncated: true without next_cursor: the call was cut before it wrote a row (call again later with the same cursor, or narrow the period, which starts over), or Freshdesk gave the tickets out of order, or more than ${MAX_CURSOR_IDS} tickets written share the last created_at second (the result's note says so): do not call again with the same cursor; export the period without max_tickets, or in shorter periods. It counts as an expensive operation and is refused when the API budget is low.`,
     "api_calls_used counts every request sent for this call, retries included, and the ticket-field schema's load when this call starts it.",
   ].join(" "),
   input,
@@ -433,9 +440,9 @@ export const exportTicketsTool: Tool<typeof input> = {
     // The form after the arguments: no input reaches it.
     const call = { tool: "export_tickets", args: { ...args, cursor_form: CURSOR_FORM } };
     // Checked first: a cursor of another call, or edited, sends nothing and creates nothing.
-    const cursor = readCursor(call, maxPosition(args.created_between));
+    const cursor = readIdsCursor(call, maxPosition(args.created_between), MAX_CURSOR_IDS);
     if (!cursor.ok) return cursor;
-    const resume = resumeAt(cursor.position, args.created_between);
+    const resume = resumeAt(cursor.position, cursor.ids, args.created_between);
     if (resume === undefined) {
       return refused(
         "Not sent: the cursor is not one this server gave. Call again without a cursor to start over.",
@@ -512,12 +519,12 @@ export const exportTicketsTool: Tool<typeof input> = {
         read.next === undefined || rows.length === 0
           ? undefined
           : positionOf(read.next, args.created_between);
-      /** A pair too large for a cursor: the file is kept, with no cursor and a note. */
+      /** More ids of the last second than a cursor holds: the file is kept, with no cursor and a note. */
       const unheld = read.next !== undefined && rows.length > 0 && position === undefined;
       const next =
         position === undefined
           ? undefined
-          : listEnvelope(call, { items: [], next: position, api_calls_used: 0 }).next_cursor;
+          : idsCursor(call, position.position, position.ids, MAX_CURSOR_IDS);
       if (!(await unchanged(where.dir, where.id))) {
         moved = true;
         return changed();
