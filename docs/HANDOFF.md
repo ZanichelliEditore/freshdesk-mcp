@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T22:43:03+01:00`
-- **Describes commit:** `<hash>` (T-064 handoff commit). **CI:** filled
-  in by the stamp commit.
+- **Describes commit:** `8783997` (the T-064 handoff commit), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45707129673
+  (workflow `quality`, ran on `8783997`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-064 (the write path holds the one client;
   `context.http` is a GET-only view) `done (2026-11-25)`. Commits
