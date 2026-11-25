@@ -61,6 +61,12 @@ Node ≥ 22.19, `zod ^4.2`, `undici ^8`, `@modelcontextprotocol/server ^2`;
 tests on `vitest ^5` with undici `MockAgent`. The HTTP client takes its
 dispatcher as a required argument and never uses the global `fetch`.
 
+**Release** ([RFC 2026-11-25](../rfc/active/2026-11-25-release-on-npm.md)):
+public npm as `@zanichelli/freshdesk-mcp`, published from CI on a `v*` tag
+by npm trusted publishing (OIDC, no npm token), from the GitHub environment
+`npm`, which only `v*` tags can enter. Who may publish is the bypass list of
+the `v*` tag ruleset; `main` has a ruleset with the same bypass list.
+
 ## Dependency rules
 
 _TODO: state which parts may depend on which. Enforce mechanically (e.g. with an

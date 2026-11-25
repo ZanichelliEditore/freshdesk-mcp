@@ -7,7 +7,8 @@
 - **Created:** 2026-11-23
 - **Gates:** Before the first tag the owner does steps 0-2 of RFC
   2026-11-25 (release on npm): repository public, environment `npm` (no
-  reviewer, no secret, tags `v*` only), `v*` tag ruleset. Steps 3-6
+  reviewer, no secret, tags `v*` only), `v*` tag ruleset, `main` branch
+  ruleset (pull request and `quality` green; same bypass list). Steps 3-6
   (placeholder `0.0.0`, trusted publisher, tag `v0.1.0`, disallow tokens)
   are the owner's, on the explicit go, after T-039, outside this task.
 
@@ -28,7 +29,7 @@ publish is 0.1.0, only after T-039 and on the owner's explicit go.
 - `package.json`: `repository.url`
   `https://github.com/ZanichelliEditore/freshdesk-mcp` and
   `"license": "MIT"` (owner, 2026-11-25); a root `LICENSE` (MIT, copyright
-  holder "Zanichelli"; the owner confirms the legal name before 0.1.0).
+  holder "Zanichelli Editore S.p.A.", owner 2026-11-25).
 - `permissions: contents: read` for the workflow; `id-token: write` on the
   publish job only. Every action pinned by commit SHA.
 - The tagged commit must be an ancestor of `origin/main`; the tag must equal
@@ -73,16 +74,17 @@ and fails on a mismatch; it publishes by npm trusted publishing (RFC
 2026-11-25, release on npm): the publish job declares `environment: npm`,
 and no job references an npm token or a secret; `package.json`
 `repository.url` is `https://github.com/ZanichelliEditore/freshdesk-mcp` and
-`license` is `MIT`, and a root `LICENSE` holds the MIT text; workflow
-`permissions` are `contents: read`, and `id-token: write` appears on the
-publish job only; the dry-run job references no secret; every `uses:`
-carries a 40-hex commit SHA; a step before the publish fails unless the
-tagged commit is an ancestor of `origin/main`; the publish carries
-`--provenance` and `--access public`. The version script's unit test runs it
-with a matching and a mismatched tag and version. `README.md` carries the
-version policy line (asserted). A `workflow_dispatch` dry run is observed
-green on GitHub, its URL in HANDOFF; no tag exists on the remote and the
-package is not on npm after the session; `make quality` green.
+`license` is `MIT`, and a root `LICENSE` holds the MIT text with copyright
+holder "Zanichelli Editore S.p.A."; workflow `permissions` are `contents:
+read`, and `id-token: write` appears on the publish job only; the dry-run
+job references no secret; every `uses:` carries a 40-hex commit SHA; a step
+before the publish fails unless the tagged commit is an ancestor of
+`origin/main`; the publish carries `--provenance` and `--access public`. The
+version script's unit test runs it with a matching and a mismatched tag and
+version. `README.md` carries the version policy line (asserted). A
+`workflow_dispatch` dry run is observed green on GitHub, its URL in HANDOFF;
+no tag exists on the remote and the package is not on npm after the session;
+`make quality` green.
 
 ---
 *Filled at `/handoff`:*

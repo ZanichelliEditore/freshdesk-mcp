@@ -388,8 +388,9 @@ Two levels:
   npm and the publisher is a member (evidence before the README names the
   package); how a publish is authorised is decided by an RFC;
   published from CI on a version tag, with provenance and every check run
-  again; the first publish is 0.1.0, after M1's smoke and on the owner's
-  explicit go; versions stay 0.x until M4, then 1.0.0. GitHub releases
+  again; the first release is 0.1.0, after M1's smoke and on the owner's
+  explicit go; a deprecated 0.0.0 placeholder precedes it (RFC
+  2026-11-25); versions stay 0.x until M4, then 1.0.0. GitHub releases
   with the `.mcpb` built by `@anthropic-ai/mcpb pack` in CI; semver;
   CHANGELOG.
 - Docs: README (English, for technical users and a possible public

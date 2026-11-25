@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-23
 
@@ -56,13 +56,39 @@ mechanism in both places it is written; `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+- RFC `docs/rfc/active/2026-11-25-release-on-npm.md`, Status Active by the
+  owner's word (2026-11-25): npm trusted publishing over OIDC, bound to the
+  GitHub environment `npm` (tags `v*` only), a `v*` tag ruleset deciding who
+  may publish, a deprecated `0.0.0` placeholder before the first release
+  0.1.0, no npm token. The environment-secret option is weighed and
+  rejected in the RFC.
+- Commits: `fda62ac` (status doing), `ed35b74` (RFC proposed, T-045
+  acceptance amended), `415abb1` (rfc-reviewer fixes), and the commit
+  `T-048: RFC active, done` (owner's answers, SPEC §11, rfc-sync).
+- `rfc-reviewer` (2026-11-25): decision sound; 1 High, 3 Medium, 2 Low, all
+  text, all resolved; each finding with its resolution in the RFC's
+  "Review" section.
+- Owner (2026-11-25): RFC approved; `LICENSE` copyright holder "Zanichelli
+  Editore S.p.A."; a `main` branch ruleset (pull request and `quality`
+  green, same bypass list as the tag ruleset) before the first tag. All in
+  the RFC, T-045 (task file and PLAN row) and SPEC §11 (first release
+  0.1.0 after a deprecated 0.0.0 placeholder).
 
 ## Dead ends
-none
+- Trusted publishing for a package that does not exist yet: not possible
+  (`npm trust` docs, read 2026-11-25); hence the placeholder.
 
 ## Open doubts
-none
+- The environment, both rulesets and the trusted publisher are settings,
+  not code: no test in the repository can prove them; the owner confirms
+  them (RFC, owner's steps 0-6).
+- `release.yml` copies the quality and gitleaks jobs from `quality.yml`
+  (a local reusable workflow cannot carry a SHA), so the two can drift.
+- A trusted publisher not used within 2 days of being configured expires:
+  steps 4 and 5 of the RFC must happen within that window.
 
 ## Context pressure
+Low: one RFC, three review fixes, one approval round.
 
 ## Next action
+none: done.

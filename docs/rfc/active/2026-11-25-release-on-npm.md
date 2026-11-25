@@ -1,6 +1,6 @@
 # Release on npm: how a publish is authorised
 
-- **Status:** Proposed
+- **Status:** Active (owner, 2026-11-25)
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
 - [ ] Implemented
@@ -26,6 +26,12 @@ Recorded decisions (owner):
    the package can publish it" (2026-11-25). The authorisation is the
    pipeline's, not a personal npm membership, and needs no second human
    approval.
+8. `LICENSE` copyright holder: "Zanichelli Editore S.p.A." (2026-11-25).
+9. Protect `main` with a branch ruleset (require a pull request and the
+   `quality` check green) before the first tag (2026-11-25).
+
+The owner approved this RFC, and its reading of decision 5 (below), on
+2026-11-25.
 
 Facts found while drafting (sources read 2026-11-25, listed at the end):
 
@@ -71,7 +77,9 @@ No npm token is stored anywhere, ever.
   **no** secrets, deployment policy "Selected branches and tags" with one tag
   rule, `v*`. A tag ruleset on `v*` that restricts creations, updates and
   deletions, with a bypass list naming who may release (repository admins
-  and the maintain role, or a release team; the owner chooses).
+  and the maintain role, or a release team; the owner chooses). A branch
+  ruleset on `main` (owner, 2026-11-25) that requires a pull request and the
+  `quality` check green, with **the same bypass list** as the tag ruleset.
 - **Workflow (T-045).** The publish job declares `environment: npm` and
   `permissions: id-token: write`, runs on `ubuntu-latest`, uses Node
   `24.22.3` (bundled npm 11.19.1), and references no secret. It publishes
@@ -108,10 +116,15 @@ against the people on the bypass list: the checks live in `release.yml`,
 and the run uses the `release.yml` of the tagged commit. A bypass-list user
 can tag a branch commit whose `release.yml` drops the check, and publish any
 code, with provenance that names that commit. `main` itself is not protected
-(read 2026-11-25 from the public API: `branches/main` reports
-`protected: false`, and no ruleset applies to `main`), so "on `main`" does
-not mean "reviewed" either. Protecting `main` is a separate owner decision,
-not part of this RFC.
+today (read 2026-11-25 from the public API: `branches/main` reports
+`protected: false`, and no ruleset applies to `main`). The owner chose to
+protect it (2026-11-25): a `main` ruleset requiring a pull request and the
+`quality` check green. "Require a pull request" stops direct pushes to
+`main`, the orchestrator's ship script included, for anyone not on the
+ruleset's bypass list. The recommendation is the same bypass list as the
+`v*` tag ruleset: the people who may release keep direct pushes, so the
+rule guards every other writer, not them. Then "on `main`" means "reviewed
+or pushed by someone who may release", which is the owner's rule again.
 
 **What a leaked credential allows:** there is no stored npm credential to
 leak. The OIDC token lives for minutes, inside one job, and npm accepts it
@@ -144,20 +157,18 @@ approves that reading with this RFC.
 - `@zanichelli/freshdesk-mcp@0.0.0` stays on npm, deprecated. Unpublishing
   every version blocks any new publish of the package for 24 hours (npm
   unpublish policy), which is not worth it.
-- SPEC §11 says "the first publish is 0.1.0". On the owner's approval, with
-  the flip to Active, it is amended to "the first release is 0.1.0; a
-  deprecated 0.0.0 placeholder precedes it (RFC 2026-11-25)". SPEC is not
-  edited before that.
+- SPEC §11 said "the first publish is 0.1.0". With the owner's approval
+  (2026-11-25) it reads "the first release is 0.1.0; a deprecated 0.0.0
+  placeholder precedes it (RFC 2026-11-25)".
 - Setting up depends on the owner, by hand, in an order (below). npm does
   not validate a trusted publisher when it is saved: a typo shows only as a
   failed publish.
 - `package.json` needs `repository.url`
   (`https://github.com/ZanichelliEditore/freshdesk-mcp`), `"license": "MIT"`
-  (owner, 2026-11-25) and a root `LICENSE` file before 0.1.0. T-045 adds all
-  three (orchestrator, 2026-11-25). The `LICENSE` copyright holder is
-  "Zanichelli", the name the repository already uses (SPEC §1); the owner
-  confirms or corrects the legal name before 0.1.0.
-- The tag ruleset and the environment are GitHub settings, not code: no
+  (owner, 2026-11-25) and a root `LICENSE` file, copyright holder
+  "Zanichelli Editore S.p.A." (owner, 2026-11-25), before 0.1.0. T-045 adds
+  all three (orchestrator, 2026-11-25).
+- The rulesets and the environment are GitHub settings, not code: no
   test in the repository can prove them. T-045 tests the workflow side
   (`environment: npm`, no secret); the owner confirms the settings.
 - `quality.yml` pins actions by tag (`@v6`), not by SHA. Out of scope here;
@@ -172,6 +183,10 @@ approves that reading with this RFC.
    tags", add tag rule `v*`.
 2. Same time: a tag ruleset, target `v*`, rules "Restrict creations",
    "Restrict updates", "Restrict deletions", bypass list = who may release.
+   And a branch ruleset, target `main`: "Require a pull request before
+   merging" and "Require status checks to pass" with the `quality` job's
+   checks (the matrix makes them `quality (22.19)` and `quality (24)`),
+   bypass list = the same people as the tag ruleset.
 3. After T-045 is merged, on the go for 0.1.0: from an empty directory,
    `npm publish --access public` the placeholder `0.0.0`, then
    `npm deprecate @zanichelli/freshdesk-mcp@0.0.0 "placeholder"` (both with 2FA, as an `@zanichelli` member who can publish).
