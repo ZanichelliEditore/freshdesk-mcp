@@ -35,6 +35,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, label and text here is invented.
 
@@ -234,35 +235,14 @@ function lines(path: string): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-/**
- * A reply Freshdesk takes `ms` to give, for a test that fakes `Date` alone
- * with `shouldAdvanceTime`: the clock jumps `ms` when the request is sent, so
- * the call's elapsed time is the replies' `ms` plus real milliseconds. The
- * `settle` loop instead charges 100 fake ms to every turn spent on real I/O,
- * which a slow runner turns into seconds (CI, 2026-11-25).
- */
+/** A reply Freshdesk takes `ms` to give, on the clock of test/support/slow-replies.ts. */
 function replyTaking(path: string, body: unknown, ms: number) {
-  mock
-    .get(ORIGIN)
-    .intercept({ path, method: "GET" })
-    .reply(() => {
-      vi.setSystemTime(Date.now() + ms);
-      return { statusCode: 200, data: body as object, responseOptions: { headers: JSON_TYPE } };
-    });
+  mock.get(ORIGIN).intercept({ path, method: "GET" }).reply(answersAfter(ms, body));
 }
 
-/** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
-  const started = Date.now();
-  let result: CallResult | undefined;
-  void call.then((value) => {
-    result = value;
-  });
-  while (result === undefined) {
-    await new Promise((resolve) => setImmediate(resolve));
-    if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-  }
-  return { result, ms: Date.now() - started };
+/** A request still unanswered after `ms`, on the same clock: it then fails as `network`. */
+function replyHanging(path: string, ms: number) {
+  mock.get(ORIGIN).intercept({ path, method: "GET" }).reply(silentFor(ms));
 }
 
 const jsonl = (over: Record<string, unknown> = {}) => ({
@@ -895,16 +875,14 @@ describe("export_tickets: full review fixes (R1)", () => {
 
   it("a later search page aborted at the call's deadline is a cut: the rows read, truncated: true", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
-    for (let attempt = 0; attempt < 4; attempt++) {
-      reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45)).delay(40_000);
-    }
-    // No timing asserted: the file steps are real I/O, which the settle loop counts as fake time.
-    const { result } = await settle(callTool(session, TOOL, jsonl()));
-    const written = output(result);
+    // Sent after the call started, so 30 s on is at or past its deadline.
+    replyHanging(searchPath(PERIOD_QUERY, 2), 30_000);
+    const written = output(await callTool(session, TOOL, jsonl()));
     expect(written.rows).toBe(30);
     expect(written.truncated).toBe(true);
+    expect(sent()).toBe(2);
     expect(written.api_calls_used).toBe(sent());
 
     expect(readdirSync(out)).toEqual([basename(written.path)]);
@@ -912,14 +890,11 @@ describe("export_tickets: full review fixes (R1)", () => {
 
   it("a thread aborted at the call's deadline is a cut: its ticket not written, the rows before it kept", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
     reply(threadPath(4301), conversationPages[0]);
-    for (let attempt = 0; attempt < 4; attempt++) {
-      reply(threadPath(4302), conversationPages[1]).delay(40_000);
-    }
-    const { result } = await settle(callTool(session, TOOL, jsonl({ conversations: true })));
-    const written = output(result);
+    replyHanging(threadPath(4302), 30_000);
+    const written = output(await callTool(session, TOOL, jsonl({ conversations: true })));
     expect(lines(written.path)).toEqual([
       { ...row(4301), conversations: thread(conversationPages[0]) },
     ]);

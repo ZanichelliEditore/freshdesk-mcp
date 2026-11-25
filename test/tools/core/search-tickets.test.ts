@@ -36,6 +36,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, address, label and text here is invented.
 
@@ -186,20 +187,6 @@ function asSent<T>(value: T): unknown {
 function cursorFor(tool: string, args: Record<string, unknown>, position: number): string {
   const built = listEnvelope({ tool, args }, { items: [], next: position, api_calls_used: 0 });
   return built.next_cursor!;
-}
-
-/** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
-  const started = Date.now();
-  let result: CallResult | undefined;
-  void call.then((value) => {
-    result = value;
-  });
-  while (result === undefined) {
-    await new Promise((resolve) => setImmediate(resolve));
-    if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-  }
-  return { result, ms: Date.now() - started };
 }
 
 describe("search_tickets: the listing", () => {
@@ -566,21 +553,26 @@ describe("search_tickets: stderr", () => {
 describe("search_tickets: one 30 s deadline per call", () => {
   it("slow requests end the call at 30 s as network, with no request after", async () => {
     const { session } = await cold();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     try {
-      // Each request takes 9 s, under one attempt's 10 s: the search would end
-      // at 36 s, so with 30 s of its own, after the schema's load, it would succeed.
-      reply(FIELDS, schemaFieldsPayload).delay(9000);
-      reply(AGENTS, agentPages.flat()).delay(9000);
-      reply(GROUPS, groupPages.flat()).delay(9000);
-      reply(searchPath(QUERY), found([ticket(4301)])).delay(9000);
+      // Each request takes 9 s, under one attempt's 10 s: the search, sent at
+      // 27 s, is still silent at 30 s; with 30 s of its own it would be retried.
+      const intercept = (path: string) => mock.get(ORIGIN).intercept({ path, method: "GET" });
+      intercept(FIELDS).reply(answersAfter(9000, schemaFieldsPayload));
+      intercept(AGENTS).reply(answersAfter(9000, agentPages.flat()));
+      intercept(GROUPS).reply(answersAfter(9000, groupPages.flat()));
+      intercept(searchPath(QUERY)).reply(silentFor(3000));
 
-      const { result, ms } = await settle(callTool(session, TOOL, { query: QUERY }));
+      const before = Date.now();
+      const result = await callTool(session, TOOL, { query: QUERY });
+      const ms = Date.now() - before;
 
       expect(refusal(result).code).toBe("network");
-      expect(ms).toBeLessThanOrEqual(30_000);
+      expect(ms).toBeGreaterThanOrEqual(30_000);
       expect(sent()).toBe(4);
-      await vi.advanceTimersByTimeAsync(120_000);
+      // No retry: a backoff (500 ms first) would have sent one by now.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       expect(sent()).toBe(4);
     } finally {
       vi.useRealTimers();

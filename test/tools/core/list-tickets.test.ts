@@ -48,6 +48,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, address, label and text here is invented.
 
@@ -657,13 +658,20 @@ describe("list_tickets: the uncategorized scan", () => {
   it("starts no list page after SCAN_START_MS: slow pages end the call early, not in an error", async () => {
     const { session } = await warm();
     const args = { uncategorized: true };
-    fakeClock();
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     try {
       // 8 s a page: the second ends at 16 s, past SCAN_START_MS, so no third.
-      for (let n = 1; n <= 4; n++)
-        reply(page(n), [uncategorised(4300 + n)], { next: true }).delay(8000);
-      const { result, ms } = await settle(callTool(session, TOOL, args));
-      const first = output(result);
+      const next = { link: `<${ORIGIN}/api/v2/tickets?page=next>; rel="next"` };
+      for (let n = 1; n <= 4; n++) {
+        mock
+          .get(ORIGIN)
+          .intercept({ path: page(n), method: "GET" })
+          .reply(answersAfter(8000, [uncategorised(4300 + n)], next));
+      }
+      const before = Date.now();
+      const first = output(await callTool(session, TOOL, args));
+      const ms = Date.now() - before;
       expect(first.items.map((item) => item.id)).toEqual([4301, 4302]);
       expect(first.next_cursor).toBe(cursorFor(TOOL, args, 2));
       expect(ms).toBeGreaterThanOrEqual(SCAN_START_MS);
@@ -1050,21 +1058,26 @@ describe("list_tickets: stderr", () => {
 describe("list_tickets: one 30 s deadline per call", () => {
   it("slow requests end the call at 30 s as network, with no request after", async () => {
     const { session } = await cold();
-    fakeClock();
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     try {
-      // Each request takes 9 s, under one attempt's 10 s: the search would end
-      // at 36 s, so with 30 s of its own, after the schema's load, it would succeed.
-      reply(FIELDS, schemaFieldsPayload).delay(9000);
-      reply(AGENTS, agentPages.flat()).delay(9000);
-      reply(GROUPS, groupPages.flat()).delay(9000);
-      reply(searchPath("status:2"), found([ticket(4301)])).delay(9000);
+      // Each request takes 9 s, under one attempt's 10 s: the search, sent at
+      // 27 s, is still silent at 30 s; with 30 s of its own it would be retried.
+      const intercept = (path: string) => mock.get(ORIGIN).intercept({ path, method: "GET" });
+      intercept(FIELDS).reply(answersAfter(9000, schemaFieldsPayload));
+      intercept(AGENTS).reply(answersAfter(9000, agentPages.flat()));
+      intercept(GROUPS).reply(answersAfter(9000, groupPages.flat()));
+      intercept(searchPath("status:2")).reply(silentFor(3000));
 
-      const { result, ms } = await settle(callTool(session, TOOL, { status: 2 }));
+      const before = Date.now();
+      const result = await callTool(session, TOOL, { status: 2 });
+      const ms = Date.now() - before;
 
       expect(refusal(result).code).toBe("network");
-      expect(ms).toBeLessThanOrEqual(30_000);
+      expect(ms).toBeGreaterThanOrEqual(30_000);
       expect(sent()).toBe(4);
-      await vi.advanceTimersByTimeAsync(120_000);
+      // No retry: a backoff (500 ms first) would have sent one by now.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       expect(sent()).toBe(4);
     } finally {
       vi.useRealTimers();

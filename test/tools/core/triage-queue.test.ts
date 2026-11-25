@@ -26,6 +26,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, address, label and text here is invented.
 
@@ -961,17 +962,26 @@ describe("triage_queue: errors", () => {
 describe("triage_queue: one 30 s deadline per call", () => {
   it("slow views end the call at 30 s as network, with no request after", async () => {
     const { session } = await warm();
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true, now: NOW });
     const page = tickets(4301, 6);
-    reply(searchPath(), found(page)).delay(2000);
-    for (const row of page) {
-      view(row, { requester_responded_at: null, agent_responded_at: null }).delay(9000);
+    const intercept = (path: string) => mock.get(ORIGIN).intercept({ path, method: "GET" });
+    intercept(searchPath()).reply(answersAfter(2000, found(page)));
+    const stats = { requester_responded_at: null, agent_responded_at: null };
+    for (const row of page.slice(0, 3)) {
+      intercept(viewPath(row.id)).reply(answersAfter(9000, { ...row, stats }));
     }
-    const { result, ms } = await timed(session, STATS);
+    // The fourth view, sent at 29 s, is still silent at 30 s.
+    intercept(viewPath(page[3]!.id)).reply(silentFor(1000));
+    const result = await callTool(session, TOOL, STATS);
+    const ms = Date.now() - NOW;
     expect(refusal(result).code).toBe("network");
-    expect(ms).toBeLessThanOrEqual(30_100);
+    expect(ms).toBeGreaterThanOrEqual(30_000);
     // The search, three views answered at 9 s each, and the one cut at 30 s.
     expect(sent()).toBe(5);
-    await vi.advanceTimersByTimeAsync(120_000);
+    // No retry: a backoff (500 ms first) would have sent one by now.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(sent()).toBe(5);
   });
 });

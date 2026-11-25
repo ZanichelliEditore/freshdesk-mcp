@@ -20,6 +20,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 const DOMAIN = "acme.freshdesk.com";
 const ORIGIN = `https://${DOMAIN}`;
@@ -285,51 +286,40 @@ describe("list_agents, list_groups: api_calls_used and retries", () => {
 
 describe("list_agents, list_groups: one 30 s deadline per call", () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
   });
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  /** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-  async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
-    const started = Date.now();
-    let result: CallResult | undefined;
-    void call.then((value) => {
-      result = value;
-    });
-    while (result === undefined) {
-      await new Promise((resolve) => setImmediate(resolve));
-      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-    }
-    return { result, ms: Date.now() - started };
-  }
-
   it.each(NAMES)(
     "%s: slow pages end the call at 30 s as network, with no request after",
     async (tool) => {
-      // Each page takes 9 s, under one attempt's 10 s: the fourth would come
-      // at 36 s, so with 30 s for each page alone the call would succeed.
-      for (let n = 1; n <= 4; n += 1) {
+      // Each page takes 9 s, under one attempt's 10 s: the fourth, sent at
+      // 27 s, is still silent at 30 s; with 30 s for each page alone it would be retried.
+      for (let n = 1; n <= 3; n += 1) {
+        const link = { link: `<${ORIGIN}${pathOf(tool, n + 1)}>; rel="next"` };
         mock
           .get(ORIGIN)
           .intercept({ path: pathOf(tool, n), method: "GET" })
-          .reply(200, TOOLS[tool].pages[1] as object, {
-            headers: {
-              ...JSON_TYPE,
-              ...(n < 4 ? { link: `<${ORIGIN}${pathOf(tool, n + 1)}>; rel="next"` } : {}),
-            },
-          })
-          .delay(9000);
+          .reply(answersAfter(9000, TOOLS[tool].pages[1], link));
       }
+      mock
+        .get(ORIGIN)
+        .intercept({ path: pathOf(tool, 4), method: "GET" })
+        .reply(silentFor(3000));
       const open = await session();
 
-      const { result, ms } = await settle(callTool(open, tool, {}));
+      const before = Date.now();
+      const result = await callTool(open, tool, {});
+      const ms = Date.now() - before;
 
       expect(refusal(result).code).toBe("network");
-      expect(ms).toBeLessThanOrEqual(30_000);
+      expect(ms).toBeGreaterThanOrEqual(30_000);
       expect(sent()).toBe(4);
-      await vi.advanceTimersByTimeAsync(120_000);
+      // No retry: a backoff (500 ms first) would have sent one by now.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       expect(sent()).toBe(4);
     },
   );

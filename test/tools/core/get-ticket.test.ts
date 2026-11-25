@@ -36,6 +36,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, address, label and text here is invented.
 
@@ -1110,37 +1111,28 @@ describe("get_ticket: stderr", () => {
 });
 
 describe("get_ticket: one 30 s deadline per call", () => {
-  /** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-  async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
-    const started = Date.now();
-    let result: CallResult | undefined;
-    void call.then((value) => {
-      result = value;
-    });
-    while (result === undefined) {
-      await new Promise((resolve) => setImmediate(resolve));
-      if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-    }
-    return { result, ms: Date.now() - started };
-  }
-
   it("slow requests end the call at 30 s as network, with no request after", async () => {
     const session = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // The clock of test/support/slow-replies.ts: real I/O is not charged as fake time.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     try {
-      // Each request takes 9 s, under one attempt's 10 s: the fourth would end
-      // at 36 s, so with 30 s for each request alone the call would succeed.
-      reply(TICKET, ticketBody).delay(9000);
-      reply(CONTACT, contactBody).delay(9000);
-      reply(COMPANY, companyBody).delay(9000);
-      reply(THREAD, []).delay(9000);
+      // Each request takes 9 s, under one attempt's 10 s: the fourth, sent at
+      // 27 s, is still silent at 30 s; with 30 s for each request alone it would be retried.
+      const intercept = (path: string) => mock.get(ORIGIN).intercept({ path, method: "GET" });
+      intercept(TICKET).reply(answersAfter(9000, ticketBody));
+      intercept(CONTACT).reply(answersAfter(9000, contactBody));
+      intercept(COMPANY).reply(answersAfter(9000, companyBody));
+      intercept(THREAD).reply(silentFor(3000));
 
-      const { result, ms } = await settle(callTool(session, TOOL, { ticket_id: ID }));
+      const before = Date.now();
+      const result = await callTool(session, TOOL, { ticket_id: ID });
+      const ms = Date.now() - before;
 
       expect(refusal(result).code).toBe("network");
-      expect(ms).toBeLessThanOrEqual(30_000);
+      expect(ms).toBeGreaterThanOrEqual(30_000);
       expect(sent()).toBe(4);
-      await vi.advanceTimersByTimeAsync(120_000);
+      // No retry: a backoff (500 ms first) would have sent one by now.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       expect(sent()).toBe(4);
     } finally {
       vi.useRealTimers();

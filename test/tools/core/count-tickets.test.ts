@@ -24,6 +24,7 @@ import {
   type Session,
 } from "../../support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
+import { answersAfter, silentFor } from "../../support/slow-replies.js";
 
 // Every name, label and text here is invented.
 
@@ -204,18 +205,20 @@ function refusal(result: CallResult): Refusal {
   return (JSON.parse(result.content[0].text) as { error: Refusal }).error;
 }
 
-/** Runs the fake clock forward until the call settles; returns the fake ms it took. */
-async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
-  const started = Date.now();
-  let result: CallResult | undefined;
-  void call.then((value) => {
-    result = value;
-  });
-  while (result === undefined) {
-    await new Promise((resolve) => setImmediate(resolve));
-    if (result === undefined) await vi.advanceTimersByTimeAsync(100);
-  }
-  return { result, ms: Date.now() - started };
+/** A reply Freshdesk takes `ms` to give, on the clock of test/support/slow-replies.ts. */
+function replyTaking(path: string, body: unknown, ms: number, { next = false } = {}) {
+  const link: Record<string, string> = next
+    ? { link: `<${ORIGIN}/api/v2/tickets?page=next>; rel="next"` }
+    : {};
+  mock
+    .get(ORIGIN)
+    .intercept({ path, method: "GET" })
+    .reply(answersAfter(ms, body, link));
+}
+
+/** A request still unanswered after `ms`, on the same clock: it then fails as `network`. */
+function replyHanging(path: string, ms: number) {
+  mock.get(ORIGIN).intercept({ path, method: "GET" }).reply(silentFor(ms));
 }
 
 describe("count_tickets: the listing", () => {
@@ -645,15 +648,16 @@ describe("count_tickets: the budget", () => {
 
   it("starts no search page after SCAN_START_MS: truncated: true, not an error", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     // 8 s a page: page 3 ends at 24 s, past SCAN_START_MS: no page 4.
     for (let page = 1; page <= 4; page++) {
-      reply(searchPath(PERIOD_QUERY, page), found(many(4000 + page * 100, 30), 120)).delay(8000);
+      replyTaking(searchPath(PERIOD_QUERY, page), found(many(4000 + page * 100, 30), 120), 8000);
     }
-    const { result, ms } = await settle(
-      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    const before = Date.now();
+    const counted = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
     );
-    const counted = output(result);
+    const ms = Date.now() - before;
     expect(counted.truncated).toBe(true);
     expect(counted.total).toBe(90);
     expect(sent()).toBe(3);
@@ -830,16 +834,17 @@ describe("count_tickets: past 300, the ordered list scan", () => {
 
   it("starts no page after SCAN_START_MS: slow pages end in truncated: true, not an error", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY), over);
     // 8 s a page: page 2 ends at 16 s, page 3 at 24 s, past SCAN_START_MS: no page 4.
     for (let page = 1; page <= 4; page++) {
-      reply(scanPath(page), many(6000 + page * 100, LIST_PAGE_SIZE), { next: true }).delay(8000);
+      replyTaking(scanPath(page), many(6000 + page * 100, LIST_PAGE_SIZE), 8000, { next: true });
     }
-    const { result, ms } = await settle(
-      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    const before = Date.now();
+    const counted = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
     );
-    const counted = output(result);
+    const ms = Date.now() - before;
     expect(counted.truncated).toBe(true);
     expect(counted.total).toBe(3 * LIST_PAGE_SIZE);
     expect(sent()).toBe(4);
@@ -912,35 +917,39 @@ describe("count_tickets: api_calls_used", () => {
 describe("count_tickets: one 30 s deadline per call", () => {
   it("a later search page aborted at the deadline is a cut: the counts so far, truncated: true", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
-    for (let attempt = 0; attempt < 4; attempt++) {
-      reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45)).delay(40_000);
-    }
-    const { result, ms } = await settle(
-      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    // Sent after the call started, so 30 s on is at or past its deadline.
+    replyHanging(searchPath(PERIOD_QUERY, 2), 30_000);
+    const counted = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
     );
-    const counted = output(result);
     expect(counted.total).toBe(30);
     expect(counted.truncated).toBe(true);
+    // No retry of page 2 past the deadline.
+    expect(sent()).toBe(2);
     expect(counted.api_calls_used).toBe(sent());
-    expect(ms).toBeLessThanOrEqual(30_100);
   });
 
   it("slow requests end the call at 30 s as network, with no request after", async () => {
     const { session } = await cold();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    reply(FIELDS, FIELDS_PAYLOAD).delay(9000);
-    reply(AGENTS, agentPages.flat()).delay(9000);
-    reply(GROUPS, groupPages.flat()).delay(9000);
-    reply(searchPath(PERIOD_QUERY), found([ticket(4301)])).delay(9000);
-    const { result, ms } = await settle(
-      callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
-    );
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    replyTaking(FIELDS, FIELDS_PAYLOAD, 9000);
+    replyTaking(AGENTS, agentPages.flat(), 9000);
+    replyTaking(GROUPS, groupPages.flat(), 9000);
+    // Sent at 27 s: 3 s on is at or past the deadline (the call started after `before`).
+    replyHanging(searchPath(PERIOD_QUERY), 3000);
+    const before = Date.now();
+    const result = await callTool(session, TOOL, {
+      group_by: ["Status"],
+      created_between: PERIOD,
+    });
+    const ms = Date.now() - before;
     expect(refusal(result).code).toBe("network");
-    expect(ms).toBeLessThanOrEqual(30_000);
+    expect(ms).toBeGreaterThanOrEqual(30_000);
     expect(sent()).toBe(4);
-    await vi.advanceTimersByTimeAsync(120_000);
+    // Past the deadline no retry is started: a backoff (500 ms first) would show one by now.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(sent()).toBe(4);
   });
 });
