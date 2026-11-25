@@ -5,7 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T14:20:51+01:00`
-- **Describes commit:** filled by the stamp commit that follows.
+- **Describes commit:** `54079fa`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the handoff commit). **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45622899764
+  (workflow `quality`, ran on `54079fa`: `quality (22.19)`, `quality (24)`,
+  `checks` all success). This file's hash and CI line arrive in the commit
+  right after it.
 
 - **Current task:** T-014 (a write is not started without time to finish)
   `done (2026-11-25)`. Commits `6e7674f` (R1) and `5a5274d` (review
