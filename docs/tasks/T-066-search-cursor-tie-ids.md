@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-063 (done)
 - **Created:** 2026-11-25
 
@@ -268,18 +268,44 @@ session, the session stops at the RFC Proposed, before (a)'s code.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- RFC `docs/rfc/active/2026-11-25-search-cursor-tie-ids.md`, Active by the
+  owner's word (2026-11-25, recorded in it), commit `5bf5c8a`;
+  `rfc-reviewer`: no design change, seven wording findings resolved.
+- Code `67b2173`; review fixes in the handoff commit.
+  - `src/tools/list.ts`: `idsCursor`, `readIdsCursor`,
+    `idsCursorMaxLength` (570 for 30); `test/tools/list.test.ts`
+    describe "the ids form (T-066)".
+  - `count-tickets.ts` `readPeriod`: `ordered`, the skip, the set and its
+    reset, the step-back `<= S`; `export-tickets.ts`: `CURSOR_FORM` 3,
+    `MAX_CURSOR_IDS`, `maxPosition`, `resumeAt`, `positionOf`, `UNHELD`.
+- Regression, shown failing on `dd33b08`'s `src/` (export and count code
+  unchanged, `list.ts` only added to; refused "out of its own order"):
+  `test/tools/core/export-tickets.test.ts::export_tickets: pages, max_tickets and the cursor (T-057) > T-066: a search position is the second and the ids written in it > regression: a tie of 3 in one second, ids ascending, across pages 1 and 2`
+  (3 cases: cut before the tie, at 29, at 15). The "a ticket a call"
+  variant was replaced by the cut at 15: 35 calls exceed the test
+  limiter's window.
+- The rest of the acceptance: the same describe ("ties descending too",
+  "within the position's second", "the step-back", "the bound: 30 ids of
+  one second", "cursors refused: no request, no file"); T-063's and R2's
+  tests re-minted on form 3; `count-tickets.test.ts` "a tie in one
+  second, ids ascending (T-066)".
+- "Page over 10" cannot be expressed (RFC point 9): tested as the
+  highest position (last second, page 10) accepted and the next refused.
+- Fixture change: the T-057 describe's `down()` gives each ticket its own
+  second (`createdOf`), since one shared second would now pass the bound.
+- `make quality`: vitest 2746 passed, `tools/checks` 138 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The RFC's threat model names a prompt-injection path to a forged id
+  set (rfc-reviewer). The owner's word accepted the forgery risk for the
+  user's own client; whether that covers the injected-model path is the
+  owner's to confirm.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

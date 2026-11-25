@@ -15,7 +15,7 @@ and stay 0.x until milestone M4, then 1.0.0.
 - **Changed:** cursors given by `export_tickets` 0.3.0 and earlier are
   refused, once: "Call again without a cursor to start over". This holds for
   both kinds of cursor. Start the export of that period again.
-- When more than 30 tickets written share the last `created_at` second, the
+- **Changed:** when more than 30 tickets written share the last `created_at` second, the
   call keeps its file and says `truncated: true` with no `next_cursor`, and
   a `note` asks you not to reuse the cursor and to export the period without
   `max_tickets` (up to 300 matching tickets fit one call) or in shorter

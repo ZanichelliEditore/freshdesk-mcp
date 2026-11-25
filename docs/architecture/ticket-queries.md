@@ -332,7 +332,7 @@ ticket created then or later was updated then or later), page 1 again, so
 the 300-page cap counts anew for each call, and skips what it already wrote.
 A ticket updated between calls that was created before that second does not
 shift the position, as a page or offset would. Ties in that second are
-skipped by count (the list scan keeps ties by count): a tie
+skipped by count, not by id (the list position keeps no ids): a tie
 that entered or left the filters between calls makes one skipped or written
 twice. A cut before any row is written gives no cursor. A resumed search
 read checks that every `created_at` reads and none rises, on every page it

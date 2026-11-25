@@ -1771,7 +1771,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       });
     });
 
-    it("a position outside the search (an id below 1 taken) still fails the call: no file", async () => {
+    it("an id below 1 taken still fails the call (idsCursor's throw): no file", async () => {
       const { session } = await warm();
       reply(
         searchPath(PERIOD_QUERY),
@@ -1779,7 +1779,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       );
       const result = await callTool(session, TOOL, jsonl({ max_tickets: 2 }));
       expect(result.isError).toBe(true);
-      // positionOf's throw, not a refusal: the registry's internal error.
+      // idsCursor's TypeError (0 joins the set of 09:00:00), not a refusal: the registry's internal error.
       expect(result.content[0].text).toBe("The tool export_tickets failed with an internal error.");
       expect(readdirSync(out)).toEqual([]);
     });
@@ -2070,6 +2070,30 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       const args = jsonl({ max_tickets: 2 });
       it("the next position after the period's last second, page 10, is the period's end", () => {
         expect(searchAt(11, "2026-01-31T23:59:59Z")).toBe(searchAt(1, "2026-02-01T00:00:00Z"));
+      });
+
+      it("the highest position, the period's last second on page 10, is accepted: page 10 is sent", async () => {
+        const { session } = await warm();
+        // Page 10 starts newer than the second (a ticket outside the period): no step-back.
+        reply(
+          searchPath(PERIOD_QUERY, 10),
+          found(
+            [
+              ticket(9, { created_at: "2026-02-01T00:00:05Z" }),
+              ticket(5, { created_at: "2026-01-31T23:59:59Z" }),
+            ],
+            272,
+          ),
+        );
+        const result = page(
+          await callTool(session, TOOL, {
+            ...args,
+            cursor: mint(args, searchAt(10, "2026-01-31T23:59:59Z"), [5]),
+          }),
+        );
+        expect(paths()).toEqual([searchPath(PERIOD_QUERY, 10)]);
+        expect(result.rows).toBe(0);
+        expect(result).not.toHaveProperty("next_cursor");
       });
       it.each([
         [

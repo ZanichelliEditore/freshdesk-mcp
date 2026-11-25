@@ -4,68 +4,66 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T16:30:48+01:00`
-- **Describes commit:** `1df732c`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the T-040 handoff commit). **CI:**
-  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45646289679
-  (workflow `quality`, ran on `1df732c`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-25T16:58:57+01:00`
+- **Describes commit:** `<hash>` (the T-066 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled by the stamp>`.
 
-- **Current task:** T-040 (RFC: write safety core; per-tool writable
-  fields) `done (2026-11-25)`. RFC
-  `docs/rfc/active/2026-11-25-write-safety-core.md`, Status Active
-  (owner, 2026-11-25), section "The owner's decisions (2026-11-25)".
-  Acceptance commit `84dd7aa`; review wording fixes in the handoff commit.
-  Safety core is now **the write path**: AGENTS.md rule 1, SPEC §9,
-  `.claude/commands/decompose.md` step 4.
+- **Current task:** T-066 (a search cursor holds the second and the ids
+  written in it) `done (2026-11-25)`. RFC
+  `docs/rfc/active/2026-11-25-search-cursor-tie-ids.md`, Active by the
+  owner's word (2026-11-25), commit `5bf5c8a`. Code `67b2173`; review
+  fixes in the handoff commit. Regression:
+  `test/tools/core/export-tickets.test.ts`, describe "T-066 …" >
+  "regression: a tie of 3 in one second, ids ascending, across pages 1
+  and 2" (shown failing on `dd33b08`'s `src/`). CHANGELOG "Unreleased".
 
-- **Next action:** `/pickup` takes T-066 (search cursor: the second and
-  the ids written in it; `docs/tasks/T-066-search-cursor-tie-ids.md`),
-  planned in a worktree and merged by the orchestrator after this handoff
-  (2026-11-25). Then `/decompose M2`, which awaits the owner's go. It must
-  reword SPEC §8.2/§9/C4's `add_note` rows and §8.2's `update_ticket`
-  purpose (see `docs/improvements.md` entries `84dd7aa`), and size T-064
-  and T-065.
+- **Next action:** the orchestrator releases 0.3.1 (owner
+  pre-authorised; not a row). Then `/decompose M2`, which awaits the
+  owner's go: it must reword SPEC §8.2/§9/C4's `add_note` rows and §8.2's
+  `update_ticket` purpose (`docs/improvements.md` entries `84dd7aa`), and
+  size T-064 and T-065.
 
 - **Owner actions:**
-  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26:
-    settles SPEC §13's M2 wording (as proposed, or (a) or (b) in the RFC)
-    before M2's first real test.
-  - T-063's order probe: run by the owner 2026-11-25, output kept in
-    `docs/private/account-facts.md`; it led to T-066.
+  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26
+    (settles SPEC §13's M2 wording).
+  - Confirm the RFC's threat model: the owner accepted the unkeyed
+    digest's forgery risk; the `rfc-reviewer` named a prompt-injection
+    path (a model steered by ticket text passing a forged id set). The
+    RFC records it as accepted under that word; confirm or reopen.
 
-- **Read before anything else:** the RFC's "Decision" and "The owner's
-  decisions", then `docs/tasks/PLAN.md` M2 section.
+- **Read before anything else:** the RFC's "Decision" and "Threat model",
+  then `docs/tasks/PLAN.md` M2 section.
 
 - **Reviews:**
-  - No third `rfc-reviewer` round (rule 9): this session's edits record
-    the owner's decisions, not review fixes.
-  - Handoff full round R1 = `84dd7aa`, range `dd33b08..84dd7aa`; all
+  - `rfc-reviewer` on the draft: no design-changing finding; seven
+    wording findings resolved in the RFC (no second round: no mechanism
+    changed).
+  - Handoff full round R1 = `67b2173`, range `8f0d8d0..67b2173`; all
     three quoted base, HEAD, stat line and trailer correctly. No scoped
-    round: the fixes are wording only, no mechanism changed.
-  - `code-reviewer`: Medium HANDOFF stale (fixed by this file); Low SPEC
-    §9 row vs paragraph (parked, see below); Low task-file C8 evidence
-    line (dated annotation added); Low RFC §13 wording sentence (fixed).
-  - `security-reviewer`: no blocking finding. Medium SPEC §8.2/§9/C4
-    `add_note` rows lag the RFC: dismissed for now by the orchestrator's
-    instruction (SPEC changes go to `/decompose M2`), parked in
-    `docs/improvements.md`; guarded by T-064's acceptance. Low: `write`
-    can still mail the requester via Resolved/Closed, sentence added to
-    the RFC's "Not covered". Low: time-trigger gate unenforced, parked.
+    round: the fixes are one added test, a test rename and wording.
+  - `code-reviewer`: no blocker. Medium: the highest valid search
+    position not shown accepted (test added). Low: stale test name
+    (renamed); regression proof not recorded (in the task's "Done");
+    the 31-id case untested under a cut (parked,
+    `docs/improvements.md`). Nits: CHANGELOG label, ticket-queries
+    wording, RFC "Implemented" box (all fixed).
+  - `security-reviewer`: no blocking finding. Low: an id ≤ 0 from
+    Freshdesk fails the call (parked, `.positive()` on the schema).
+    Info: RFC sentence "no second party" narrowed to name the
+    injection path (fixed).
   - `compliance-reviewer`: wireframes `none`.
 
-- **Proposed plan changes:** T-064 (the write path, acceptance line
-  amended by the RFC) and T-065 (allow sets) stay `proposed
-  (2026-11-25)`, sized by `/decompose M2`.
+- **Proposed plan changes:** none.
 
-- **Open doubts:** whether `agent-native-setup update` would revert the
-  instantiated safety-core value in `.claude/commands/decompose.md`
-  step 4 (not checked). `.claude/worktrees/` is not gitignored (parked).
+- **Open doubts:** the threat model's injection path (owner action
+  above). From T-040, unchecked: whether `agent-native-setup update`
+  would revert the safety-core value in `.claude/commands/decompose.md`
+  step 4; `.claude/worktrees/` is not gitignored (parked).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `84dd7aa`'s tree: vitest
-  "Tests 2691 passed (2691)", 39 files; `tools/checks` "Ran 138 tests",
-  OK; lint, format, typecheck, build and both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on the handoff tree: vitest
+  "Tests 2746 passed (2746)"; `tools/checks` "Ran 138 tests", OK; lint,
+  format, typecheck, build and both gitleaks scans passed.

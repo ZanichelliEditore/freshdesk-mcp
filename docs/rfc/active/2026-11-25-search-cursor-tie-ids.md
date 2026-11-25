@@ -3,7 +3,7 @@
 - **Status:** Active (owner, 2026-11-25)
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
-- [ ] Implemented
+- [x] Implemented (T-066, 2026-11-25)
 
 ## Context
 
@@ -127,7 +127,8 @@ it. A forged position can already make a call skip every ticket newer than
 a chosen second; a forged id set adds the skipping of chosen ids within
 that second. Both affect only what the caller's own export writes, from
 the caller's own account, through the caller's own client: there is no
-second party a forgery could harm.
+second party a forgery could harm, apart from the prompt-injection path
+below.
 
 One path to a forged cursor does not come from the user (rfc-reviewer,
 2026-11-25): the model supplies the cursor, and it reads ticket text that
