@@ -180,7 +180,9 @@ approves that reading with this RFC.
    trusted publishing need it; the public API showed `public` on 2026-11-25).
 1. Before T-045's first tag: GitHub, repository settings. Create
    environment `npm`: no reviewers, no secrets, "Selected branches and
-   tags", add tag rule `v*`.
+   tags", add tag rule `v*`. Do this before any `v*` tag is pushed: a tag
+   pushed first runs the publish job, and GitHub creates a missing `npm`
+   environment with no deployment rule.
 2. Same time: a tag ruleset, target `v*`, rules "Restrict creations",
    "Restrict updates", "Restrict deletions", bypass list = who may release.
    And a branch ruleset, target `main`: "Require a pull request before
@@ -190,7 +192,9 @@ approves that reading with this RFC.
 3. After T-045 is merged, on the go for 0.1.0: from an empty directory,
    `npm publish --access public` the placeholder `0.0.0`, then
    `npm deprecate @zanichelli/freshdesk-mcp@0.0.0 "placeholder"` (both with 2FA, as an `@zanichelli` member who can publish).
-4. npmjs.com, package settings, Trusted publishing: GitHub Actions,
+4. First confirm, in GitHub's settings, that environment `npm` shows
+   "Selected branches and tags" with the `v*` tag rule and no other rule.
+   Then npmjs.com, package settings, Trusted publishing: GitHub Actions,
    `ZanichelliEditore` / `freshdesk-mcp` / `release.yml` / environment `npm`.
 5. Within 2 days of step 4: push tag `v0.1.0` on the `main` commit whose
    `package.json` says `0.1.0`. Check the release run and the provenance

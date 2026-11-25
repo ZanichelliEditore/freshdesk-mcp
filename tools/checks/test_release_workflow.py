@@ -4,6 +4,13 @@ No YAML parser (no PyYAML: T-045). The workflow is read as text, comments
 dropped first, so a commented-out line counts for nothing. The helpers rely
 on the layout release.yml keeps: jobs at two spaces, job keys at four, steps
 at six (`      - `).
+
+What text-level reading cannot catch (the RFC's threat model is a mistake,
+not a writer on the bypass list, who can tag a commit whose release.yml
+drops any check): a ` #` inside a quoted string is taken for a comment; a
+publish spelled differently (`npx npm publish`, `npm pub`, a script that
+publishes) is not seen as one; a step mixing `--dry-run` with a real
+publish is taken for a dry run.
 """
 
 import json
@@ -17,12 +24,9 @@ QUALITY = ROOT / ".github" / "workflows" / "quality.yml"
 
 PUBLISH_IF = "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
 SHA_PIN = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@[0-9a-f]{40}$")
-SECRET_WORDS = (
-    "secrets.",
-    "NPM_TOKEN",
-    "NODE_AUTH_TOKEN",
-    "_authToken",
-    "GITHUB_TOKEN",
+SECRET = re.compile(
+    r"\bsecrets\b|github\.token|npm_token|node_auth_token|_authtoken|github_token",
+    re.I,
 )
 
 
@@ -93,6 +97,58 @@ def publishing_jobs(text: str) -> list[str]:
     return [name for name, job in jobs(text).items() if publish_index(job) >= 0]
 
 
+def secret_references(text: str) -> list[str]:
+    """Every secret or token reference in the uncommented text."""
+    return SECRET.findall(uncommented(text))
+
+
+def permissions(job: str) -> list[str] | None:
+    """A job's permissions as stripped lines, None without a `permissions:` key."""
+    match = re.search(r"^    permissions:[ \t]*(.*)$", job, re.M)
+    if not match:
+        return None
+    if match.group(1).strip():
+        return [match.group(1).strip()]
+    body = block(job, re.compile(r"^    permissions:\s*$"), 4)
+    return sorted(line.strip() for line in body.splitlines() if line.strip())
+
+
+def permission_problems(text: str) -> list[str]:
+    """Jobs whose permissions are not the allowed ones (publish: read + id-token)."""
+    problems = []
+    for name, job in jobs(text).items():
+        got = permissions(job)
+        if name == "publish":
+            if got != ["contents: read", "id-token: write"]:
+                problems.append(name)
+        elif got not in (None, ["contents: read"]):
+            problems.append(name)
+    return problems
+
+
+def normalised(job: str) -> list[str]:
+    """A copied job's lines without the copy's own changes: the `@<ref>` of
+    `uses:`, `persist-credentials`, and a `with:` left empty by dropping it."""
+    lines = [
+        re.sub(r"(uses: [^@\s]+)@\S+", r"\1", line)
+        for line in job.splitlines()
+        if line.strip() and "persist-credentials:" not in line
+    ]
+    out = []
+    for i, line in enumerate(lines):
+        if line.strip() == "with:":
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            indent = len(line) - len(line.lstrip())
+            if len(nxt) - len(nxt.lstrip()) <= indent:
+                continue
+        out.append(line)
+    return out
+
+
+def step_has_if(step: str) -> bool:
+    return re.search(r"(?m)^(        )?if:", step) is not None
+
+
 class Helpers(unittest.TestCase):
     """The helpers on fixtures: what they must and must not count."""
 
@@ -123,6 +179,29 @@ class Helpers(unittest.TestCase):
 
     def test_needs_reads_a_flow_list(self) -> None:
         self.assertEqual(needs("    needs: [a, b]\n"), {"a", "b"})
+
+    def test_every_secret_form_is_found(self) -> None:
+        for form in (
+            "${{ secrets.NPM }}",
+            "${{ secrets['NPM'] }}",
+            "${{ toJSON(secrets) }}",
+            "${{ github.token }}",
+            "NPM_TOKEN",
+            "npm_token",
+            "Node_Auth_Token",
+            "//registry.npmjs.org/:_authToken=x",
+            "GITHUB_TOKEN",
+        ):
+            self.assertTrue(secret_references(f"      - run: echo {form}\n"), form)
+        self.assertEqual(secret_references("      # run: echo ${{ secrets.X }}\n"), [])
+
+    def test_with_left_empty_is_dropped(self) -> None:
+        copy = (
+            "      - uses: a/b@"
+            + "0" * 40
+            + "\n        with:\n          persist-credentials: false\n"
+        )
+        self.assertEqual(normalised(copy), normalised("      - uses: a/b@v6\n"))
 
 
 class ReleaseWorkflow(unittest.TestCase):
@@ -192,8 +271,7 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn('node-version: "24.22.3"', self.publish)
 
     def test_no_job_references_a_token_or_secret(self) -> None:
-        for word in SECRET_WORDS:
-            self.assertNotIn(word, self.text)
+        self.assertEqual(secret_references(self.raw), [])
 
     def test_permissions(self) -> None:
         top = block(self.text, re.compile(r"^permissions:\s*$"), 0)
@@ -202,10 +280,32 @@ class ReleaseWorkflow(unittest.TestCase):
             ["contents: read"],
         )
         self.assertEqual(self.text.count("id-token: write"), 1)
-        self.assertIn("id-token: write", self.publish)
-        for name, job in self.jobs.items():
-            if name != "publish":
-                self.assertNotIn("id-token", job, name)
+        self.assertEqual(permission_problems(self.raw), [])
+
+    def test_wider_job_permissions_are_found(self) -> None:
+        build = self.raw.replace(
+            "  build:\n    needs: [quality, gitleaks]\n",
+            "  build:\n    needs: [quality, gitleaks]\n    permissions: write-all\n",
+        )
+        self.assertEqual(permission_problems(build), ["build"])
+        publish = self.raw.replace(
+            "      contents: read\n      id-token: write\n",
+            "      contents: write\n      id-token: write\n",
+        )
+        self.assertEqual(permission_problems(publish), ["publish"])
+
+    def test_checkouts_take_the_triggering_commit(self) -> None:
+        for name in ("build", "publish"):
+            self.assertNotRegex(self.jobs[name], r"(?m)^\s+ref:", name)
+
+    def test_checks_and_publish_steps_are_unconditional(self) -> None:
+        for needle in ("release_version.py", "git merge-base --is-ancestor"):
+            index = first_step_with(self.publish, needle)
+            self.assertFalse(step_has_if(steps(self.publish)[index]), needle)
+        publish = steps(self.publish)[publish_index(self.publish)]
+        self.assertFalse(step_has_if(publish))
+        self.assertTrue(step_has_if("if: false\n        run: x\n"))
+        self.assertTrue(step_has_if("run: x\n        if: false\n"))
 
     def test_dry_run_publishes_nothing_and_needs_nothing_secret(self) -> None:
         self.assertEqual(
@@ -217,8 +317,8 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn("--dry-run", publishes[0])
         self.assertNotIn("--provenance", publishes[0])
         self.assertEqual(key(self.dry_run, "environment"), "")
-        for word in (*SECRET_WORDS, "id-token"):
-            self.assertNotIn(word, self.dry_run)
+        self.assertEqual(secret_references(self.dry_run), [])
+        self.assertIsNone(permissions(self.dry_run))
 
     def test_every_uses_is_pinned_by_sha(self) -> None:
         uses = re.findall(r"uses:\s*(\S+)", self.text)
@@ -226,12 +326,12 @@ class ReleaseWorkflow(unittest.TestCase):
         for ref in uses:
             self.assertRegex(ref, SHA_PIN)
 
-    def test_copied_jobs_run_what_quality_yml_runs(self) -> None:
+    def test_copied_jobs_equal_quality_yml(self) -> None:
         quality = jobs(QUALITY.read_text(encoding="utf-8"))
         for ours, theirs in (("quality", "quality"), ("gitleaks", "checks")):
-            mine = re.findall(r"run: (.+)", self.jobs[ours])
-            source = re.findall(r"run: (.+)", quality[theirs])
-            self.assertEqual(mine, source, ours)
+            self.assertEqual(
+                normalised(self.jobs[ours]), normalised(quality[theirs]), ours
+            )
 
 
 class PackageMetadata(unittest.TestCase):
@@ -243,6 +343,8 @@ class PackageMetadata(unittest.TestCase):
         )
         self.assertEqual(pkg["license"], "MIT")
         self.assertNotIn("private", pkg)
+        # A publish from outside Actions then fails: no OIDC token to sign with.
+        self.assertIs(pkg["publishConfig"]["provenance"], True)
 
     def test_license_is_mit_with_the_holder(self) -> None:
         text = (ROOT / "LICENSE").read_text(encoding="utf-8")

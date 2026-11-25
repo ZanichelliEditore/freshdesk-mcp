@@ -12,7 +12,7 @@
 - **`docs/`** — `architecture/` (this map, reflecting the active RFCs) and `rfc/` (the decision lifecycle `proposed/` → `active/` → `superseded/`/`retired/`).
 - **`tools/checks/`** — scripts that enforce the RFC/docs conventions mechanically (e.g. keeping each RFC in the folder its Status names).
 - **Quality gate** — linters/formatters wired at the pre-commit, command-surface, and CI layers so violations are caught mechanically.
-- **CI** (`.github/workflows/`) — the quality gate plus a secrets + dependency scan on every push/PR.
+- **CI** (`.github/workflows/`) — `quality.yml`: the quality gate plus a secrets + dependency scan on every push/PR. `release.yml` (RFC 2026-11-25, release on npm): on a `v*` tag, copies of those jobs, a fresh build packed once, then `npm publish` of that tarball by npm trusted publishing (OIDC, environment `npm`, no token); `workflow_dispatch` runs the chain and a `--dry-run` only.
 
 ### Product
 

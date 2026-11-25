@@ -8,7 +8,10 @@
 - **Gates:** Before the first tag the owner does steps 0-2 of RFC
   2026-11-25 (release on npm): repository public, environment `npm` (no
   reviewer, no secret, tags `v*` only), `v*` tag ruleset, `main` branch
-  ruleset (pull request and `quality` green; same bypass list). Steps 3-6
+  ruleset (pull request and `quality` green; same bypass list). No `v*`
+  tag before step 1: a tag pushed first creates `npm` with no deployment
+  rule. Before step 4 the owner confirms `npm` shows "Selected branches and
+  tags" with only the `v*` tag rule. Steps 3-6
   (placeholder `0.0.0`, trusted publisher, tag `v0.1.0`, disallow tokens)
   are the owner's, on the explicit go, after T-039, outside this task.
 
@@ -26,6 +29,14 @@ publish is 0.1.0, only after T-039 and on the owner's explicit go.
   npm): it declares `environment: npm`, and no job references an npm token
   or a secret. The quality and gitleaks jobs are copied from `quality.yml`,
   not called (a local reusable workflow cannot carry a SHA).
+- Pins beyond the RFC's three, to hand the build's tarball to the publish:
+  `actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9`
+  (v7.0.2) and `actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333`
+  (v8.0.2), both lightweight tags, read with `git ls-remote` by the builder
+  and again by the orchestrator (2026-11-25). The RFC's three rechecked the
+  same day, unchanged.
+- `package.json` `publishConfig.provenance: true`, so a publish from outside
+  Actions fails without an OIDC token (full review, 2026-11-25).
 - `package.json`: `repository.url`
   `https://github.com/ZanichelliEditore/freshdesk-mcp` and
   `"license": "MIT"` (owner, 2026-11-25); a root `LICENSE` (MIT, copyright

@@ -2,6 +2,9 @@
   "name": "@zanichelli/freshdesk-mcp",
   "version": "0.1.0",
   "license": "MIT",
+  "publishConfig": {
+    "provenance": true
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/ZanichelliEditore/freshdesk-mcp"

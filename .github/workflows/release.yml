@@ -47,6 +47,8 @@ jobs:
       - run: python3 -m unittest discover -s tools/checks
   gitleaks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,7 +63,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pipx install pre-commit==4.6.2
-      # gitleaks CLI at the pin in .pre-commit-config.yaml, over every commit.
+      # gitleaks CLI at the pin in .pre-commit-config.yaml, over every commit
+      # (fetch-depth 0); same scan as `make gitleaks`.
       - run: pre-commit run gitleaks-history --hook-stage manual
   # A fresh checkout, built and packed once; publish and dry-run ship this
   # tarball, never a local dist/ (docs/improvements.md, entry 82ab7a6).
@@ -113,7 +116,9 @@ jobs:
       - name: publish
         run: npm publish ./package/*.tgz --provenance --access public
   # Manual check of the chain and the tarball. No id-token, no environment,
-  # no --provenance (it needs the OIDC token): it can only print what a
+  # no --provenance. publishConfig.provenance does not apply here: npm 11
+  # signs provenance only inside the real publish call, which --dry-run
+  # skips (lib/commands/publish.js, npm 11.19.1). It only prints what a
   # publish would send.
   dry-run:
     needs: [quality, gitleaks, build]
