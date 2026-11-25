@@ -157,7 +157,9 @@ export function parseCliArgs(args: readonly string[]): CliArgs {
     tokens: true,
   });
   const refuse = (why: string) =>
-    new ConfigError(`Invalid command line: ${why}. The server takes --export-dir <dir> only.`);
+    new ConfigError(
+      `Invalid command line: ${why}. The server takes --export-dir <dir> and --version only.`,
+    );
   const result: CliArgs = { version: false };
   let exportDirSeen = false;
   for (const token of tokens) {
@@ -170,8 +172,9 @@ export function parseCliArgs(args: readonly string[]): CliArgs {
     } else if (token.name === "export-dir") {
       if (exportDirSeen) throw refuse("--export-dir is given more than once");
       exportDirSeen = true;
-      // As strict parsing does: a separate value starting with "-" is taken
-      // for a missing value, so `--export-dir --version` is not a path.
+      // A separate value starting with "-" (even "-" alone) is taken for a
+      // missing value, so `--export-dir --version` is not a path; strict
+      // parsing would throw on most of these too. `--export-dir=-x` is kept.
       const value = token.value;
       if (value === undefined || value === "" || (!token.inlineValue && value.startsWith("-"))) {
         throw refuse("--export-dir needs a directory (--export-dir <dir> or --export-dir=<dir>)");

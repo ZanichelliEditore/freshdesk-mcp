@@ -373,19 +373,37 @@ describe("command-line arguments (T-060, RFC 2026-11-25 export-dir flag)", () =>
     const err = errorOf(() => parseCliArgs(args));
     expect(err.message).toContain(says);
     expect(err.message).not.toContain("/a");
+    expect(err.message).not.toContain("--export-dir needs");
   });
 
   it.each([
-    ["--export-dir with no value", ["--export-dir"]],
-    ["--export-dir followed by an option", ["--export-dir", "--version"]],
-    ["--export-dir followed by a dash value", ["--export-dir", "-x"]],
-    ["--export-dir=", ["--export-dir="]],
-    ["--export-dir with an empty value", ["--export-dir", ""]],
-    ["--export-dir given twice", ["--export-dir", "/a", "--export-dir=/b"]],
-    ["--export-dir given twice, same value", ["--export-dir=/a", "--export-dir=/a"]],
-  ])("%s is refused naming --export-dir", (_what, args) => {
+    ["--export-dir with no value", ["--export-dir"], "--export-dir needs a directory"],
+    [
+      "--export-dir followed by an option",
+      ["--export-dir", "--version"],
+      "--export-dir needs a directory",
+    ],
+    [
+      "--export-dir followed by a dash value",
+      ["--export-dir", "-x"],
+      "--export-dir needs a directory",
+    ],
+    ["--export-dir=", ["--export-dir="], "--export-dir needs a directory"],
+    ["--export-dir with an empty value", ["--export-dir", ""], "--export-dir needs a directory"],
+    [
+      "--export-dir given twice",
+      ["--export-dir", "/a", "--export-dir=/b"],
+      "--export-dir is given more than once",
+    ],
+    [
+      "--export-dir given twice, same value",
+      ["--export-dir=/a", "--export-dir=/a"],
+      "--export-dir is given more than once",
+    ],
+  ])("%s is refused naming --export-dir as the cause", (_what, args, cause) => {
     const err = errorOf(() => parseCliArgs(args));
-    expect(err.message).toContain("--export-dir");
+    expect(err.message).toContain(cause);
+    expect(err.message).not.toContain("an unknown option");
     expect(err.message).not.toContain("/a");
     expect(err.message).not.toContain("/b");
   });

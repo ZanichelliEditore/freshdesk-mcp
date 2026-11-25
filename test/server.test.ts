@@ -372,7 +372,7 @@ describe("the built cli", () => {
         ["--export-dir", "/a", `--${TOKEN}=1`],
         "an unknown option",
       ],
-      ["a missing value", ["--export-dir"], "--export-dir"],
+      ["a missing value", ["--export-dir"], "--export-dir needs a directory"],
     ])(
       "%s exits 1, explained on stderr, the token not quoted, nothing on stdout",
       (_, args, says) => {

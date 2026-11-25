@@ -11,8 +11,9 @@ and stay 0.x until milestone M4, then 1.0.0.
   both are set.
 - **Changed:** an argument the server does not know (an unknown option, a
   positional argument, `--export-dir` with no value, an empty one, or given
-  twice) now stops the server at start with a message on stderr and exit
-  code 1; 0.1.0 ignored it. The message never quotes the argument.
+  twice, `--version` with a value or given twice) now stops the server at
+  start with a message on stderr and exit code 1; 0.1.0 ignored it. The
+  message never quotes the argument.
 - `--version` is read anywhere in the argument list.
 
 ## 0.1.0 (2026-11-25)
