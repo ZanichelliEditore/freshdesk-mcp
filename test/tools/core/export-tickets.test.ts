@@ -234,6 +234,23 @@ function lines(path: string): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
+/**
+ * A reply Freshdesk takes `ms` to give, for a test that fakes `Date` alone
+ * with `shouldAdvanceTime`: the clock jumps `ms` when the request is sent, so
+ * the call's elapsed time is the replies' `ms` plus real milliseconds. The
+ * `settle` loop instead charges 100 fake ms to every turn spent on real I/O,
+ * which a slow runner turns into seconds (CI, 2026-11-25).
+ */
+function replyTaking(path: string, body: unknown, ms: number) {
+  mock
+    .get(ORIGIN)
+    .intercept({ path, method: "GET" })
+    .reply(() => {
+      vi.setSystemTime(Date.now() + ms);
+      return { statusCode: 200, data: body as object, responseOptions: { headers: JSON_TYPE } };
+    });
+}
+
 /** Runs the fake clock forward until the call settles; returns the fake ms it took. */
 async function settle(call: Promise<CallResult>): Promise<{ result: CallResult; ms: number }> {
   const started = Date.now();
@@ -727,12 +744,13 @@ describe("export_tickets: the conversations option", () => {
 
   it("starts no thread after SCAN_START_MS: truncated: true, not an error", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY), found(many(4301, 4)));
     // 8 s a thread: the third ends at 24 s, past SCAN_START_MS: no fourth.
-    for (let id = 4301; id <= 4304; id++) reply(threadPath(id), conversationPages[1]).delay(8000);
-    const { result, ms } = await settle(callTool(session, TOOL, jsonl({ conversations: true })));
-    const written = output(result);
+    for (let id = 4301; id <= 4304; id++) replyTaking(threadPath(id), conversationPages[1], 8000);
+    const before = Date.now();
+    const written = output(await callTool(session, TOOL, jsonl({ conversations: true })));
+    const ms = Date.now() - before;
     expect(written.rows).toBe(3);
     expect(written.truncated).toBe(true);
     expect(sent()).toBe(4);
@@ -1298,19 +1316,17 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
 
   it("the time limit gives next_cursor; the cursor writes the rest", async () => {
     const { session } = await warm();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     reply(searchPath(PERIOD_QUERY), found(down(4304, 4)));
     // 8 s a thread: the third ends at 24 s, past SCAN_START_MS: no fourth.
-    for (let id = 4301; id <= 4304; id++) reply(threadPath(id), conversationPages[1]).delay(8000);
+    for (let id = 4301; id <= 4304; id++) replyTaking(threadPath(id), conversationPages[1], 8000);
     const args = jsonl({ conversations: true });
-    const first = page((await settle(callTool(session, TOOL, args))).result);
+    const first = page(await callTool(session, TOOL, args));
     expect(ids(first.path)).toEqual([4304, 4303, 4302]);
     expect(first.truncated).toBe(true);
 
     reply(searchPath(PERIOD_QUERY), found(down(4304, 4)));
-    const second = page(
-      (await settle(callTool(session, TOOL, { ...args, cursor: first.next_cursor }))).result,
-    );
+    const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
     expect(ids(second.path)).toEqual([4301]);
     expect(second).not.toHaveProperty("next_cursor");
     expect(basename(second.path)).not.toBe(basename(first.path));
