@@ -299,15 +299,25 @@ T-037's choices (2026-11-24, `src/tools/toolsets/core/export-tickets.ts`):
   each its own file: with shorter periods, or (T-057, 2026-11-25) the same
   period paged with `next_cursor`. Background export stays out of scope.
 
-T-057's choices (2026-11-25): a page's position on search is the index of
-the next result in Freshdesk's order (the search order between two calls is
-not measured); on the list scan it is the UTC second of the latest ticket
+T-057's choices (2026-11-25): search answers by `created_at` descending,
+then id descending, and gave the same order on two reads, not by
+`updated_at`, with no id twice (measured 2026-11-25, real account, `GET`,
+one day of 405 results, pages 1-3 read twice). So a page's position on
+search is the lowest id written and the search page that held it: the next
+call starts at that page, goes back a page while it starts below that id,
+and writes only lower ids. A ticket created in the period between calls
+(a higher id, first in the results) is left out, none is written twice, and
+none that matched at the first call is skipped unless it left the filters.
+On the list scan the position is the UTC second of the latest ticket
 written and how many created in that second were written, and the next call
 reads the list from `updated_since` one second before that second (every
 ticket created then or later was updated then or later), page 1 again, so
 the 300-page cap counts anew for each call, and skips what it already wrote.
 A ticket updated between calls that was created before that second does not
-shift the position, as a page or offset would.
+shift the position, as a page or offset would. Ties in that second are
+skipped by count (a second and an id do not fit one cursor position): a tie
+that entered or left the filters between calls makes one skipped or written
+twice. A cut before any row is written gives no cursor.
 - A read cut by the budget, the time limit, page 300, a later request the
   limiter refuses or a later request aborted at the call's deadline
   (`network` once it is reached: `isCut`, which `count_tickets` shares since

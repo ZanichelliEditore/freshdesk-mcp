@@ -977,6 +977,15 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     };
   }
 
+  /** Search's order (measured 2026-11-25): created_at descending, id descending; `top` first. */
+  function down(top: number, count: number) {
+    return Array.from({ length: count }, (_, i) => ticket(top - i));
+  }
+
+  function idsOf(tickets: { id: number }[]): number[] {
+    return tickets.map((t) => t.id);
+  }
+
   function ids(path: string): number[] {
     return lines(path).map((line) => (line as { id: number }).id);
   }
@@ -1052,35 +1061,118 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     const { session } = await warm();
     const tick = clock();
     const args = jsonl({ max_tickets: 20 });
-    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
+    const pageOne = () => reply(searchPath(PERIOD_QUERY, 1), found(down(4345, 30), 45));
+    const pageTwo = () => reply(searchPath(PERIOD_QUERY, 2), found(down(4315, 15), 45));
+    pageOne();
     const first = page(await callTool(session, TOOL, args));
-    expect(ids(first.path)).toEqual(many(4301, 20).map((t) => t.id));
+    expect(ids(first.path)).toEqual(idsOf(down(4345, 20)));
     const kept = readFileSync(first.path, "utf8");
 
     await tick();
     mock.clearCallHistory();
-    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 45));
-    reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45));
+    pageOne();
+    pageTwo();
     const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
-    expect(ids(second.path)).toEqual(many(4321, 20).map((t) => t.id));
+    expect(ids(second.path)).toEqual(idsOf(down(4325, 20)));
     expect(second.api_calls_used).toBe(2);
 
     await tick();
     mock.clearCallHistory();
-    // Offset 40 is on search page 2: the call starts there.
-    reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 15), 45));
+    // The last ticket written is on search page 2: the call starts there.
+    pageTwo();
     const third = page(await callTool(session, TOOL, { ...args, cursor: second.next_cursor }));
-    expect(ids(third.path)).toEqual(many(4341, 5).map((t) => t.id));
+    expect(ids(third.path)).toEqual(idsOf(down(4305, 5)));
     expect(third).not.toHaveProperty("next_cursor");
     expect(paths()).toEqual([searchPath(PERIOD_QUERY, 2)]);
 
     const all = [first, second, third].flatMap((result) => ids(result.path));
-    expect(all).toEqual(many(4301, 45).map((t) => t.id));
+    expect(all).toEqual(idsOf(down(4345, 45)));
     const names = [first, second, third].map((result) => basename(result.path));
     expect(new Set(names).size).toBe(3);
     for (const name of names) expect(name).toMatch(NAME);
     expect(readdirSync(out).sort()).toEqual([...names].sort());
     expect(readFileSync(first.path, "utf8")).toBe(kept);
+  });
+
+  it("search: a ticket created between calls goes first; no ticket is written twice, the new one is left out", async () => {
+    const { session } = await warm();
+    const tick = clock();
+    const args = jsonl({ max_tickets: 2 });
+    reply(searchPath(PERIOD_QUERY), found(down(4305, 5)));
+    const first = page(await callTool(session, TOOL, args));
+    await tick();
+    reply(searchPath(PERIOD_QUERY), found(down(4306, 6)));
+    const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
+    await tick();
+    reply(searchPath(PERIOD_QUERY), found(down(4306, 6)));
+    const third = page(await callTool(session, TOOL, { ...args, cursor: second.next_cursor }));
+    expect([first, second, third].map((result) => ids(result.path))).toEqual([
+      [4305, 4304],
+      [4303, 4302],
+      [4301],
+    ]);
+    expect(third).not.toHaveProperty("next_cursor");
+  });
+
+  it("search: written tickets that left the results move the rest a page back; none unchanged is skipped", async () => {
+    const { session } = await warm();
+    const tick = clock();
+    const args = jsonl({ max_tickets: 35 });
+    reply(searchPath(PERIOD_QUERY, 1), found(down(4345, 30), 45));
+    reply(searchPath(PERIOD_QUERY, 2), found(down(4315, 15), 45));
+    const first = page(await callTool(session, TOOL, args));
+    expect(ids(first.path)).toEqual(idsOf(down(4345, 35)));
+
+    await tick();
+    mock.clearCallHistory();
+    // 4345 to 4340, written, have left the filter: 4310, not written, is now on page 1.
+    reply(searchPath(PERIOD_QUERY, 2), found(down(4309, 9), 39));
+    reply(searchPath(PERIOD_QUERY, 1), found(down(4339, 30), 39));
+    reply(searchPath(PERIOD_QUERY, 2), found(down(4309, 9), 39));
+    const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
+    expect(ids(second.path)).toEqual(idsOf(down(4310, 10)));
+    expect(second).not.toHaveProperty("next_cursor");
+    expect(paths()).toEqual([
+      searchPath(PERIOD_QUERY, 2),
+      searchPath(PERIOD_QUERY, 1),
+      searchPath(PERIOD_QUERY, 2),
+    ]);
+  });
+
+  it("a cut before any row is written gives no next_cursor (no loop): truncated: true, the description says narrow the period", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 1 } });
+    const outside = (id: number) => ticket(id, { created_at: "2026-02-05T10:00:00Z" });
+    // Page 1 holds no ticket of the period, and the budget of 1 is spent: page 2 is not sent.
+    reply(searchPath(PERIOD_QUERY, 1), found([outside(4399)], 45));
+    const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 1 })));
+    expect(sent()).toBe(1);
+    expect(result.rows).toBe(0);
+    expect(result.truncated).toBe(true);
+    expect(result).not.toHaveProperty("next_cursor");
+    const tools = await listTools(session);
+    expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
+      "truncated: true without next_cursor: the call was cut before it wrote a row; narrow the period",
+    );
+  });
+
+  it("search: the budget is checked before each later page, when the local checks drop results", async () => {
+    const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 2 } });
+    const outside = (id: number) => ticket(id, { created_at: "2026-02-05T10:00:00Z" });
+    // max_tickets 30 of 300: an estimate of 1 call, but page 1 holds no ticket of the period.
+    reply(
+      searchPath(PERIOD_QUERY, 1),
+      found(
+        Array.from({ length: 30 }, (_, i) => outside(4600 - i)),
+        300,
+      ),
+    );
+    reply(searchPath(PERIOD_QUERY, 2), found(down(4570, 5), 300));
+    const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 30 })));
+    expect(ids(result.path)).toEqual(idsOf(down(4570, 5)));
+    expect(result.truncated).toBe(true);
+    expect(result.next_cursor).toEqual(expect.any(String));
+    expect(sent()).toBe(2);
+    expect(result.api_calls_used).toBe(2);
   });
 
   it("list scan: the pages hold each ticket once, ties in a second and a ticket updated between calls included", async () => {
@@ -1147,10 +1239,11 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     expect(second).not.toHaveProperty("truncated");
   });
 
-  it("a later page the limiter refuses gives next_cursor; another session resumes at that page", async () => {
+  it("a later page the limiter refuses gives next_cursor; another session resumes from the last page written", async () => {
     const { session } = await warm();
-    reply(searchPath(PERIOD_QUERY, 1), found(many(4301, 30), 120));
-    reply(searchPath(PERIOD_QUERY, 2), found(many(4331, 30), 120), {
+    const at = (n: number) => found(down(4420 - (n - 1) * 30, 30), 120);
+    reply(searchPath(PERIOD_QUERY, 1), at(1));
+    reply(searchPath(PERIOD_QUERY, 2), at(2), {
       headers: { "x-ratelimit-total": "100", "x-ratelimit-remaining": "10" },
     });
     const first = page(await callTool(session, TOOL, jsonl()));
@@ -1160,15 +1253,16 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
 
     const other = await warm({ limits: { pacing_rps: 1000 } }, out);
     await clock()();
-    reply(searchPath(PERIOD_QUERY, 3), found(many(4361, 30), 120), {
+    reply(searchPath(PERIOD_QUERY, 2), at(2), {
       headers: { "x-ratelimit-total": "5000.0", "x-ratelimit-remaining": "4900.0" },
     });
-    reply(searchPath(PERIOD_QUERY, 4), found(many(4391, 30), 120));
+    reply(searchPath(PERIOD_QUERY, 3), at(3));
+    reply(searchPath(PERIOD_QUERY, 4), at(4));
     const second = page(
       await callTool(other.session, TOOL, { ...jsonl(), cursor: first.next_cursor }),
     );
-    expect(paths()).toEqual([searchPath(PERIOD_QUERY, 3), searchPath(PERIOD_QUERY, 4)]);
-    expect(ids(second.path)).toEqual(many(4361, 60).map((t) => t.id));
+    expect(paths()).toEqual([2, 3, 4].map((n) => searchPath(PERIOD_QUERY, n)));
+    expect(ids(second.path)).toEqual(idsOf(down(4360, 60)));
     expect(second).not.toHaveProperty("next_cursor");
   });
 
@@ -1176,47 +1270,47 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     const team = { limits: { pacing_rps: 1000, call_budget: 3 } };
     const { session } = await warm(team);
     const tick = clock();
-    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
-    // 4301's thread takes two requests: with the probe, the budget of 3 is spent.
+    reply(searchPath(PERIOD_QUERY), found([ticket(4302), ticket(4301)]));
+    // 4302's thread takes two requests: with the probe, the budget of 3 is spent.
     mock
       .get(ORIGIN)
-      .intercept({ path: threadPath(4301), method: "GET" })
+      .intercept({ path: threadPath(4302), method: "GET" })
       .reply(200, conversationPages[0], {
         headers: {
           ...JSON_TYPE,
-          link: `<${ORIGIN}/api/v2/tickets/4301/conversations?per_page=100&page=2>; rel="next"`,
+          link: `<${ORIGIN}/api/v2/tickets/4302/conversations?per_page=100&page=2>; rel="next"`,
         },
       });
-    reply("/api/v2/tickets/4301/conversations?per_page=100&page=2", conversationPages[1]);
+    reply("/api/v2/tickets/4302/conversations?per_page=100&page=2", conversationPages[1]);
     const args = jsonl({ conversations: true });
     const first = page(await callTool(session, TOOL, args));
-    expect(ids(first.path)).toEqual([4301]);
+    expect(ids(first.path)).toEqual([4302]);
     expect(first.truncated).toBe(true);
 
     await tick();
-    reply(searchPath(PERIOD_QUERY), found([ticket(4301), ticket(4302)]));
-    reply(threadPath(4302), conversationPages[1]);
+    reply(searchPath(PERIOD_QUERY), found([ticket(4302), ticket(4301)]));
+    reply(threadPath(4301), conversationPages[1]);
     const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
-    expect(ids(second.path)).toEqual([4302]);
+    expect(ids(second.path)).toEqual([4301]);
     expect(second).not.toHaveProperty("next_cursor");
   });
 
   it("the time limit gives next_cursor; the cursor writes the rest", async () => {
     const { session } = await warm();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    reply(searchPath(PERIOD_QUERY), found(many(4301, 4)));
+    reply(searchPath(PERIOD_QUERY), found(down(4304, 4)));
     // 8 s a thread: the third ends at 24 s, past SCAN_START_MS: no fourth.
     for (let id = 4301; id <= 4304; id++) reply(threadPath(id), conversationPages[1]).delay(8000);
     const args = jsonl({ conversations: true });
     const first = page((await settle(callTool(session, TOOL, args))).result);
-    expect(ids(first.path)).toEqual([4301, 4302, 4303]);
+    expect(ids(first.path)).toEqual([4304, 4303, 4302]);
     expect(first.truncated).toBe(true);
 
-    reply(searchPath(PERIOD_QUERY), found(many(4301, 4)));
+    reply(searchPath(PERIOD_QUERY), found(down(4304, 4)));
     const second = page(
       (await settle(callTool(session, TOOL, { ...args, cursor: first.next_cursor }))).result,
     );
-    expect(ids(second.path)).toEqual([4304]);
+    expect(ids(second.path)).toEqual([4301]);
     expect(second).not.toHaveProperty("next_cursor");
     expect(basename(second.path)).not.toBe(basename(first.path));
   });

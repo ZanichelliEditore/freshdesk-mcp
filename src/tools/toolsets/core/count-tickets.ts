@@ -186,13 +186,15 @@ export interface PeriodRead {
 
 /**
  * A position in a period's read (export_tickets' cursor, T-057): its start;
- * on search, the index of the next result in Freshdesk's order; on the list
- * scan, the UTC second of the latest ticket taken (epoch seconds) and how
- * many tickets created in that second were taken.
+ * on search, `below`, the lowest ticket id taken (search answers by
+ * created_at and id, both descending, measured 2026-11-25: what is left has
+ * lower ids), and `page`, the search page that held it; on the list scan,
+ * the UTC second of the latest ticket taken (epoch seconds) and how many
+ * tickets created in that second were taken.
  */
 export type Resume =
   | { path: "start" }
-  | { path: "search"; offset: number }
+  | { path: "search"; below: number; page: number }
   | { path: "list"; second: number; ties: number };
 
 /** A read's outcome: `next`, where to resume, present exactly when it stopped before the period's end. */
@@ -395,13 +397,35 @@ export async function readPeriod(
   /** The read stopped before the period's end: `at` is where it resumes. */
   const cut = (at: Resume) => ({ ok: true as const, truncated: true, next: at });
 
-  // A search position starts at the page that holds it: that page is the probe.
-  const offset = from.path === "search" ? from.offset : 0;
-  const firstPage = Math.floor(offset / SEARCH_PAGE_SIZE) + 1;
-  const probe = await searchTickets(context.http, query.query, firstPage, deadline, "expensive");
+  const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
+  // A search position starts at the page that held its last ticket: that page is the probe.
+  const below = from.path === "search" ? from.below : undefined;
+  let firstPage = from.path === "search" ? from.page : 1;
+  let probe = await searchTickets(context.http, query.query, firstPage, deadline, "expensive");
   if (!probe.ok) return probe;
   meter.used += probe.attempts;
   meter.requests += probe.attempts;
+  // Tickets that left the results since moved the rest forward: while the page starts
+  // below the boundary (or is empty), the boundary is on an earlier page.
+  while (below !== undefined && firstPage > 1 && (probe.results[0]?.id ?? 0) < below) {
+    firstPage -= 1;
+    const earlier = await searchTickets(
+      context.http,
+      query.query,
+      firstPage,
+      deadline,
+      "expensive",
+    );
+    if (!earlier.ok) {
+      if (!isCut(earlier.error, deadline)) return earlier;
+      meter.used += earlier.attempts ?? 0;
+      meter.requests += earlier.attempts ?? 0;
+      return cut(from);
+    }
+    meter.used += earlier.attempts;
+    meter.requests += earlier.attempts;
+    probe = earlier;
+  }
 
   if (from.path === "search" && probe.total > SEARCH_CAP) {
     return spent({
@@ -413,45 +437,51 @@ export async function readPeriod(
   }
 
   if (from.path === "search" || (from.path === "start" && probe.total <= SEARCH_CAP)) {
-    // The results this call reads at most: the caller's limit from the offset.
-    const end = Math.min(probe.total, limit === undefined ? probe.total : offset + limit);
+    // The results this call reads at most: the caller's limit from the first page read.
+    const skipped = (firstPage - 1) * SEARCH_PAGE_SIZE;
+    const end = Math.min(probe.total, limit === undefined ? probe.total : skipped + limit);
     const estimate =
       estimateCalls({
         tickets: Math.max(0, end - firstPage * SEARCH_PAGE_SIZE),
         pageSize: SEARCH_PAGE_SIZE,
         conversations: false,
         probe: 1,
-      }) + (conversations ? Math.max(0, end - offset) : 0);
+      }) + (conversations ? Math.max(0, end - skipped) : 0);
     const refusal = checkBudget(context, estimate, args.confirm);
     if (refusal) return spent(refusal);
-    const at = (index: number): Resume =>
-      index === 0 ? { path: "start" } : { path: "search", offset: index };
+    /** The lowest id taken, and the page that held it. */
+    let lowest = from.path === "search" ? { below: from.below, page: from.page } : undefined;
+    const here = (): Resume =>
+      lowest === undefined ? { path: "start" } : { path: "search", ...lowest };
     const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
     let results = probe.results;
     for (let page = firstPage; ; page++) {
-      const base = (page - 1) * SEARCH_PAGE_SIZE;
       if (page > firstPage) {
         if (page > pages) break;
-        if (Date.now() - started >= SCAN_START_MS) return cut(at(base));
+        // Ticket requests, retries included, at the budget: no further page (the local checks can drop results).
+        if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return cut(here());
         const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
         if (!found.ok) {
           if (!isCut(found.error, deadline)) return found;
           meter.used += found.attempts ?? 0;
           meter.requests += found.attempts ?? 0;
-          return cut(at(base));
+          return cut(here());
         }
         meter.used += found.attempts;
         meter.requests += found.attempts;
         results = found.results;
       }
-      for (const [i, ticket] of results.entries()) {
-        if (base + i < offset || !matchesLocal(query, ticket)) continue;
+      for (const ticket of results) {
+        // At or past the boundary: taken by an earlier call, or created since the first.
+        if (below !== undefined && ticket.id >= below) continue;
+        if (!matchesLocal(query, ticket)) continue;
         // A ticket a later page repeats (it moved during the call) is taken once.
         if (seen.has(ticket.id)) continue;
         seen.add(ticket.id);
         const taken = await take(ticket);
-        if (taken === false) return cut(at(base + i));
+        if (taken === false) return cut(here());
         if (taken !== true) return { ok: false, error: taken };
+        if (lowest === undefined || ticket.id < lowest.below) lowest = { below: ticket.id, page };
       }
     }
     return { ok: true, truncated: false };
@@ -465,7 +495,6 @@ export async function readPeriod(
   });
   const refusal = checkBudget(context, estimate, args.confirm);
   if (refusal) return spent(refusal);
-  const budget = args.confirm === true ? Infinity : context.team.limits.call_budget;
   const matches = fieldMatcher(schema, args);
   const { to } = args.created_between;
   /** Taken before this read: tickets created before `skip.second`, and the first `skip.ties` created in it. */
