@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-057
 - **Created:** 2026-11-25
 
@@ -59,18 +59,60 @@ when a first attempt at 8.5–9.5 s fails and its retry hangs. It fails safe
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `b599dd2` task and status doing; `68453a8` the fix; `c4d8548` full review
+  fix (only a GET's expiry is marked); this commit (lists B parked, done).
+- Acceptance, line by line:
+  - 19.6 s page that hangs is a cut: `test/tools/core/count-tickets.test.ts`
+    "a later page started at 19.6 s that hangs is a cut…",
+    `test/tools/core/export-tickets.test.ts` "a later search page started
+    at 19.6 s that hangs is a cut…".
+  - Attempt at 9 s fails, retry hangs, is a cut: "…whose attempt at 9 s
+    fails and whose retry hangs is a cut…" in both files.
+  - `network` at 5 s with time left fails the call: "a later page failing
+    network at 5 s with time left fails the call" (count),
+    "a later search page failing network at 5 s with time left fails the
+    call, no file" (export).
+  - Client mark: `test/client/http-retry.test.ts` "marks a GET's network
+    failure that no retry can follow before the deadline…", "marks a
+    network failure with no time left before a caller's deadline too",
+    "marks the expiry of a GET in flight at the deadline…"; not marked:
+    "does not mark a network failure that used its retries with time
+    left", "does not mark a 5xx that no retry can follow…", "does not mark
+    a write aborted in flight at a caller's deadline…", "does not mark a
+    write refused because its deadline had already passed".
+  - Existing deadline tests pass; `make quality` green (2604 tests).
+- Red first: the four tool cut tests (`expected true to be falsy`) before
+  `68453a8`; the two write tests (`expected true to be false`) before
+  `c4d8548`.
+- Option (a): the client marks the error (`http.reachedDeadline`, a
+  private `WeakSet` in `src/client/http.ts`) and `isCut` asks it, so the
+  client stays the one source of "deadline reached"; (b) would have copied
+  the backoff arithmetic into the tools. An instance method, like
+  `reserveRefusal`, because the tool import allow-list refuses
+  `client/http.js`. The error's shape in tool output is unchanged.
+- Reviews: full round on `9f7c032..68453a8` (R1 = `68453a8`): compliance
+  `none` (no wireframes); security 1 Low + 1 info; code 2 Low (the
+  code-reviewer made one Bash call, recorded). The Low both reported
+  (`expired()` marked a write's expiry) fixed in `c4d8548`; the info and
+  the code note parked in `docs/improvements.md` (stamped `68453a8`).
+  Scoped round on `68453a8..c4d8548`: list A empty for all three; lists B
+  parked in `docs/improvements.md` (stamped `c4d8548`).
 
 ## Dead ends
-none
+- A module-level `reachedDeadline` export from `src/client/http.ts`: the
+  tool import allow-list (`eslint.tool-imports.json`) refuses
+  `client/http.js`, by design; moved to an instance method.
+- A client test first gave its first attempt a 19.1 s reply: the 10 s
+  attempt timeout cut it, so the attempts shifted; rebuilt as replies at
+  9.5 s and 18.6 s, then the hanging attempt at 19.6 s.
 
 ## Open doubts
-none
+- The write guard in `requestWithRetry` lost its test in `c4d8548`, and
+  writes other than POST are not asserted unmarked: parked
+  (`docs/improvements.md`, `c4d8548`), not done under rule 9.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none: done.
