@@ -427,6 +427,24 @@ class RangeMatching(_RangeRepo):
         self.assertNotIn("docs/", err.split("Fix:")[0])
         self.assert_no_leak(out + err)
 
+    def test_file_whose_path_and_content_match_is_not_named(self) -> None:
+        bad = self.commit(**{f"docs/{_VALUE}.txt": f"{_VALUE}\n".encode()})
+        self.git("checkout", "-q", "main")
+        code, out, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"  {bad[:12]} a file (its name withheld", err)
+        self.assertIn(f"  {bad[:12]} path\n", err)
+        self.assertNotIn("docs/", err.split("Fix:")[0])
+        self.assert_no_leak(out + err)
+
+    def test_control_characters_in_a_path_are_escaped(self) -> None:
+        bad = self.commit(**{"a\x1b[2Jb.txt": f"{_VALUE}\n".encode()})
+        self.git("checkout", "-q", "main")
+        code, _, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"  {bad[:12]} a\\x1b[2Jb.txt:1", err)
+        self.assertNotIn("\x1b", err)
+
     def test_commits_outside_the_range_are_not_checked(self) -> None:
         self.git("checkout", "-q", "main")
         self.commit(f"main says {_VALUE}")
@@ -459,14 +477,47 @@ class RangeMatching(_RangeRepo):
 
 @unittest.skipUnless(_UTF8, "no UTF-8 locale on this machine")
 class RangeBothLocales(_RangeRepo):
-    def test_accented_letter_in_another_case_in_a_message_is_caught(self) -> None:
-        self.patterns("zq-società-[0-9]+\n".encode())
+    """Each case is missed by one locale alone, in a tree and in a message."""
+
+    def setUp(self) -> None:
+        super().setUp()
         self.env["LC_ALL"] = _UTF8
-        bad = self.commit("about ZQ-SOCIETÀ-1")
+
+    def assert_caught(self, needle: str) -> None:
         self.git("checkout", "-q", "main")
         code, _, err = self.run_range()
         self.assertNotEqual(code, 0)
-        self.assertIn(f"{bad[:12]} message", err)
+        self.assertIn(needle, err)
+
+    def test_accented_letter_in_another_case_in_a_file(self) -> None:
+        # Missed by the C locale: `-i` folds ASCII only there.
+        self.patterns("zq-società-[0-9]+\n".encode())
+        bad = self.commit(a="ZQ-SOCIETÀ-1\n".encode())
+        self.assert_caught(f"{bad[:12]} a:1")
+
+    def test_accented_letter_in_another_case_in_a_message(self) -> None:
+        self.patterns("zq-società-[0-9]+\n".encode())
+        bad = self.commit("about ZQ-SOCIETÀ-1")
+        self.assert_caught(f"{bad[:12]} message")
+
+    def test_value_beside_a_byte_that_is_not_utf8_in_a_file(self) -> None:
+        # Missed by a UTF-8 locale: `.` does not match the Latin-1 byte.
+        self.patterns(b"zq-synth.[0-9]+\n")
+        bad = self.commit(a=b"ZQ-Synth\xe94711\n")
+        self.assert_caught(f"{bad[:12]} a:1")
+
+    def test_value_beside_a_byte_that_is_not_utf8_in_a_message(self) -> None:
+        self.patterns(b"zq-synth.[0-9]+\n")
+        subprocess.run(
+            ["git", "commit", "-q", "--allow-empty", "-F", "-"],
+            cwd=self.root,
+            env=self.env,
+            input=b"about ZQ-Synth\xe94711\n",
+            capture_output=True,
+            check=True,
+        )
+        bad = self.rev("HEAD")
+        self.assert_caught(f"{bad[:12]} message")
 
 
 class RangeRefused(_RangeRepo):
@@ -489,13 +540,13 @@ class RangeRefused(_RangeRepo):
         self.assert_refused("RANGE must be", "main..pr..pr")
 
     def test_end_starting_with_a_dash(self) -> None:
-        self.assert_refused("starts with `-`", "main..--all")
+        self.assert_refused("empty or starts with `-`", "main..--all")
 
     def test_base_starting_with_a_dash(self) -> None:
-        self.assert_refused("starts with `-`", "--all..pr")
+        self.assert_refused("empty or starts with `-`", "--all..pr")
 
     def test_empty_end(self) -> None:
-        self.assert_refused("is empty", "main..")
+        self.assert_refused("empty or starts with `-`", "main..")
 
     def test_end_that_does_not_resolve(self) -> None:
         self.assert_refused("does not name a commit", "main..nope")

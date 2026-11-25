@@ -25,18 +25,25 @@ before merging. Fetch the pull request as a ref and run the check from
 checker or read the patterns file.
 
 ```bash
-git switch main && git pull --ff-only
-git fetch origin pull/<n>/head:pr-<n>
-make account-patterns-range RANGE="$(git merge-base main pr-<n>)..pr-<n>"
+git switch main && git pull --ff-only &&
+  git fetch origin +pull/<n>/head:pr-<n> &&
+  make account-patterns-range RANGE="$(git merge-base main pr-<n>)..pr-<n>"
 ```
 
-It scans the whole tree of every commit in the range, each commit's
-message and the paths in its tree (not author or committer names), and
-prints only the number of commits checked, or the short id of each commit
-with the file and line, `message` or `path` that matched; never the value.
+The `+` replaces a `pr-<n>` left from an earlier check, and `&&` stops at a
+failed step, so the check never runs on an old head. Before merging, the
+pull request's head commit must still be `git rev-parse pr-<n>`: a later
+push was not checked.
+
+It scans every regular file in the tree of every commit in the range, each
+commit's message and the paths in its tree (not author or committer names,
+other commit headers or symlink targets), and prints only the number of
+commits checked, or the short id of each commit with the file and line,
+`message` or `path` that matched; never the value.
 It refuses to run from a checkout that holds a commit of the range or whose
 `Makefile` or `tools/` differ from HEAD, but that guard runs inside the code
-it protects: running from `main` is the control.
+it protects, and it does not see a squash, rebase or cherry-pick of the pull
+request committed locally: running from `main` is the control.
 
 ## Definition of done
 

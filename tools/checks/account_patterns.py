@@ -34,16 +34,17 @@ range, a base that is not an ancestor of the head, an empty range, a shallow
 repository, and a checkout that reaches a commit of the range or whose
 `Makefile` or `tools/` differ from HEAD. That last guard runs inside the code
 it protects, so it catches a slip, not an attack; the control is running it
-from `main` (CONTRIBUTING.md, "The account-patterns hook"). Author and
-committer identities are not scanned.
+from `main` (CONTRIBUTING.md, "The account-patterns hook"). It does not see
+a squash, rebase or cherry-pick of the pull request committed locally: those
+commits have new ids. Not scanned: author and committer identities, other
+commit headers, and the target of a symlink.
 
-Known limits, not handled here:
+Known limits of the hook, not handled here:
 - `git commit --no-verify` and `SKIP=account-patterns` skip the hook;
 - a clone that never ran `make install` has no hook;
 - a merge commit runs no commit-stage hook;
 - only the contents of regular files are scanned: not paths, not the target
   of a symlink, not commit messages;
-- a path is printed as git stores it, control characters included;
 - a caller whose own locale is C (no `LANG`, as some GUI clients run git)
   gets the C run twice, so no case folding of accented letters.
 
@@ -85,7 +86,9 @@ def _bad_line(content: bytes) -> int | None:
 
 
 def _text(path: bytes) -> str:
-    return path.decode("utf-8", "backslashreplace")
+    """A path for the terminal: bad UTF-8 and control characters escaped."""
+    text = path.decode("utf-8", "backslashreplace")
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
 
 
 def _grep(
@@ -187,7 +190,7 @@ _NOT_CHECKED_FIX = (
 _RANGE_FIX = (
     "run `make account-patterns-range RANGE=<base>..<head>` from main, with "
     "the pull request fetched as a ref (`git fetch origin "
-    "pull/<n>/head:pr-<n>`) and RANGE=$(git merge-base main pr-<n>)..pr-<n>."
+    "+pull/<n>/head:pr-<n>`) and RANGE=$(git merge-base main pr-<n>)..pr-<n>."
 )
 
 
@@ -197,8 +200,6 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
 
 def _resolve(root: Path, end: str) -> str | None:
     """The full id of the commit `end` names, or None."""
-    if not end or end.startswith("-"):
-        return None
     done = _git(
         root,
         "rev-parse",
@@ -222,11 +223,15 @@ def _commits(root: Path, spec: str) -> list[str] | int:
             _RANGE_FIX,
         )
     base_name, head_name = spec.split("..")
+    if not base_name or not head_name or "-" in (base_name[0], head_name[0]):
+        return _fail(
+            "an end of RANGE is empty or starts with `-`.",
+            _RANGE_FIX,
+        )
     base, head = _resolve(root, base_name), _resolve(root, head_name)
     if base is None or head is None:
         return _fail(
-            "an end of RANGE is empty, starts with `-`, or does not name a "
-            "commit in this repository.",
+            "an end of RANGE does not name a commit in this repository.",
             "fetch the pull request first; " + _RANGE_FIX,
         )
     if _git(root, "rev-parse", "--is-shallow-repository").stdout.strip() != b"false":
@@ -327,7 +332,7 @@ def _range_main(args: list[str]) -> int:
         return problem
 
     envs = [dict(os.environ), {**os.environ, "LC_ALL": "C"}]
-    found: list[str] = []
+    in_trees: dict[str, list[str]] = {}
     texts: dict[str, bytes] = {}
     for commit in commits:
         short = commit[:12]
@@ -343,7 +348,7 @@ def _range_main(args: list[str]) -> int:
             )
         if any(run.returncode == 0 for run in runs):
             outputs = [run.stdout for run in runs]
-            found += [f"{short} {x}" for x in _locations(root, envs, outputs, commit)]
+            in_trees[commit] = _locations(root, envs, outputs, commit)
         # The raw object: headers, a blank line, then the message as stored.
         message = _git(root, "cat-file", "commit", commit)
         paths = _git(root, "ls-tree", "-r", "-z", "--name-only", commit)
@@ -359,6 +364,12 @@ def _range_main(args: list[str]) -> int:
     if isinstance(matched, int):
         return matched
     matched.sort(key=lambda name: commits.index(name.split(".")[0]))
+    found: list[str] = []
+    for commit, locations in in_trees.items():
+        if f"{commit}.path" in matched:
+            # The file's own path can hold the value: name no file.
+            locations = ["a file (its name withheld: a path matches)"]
+        found += [f"{commit[:12]} {x}" for x in locations]
     found += [f"{name[:12]} {name.split('.')[1]}" for name in matched]
     if not found:
         print(f"commits checked: {len(commits)}")
