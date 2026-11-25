@@ -33,10 +33,16 @@
 //     attempts, limiter waits and backoffs together. Each attempt carries the
 //     deadline: the limiter refuses a wait that would end at or after it
 //     (`rate_limited`, so that refusal wins over the expiry), and what is
-//     left caps the attempt's timeout, so an attempt in flight at the
-//     deadline is aborted and comes back as the expiry error: `network`,
-//     retryable for a GET only. A backoff that would end at or after the
-//     deadline is not started: the last answer is returned as it is.
+//     left caps the attempt's timeout, so a GET in flight at the deadline is
+//     aborted and comes back as the expiry error: `network`, retryable. A
+//     backoff that would end at or after the deadline is not started: the
+//     last answer is returned as it is.
+//   - A write is not started with less than REQUEST_TIMEOUT_MS left (SPEC
+//     §7.1; T-014): it is refused as `rate_limited`, `retryable: true`, not
+//     sent. Checked before `acquire` (no token or pacing slot spent), in the
+//     bound `acquire` is given (a limiter wait that would leave less is
+//     refused at once), and again after it. So the deadline never cuts a
+//     write in flight: only the attempt's own timeout can.
 //   - Deadline reached: `http.reachedDeadline(error)` is true for an error the
 //     deadline ended, and only the client marks one (a private WeakSet, so
 //     the error's shape in a tool's output is unchanged): a GET's expiry
@@ -97,22 +103,30 @@ function notSent(why: string): HttpResult {
   };
 }
 
-/**
- * An aborted write may have been applied, as with the timeout of one attempt.
- * A write refused because its deadline had already passed was not sent, and
- * is still marked not retryable: the conservative answer, until T-014 gives
- * a write that is not sent an answer of its own.
- */
-function expired(method: string): HttpResult {
+/** A GET the deadline ended: a write never gets this (see `tooLate`). */
+function expired(): HttpResult {
   const error: FreshdeskError = {
     code: "network",
     http_status: null,
     message: "No answer from Freshdesk before the call's deadline: the call was given up.",
-    retryable: method === "GET",
+    retryable: true,
   };
-  // A write's expiry may have been applied: not the deadline's alone (T-059).
-  if (method === "GET") ended.add(error);
+  ended.add(error);
   return { ok: false, error };
+}
+
+/** A write not started for want of REQUEST_TIMEOUT_MS before its deadline. */
+function tooLate(): HttpResult {
+  return {
+    ok: false,
+    error: {
+      code: "rate_limited",
+      http_status: null,
+      message:
+        "Not sent: less than 10 s was left before the call's deadline, too little for a write to finish. Nothing was applied: it is safe to try again.",
+      retryable: true,
+    },
+  };
 }
 
 export interface HttpClientOptions {
@@ -242,14 +256,21 @@ export class HttpClient {
     if (!this.#allowed(url)) {
       return notSent("the URL is not on the configured Freshdesk host");
     }
-    // A deadline already reached: the limiter is not asked. Written so that
-    // a deadline that is not a number sends nothing either.
-    if (!(deadline > Date.now())) return expired(method);
-    const acquired = await this.#limiter.acquire(request.cost ?? "cheap", deadline - Date.now());
+    // A deadline already reached, or for a write one less than an attempt's
+    // timeout away: the limiter is not asked. Written so that a deadline
+    // that is not a number sends nothing either.
+    const read = method === "GET";
+    const enough = (left: number) => (read ? left > 0 : left >= REQUEST_TIMEOUT_MS);
+    const tooSoon = read ? expired : tooLate;
+    if (!enough(deadline - Date.now())) return tooSoon();
+    // A write may go out while REQUEST_TIMEOUT_MS is left; the limiter's bound
+    // is exclusive, hence the 1 ms.
+    const latest = read ? deadline : deadline - REQUEST_TIMEOUT_MS + 1;
+    const acquired = await this.#limiter.acquire(request.cost ?? "cheap", latest - Date.now());
     if (!acquired.ok) return acquired;
     // Read again: `acquire` may have slept. Its token is spent either way.
     const left = deadline - Date.now();
-    if (!(left > 0)) return expired(method);
+    if (!enough(left)) return tooSoon();
 
     const started = performance.now();
     const log = (outcome: number | "network") => {
@@ -285,7 +306,10 @@ export class HttpClient {
       text = await response.text();
     } catch (cause) {
       log("network");
-      if (timeout.signal.aborted && left <= REQUEST_TIMEOUT_MS) return this.#mark(expired(method));
+      // A write's attempt is never cut by the deadline: it had its full timeout.
+      if (read && timeout.signal.aborted && left <= REQUEST_TIMEOUT_MS) {
+        return this.#mark(expired());
+      }
       return this.#mark({ ok: false, error: networkError(cause) });
     } finally {
       clearTimeout(timer);

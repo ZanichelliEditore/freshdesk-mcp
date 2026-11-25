@@ -13,6 +13,14 @@ const ORIGIN = `https://${DOMAIN}`;
 const JSON_TYPE = { "content-type": "application/json" };
 const PATH = "/api/v2/tickets";
 const WRITES = ["POST", "PUT", "DELETE"] as const;
+/** A write refused for want of 10 s before its deadline (T-014). */
+const NOT_STARTED = {
+  code: "rate_limited",
+  http_status: null,
+  message:
+    "Not sent: less than 10 s was left before the call's deadline, too little for a write to finish. Nothing was applied: it is safe to try again.",
+  retryable: true,
+};
 
 let mock: MockAgent;
 let http: HttpClient;
@@ -440,20 +448,29 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     await nothingMoreSent(3);
   });
 
-  it.each(WRITES)("aborts a %s in flight at the deadline: not retryable", async (method) => {
-    on(method)
-      .reply(429, "", { headers: { "retry-after": "14" } })
-      .times(2);
-    slow(method).times(2);
+  // T-014: before, the third attempt went out at 28 s and the deadline cut it
+  // 2 s later. A write is no longer started with less than 10 s left.
+  it.each(WRITES)(
+    "does not start a %s again after a 429 whose hold leaves under 10 s",
+    async (method) => {
+      on(method)
+        .reply(429, "", { headers: { "retry-after": "14" } })
+        .times(2);
+      slow(method).times(2);
 
-    const { result, ms } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
+      const { result, ms } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
 
-    // Sent at 28 s and cut 2 s later, not after the 10 s of one attempt.
-    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
-    expect(ms).toBe(TOTAL_DEADLINE_MS);
-    expect(sent()).toHaveLength(3);
-    await nothingMoreSent(3);
-  });
+      // The second hold ends at 28 s: refused when it starts, at 14 s.
+      expect(failure(result)).toMatchObject({
+        code: "rate_limited",
+        http_status: null,
+        retryable: true,
+      });
+      expect(ms).toBe(14_000);
+      expect(sent()).toHaveLength(2);
+      await nothingMoreSent(2);
+    },
+  );
 
   it("marks the expiry of a GET in flight at the deadline as the deadline reached", async () => {
     slow("GET").times(4);
@@ -516,27 +533,22 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     expect(http.reachedDeadline(failure(result))).toBe(false);
   });
 
-  it("does not mark a write aborted in flight at a caller's deadline: it may have been applied", async () => {
-    slow("POST");
+  // T-014 replaced "does not mark a write aborted in flight at a caller's
+  // deadline": a write with 5 s left is no longer sent.
+  it.each([5000, -1])(
+    "does not mark a write refused %d ms before its deadline: it was not sent",
+    async (away) => {
+      slow("POST");
 
-    const { result } = await settle(
-      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() + 5000),
-    );
+      const { result } = await settle(
+        http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() + away),
+      );
 
-    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
-    expect(sent()).toHaveLength(1);
-    expect(http.reachedDeadline(failure(result))).toBe(false);
-  });
-
-  it("does not mark a write refused because its deadline had already passed", async () => {
-    const { result } = await settle(
-      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() - 1),
-    );
-
-    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
-    expect(sent()).toHaveLength(0);
-    expect(http.reachedDeadline(failure(result))).toBe(false);
-  });
+      expect(failure(result)).toEqual(NOT_STARTED);
+      expect(sent()).toHaveLength(0);
+      expect(http.reachedDeadline(failure(result))).toBe(false);
+    },
+  );
 
   it("returns the last answer rather than start a backoff that would cross the deadline", async () => {
     // Answers at 9.5 s, 19.5 s and 29.8 s; the third backoff is 2 s.
@@ -578,32 +590,34 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     expect(sent()).toHaveLength(4);
   });
 
-  // `request` itself says so: `requestWithRetry` would mark a write anyway.
-  it.each([
-    ["GET", true],
-    ["POST", false],
-    ["PUT", false],
-    ["DELETE", false],
-  ] as const)(
-    "one attempt of a %s cut by the deadline: retryable %s",
-    async (method, retryable) => {
-      slow(method);
+  it("one attempt of a GET cut by the deadline: retryable", async () => {
+    slow("GET");
 
-      const { result, ms } = await settle(
-        http.request({ method, path: "/tickets" }, Date.now() + 2000),
-      );
+    const { result, ms } = await settle(http.request({ path: "/tickets" }, Date.now() + 2000));
 
-      expect(failure(result)).toEqual({ ...EXPIRED, retryable });
-      expect(ms).toBe(2000);
-    },
-  );
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: true });
+    expect(ms).toBe(2000);
+  });
 
-  it.each([NaN, -Infinity, 0])("sends nothing for a deadline of %d", async (deadline) => {
+  // T-014: a write with 2 s left used to be sent and cut by the deadline.
+  it.each(WRITES)("one attempt of a %s with 2 s left is not sent", async (method) => {
+    slow(method);
+
+    const { result, ms } = await settle(
+      http.request({ method, path: "/tickets" }, Date.now() + 2000),
+    );
+
+    expect(failure(result)).toEqual(NOT_STARTED);
+    expect(ms).toBe(0);
+    expect(sent()).toHaveLength(0);
+  });
+
+  it.each([NaN, -Infinity, 0])("sends no write for a deadline of %d", async (deadline) => {
     on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
 
     const { result } = await settle(http.request({ method: "POST", path: "/tickets" }, deadline));
 
-    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(failure(result)).toEqual(NOT_STARTED);
     expect(sent()).toHaveLength(0);
   });
 
@@ -619,9 +633,11 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       on(method).reply(201, { id: 7 }, { headers: JSON_TYPE });
     }
 
-    it.each(["GET", ...WRITES] as const)(
+    // A write's bound keeps 10 s for its attempt: it may go out up to and
+    // including 20 s, and the limiter's bound is exclusive (T-014).
+    it.each([["GET", 14_000], ...WRITES.map((method) => [method, 4_001] as const)] as const)(
       "a %s whose wait would end exactly at it is refused as rate_limited, with no sleep",
-      async (method) => {
+      async (method, bound) => {
         const acquire = vi.spyOn(limiter, "acquire");
         holdsFrom(method, 2000);
 
@@ -634,17 +650,18 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
           retry_after_s: 14,
         });
         expect(ms).toBe(16_000);
-        expect(acquire).toHaveBeenLastCalledWith("cheap", 14_000);
+        expect(acquire).toHaveBeenLastCalledWith("cheap", bound);
         expect(sent()).toHaveLength(3);
         await nothingMoreSent(3);
       },
     );
 
+    // A GET: since T-014 a write is not started with 1 ms left.
     it("a wait that ends one millisecond before it is served", async () => {
-      holdsFrom("POST", 1999);
+      holdsFrom("GET", 1999);
       const started = Date.now();
       let ended: number | undefined;
-      const call = http.requestWithRetry({ method: "POST", path: "/tickets" }).then((result) => {
+      const call = http.requestWithRetry({ path: "/tickets" }).then((result) => {
         ended = Date.now() - started;
         return result;
       });
@@ -662,11 +679,11 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       vi.setSystemTime(Date.now() + TOTAL_DEADLINE_MS);
       return Promise.resolve({ ok: true });
     });
-    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+    on("GET").reply(200, { id: 7 }, { headers: JSON_TYPE });
 
-    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }));
 
-    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: true });
     expect(sent()).toHaveLength(0);
   });
 
@@ -788,14 +805,15 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       expect(sent()).toHaveLength(0);
     });
 
-    it("a write refused at entry is not retryable, like any expiry of a write", async () => {
+    // T-014: it was `network`, not retryable, like any expiry of a write.
+    it("a write refused at entry was not sent: rate_limited and retryable", async () => {
       on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
 
       const { result } = await settle(
         http.requestWithRetry({ method: "POST", path: "/tickets" }, Date.now() - 1),
       );
 
-      expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+      expect(failure(result)).toEqual(NOT_STARTED);
       expect(sent()).toHaveLength(0);
     });
 
@@ -826,5 +844,144 @@ describe("request: a deadline cannot lengthen anything", () => {
     const refused = await settle(http.request({ path: "/tickets" }, Date.now() + 3_600_000));
     expect(failure(refused.result)).toMatchObject({ code: "rate_limited", retry_after_s: 16 });
     expect(refused.ms).toBe(0);
+  });
+});
+
+// T-014 (SPEC §7.1): a write is not started with less than REQUEST_TIMEOUT_MS
+// left before its deadline, so only its own timeout can cut it, never the
+// deadline. A GET is unchanged.
+describe("requestWithRetry: a write is not started without time to finish", () => {
+  it.each(WRITES)(
+    "a %s with 1 ms less than 10 s left is not sent, nor the limiter asked",
+    async (method) => {
+      const acquire = vi.spyOn(limiter, "acquire");
+      on(method).reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+      const { result, ms } = await settle(
+        http.requestWithRetry({ method, path: "/tickets" }, Date.now() + REQUEST_TIMEOUT_MS - 1),
+      );
+
+      expect(result).toEqual({ ok: false, error: NOT_STARTED, attempts: 0 });
+      expect(ms).toBe(0);
+      expect(sent()).toHaveLength(0);
+      expect(acquire).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(sent()).toHaveLength(0);
+    },
+  );
+
+  it("the limiter's count is unchanged by a write refused before it is asked", async () => {
+    // 20 of 100 left: one token more and the reserve of 20 % refuses.
+    on("GET").reply(200, [], {
+      headers: { ...JSON_TYPE, "x-ratelimit-total": "100", "x-ratelimit-remaining": "20" },
+    });
+    await settle(http.requestWithRetry({ path: "/tickets" }));
+    expect(http.reserveRefusal()).toBeUndefined();
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }, Date.now() + 9999));
+
+    expect(http.reserveRefusal()).toBeUndefined();
+    // The check is not idle: a write that is sent takes the token.
+    await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+    expect(http.reserveRefusal()).toMatchObject({ code: "rate_limited" });
+  });
+
+  it.each(WRITES)("a %s with exactly 10 s left is sent", async (method) => {
+    on(method).reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(
+      http.requestWithRetry({ method, path: "/tickets" }, Date.now() + REQUEST_TIMEOUT_MS),
+    );
+
+    expect(result).toMatchObject({ ok: true, status: 201, attempts: 1 });
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("a POST with exactly 10 s left is cut by its own timeout, not by the deadline", async () => {
+    on("POST").reply(201, { slow: true }, { headers: JSON_TYPE }).delay(60_000);
+
+    const { result, ms } = await settle(
+      http.requestWithRetry({ method: "POST", path: "/tickets" }, Date.now() + REQUEST_TIMEOUT_MS),
+    );
+
+    expect(failure(result)).toEqual({
+      code: "network",
+      http_status: null,
+      message: "Could not reach Freshdesk (TimeoutError).",
+      retryable: false,
+    });
+    expect(http.reachedDeadline(failure(result))).toBe(false);
+    expect(ms).toBe(REQUEST_TIMEOUT_MS);
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("a POST held by a 429 whose wait leaves under 10 s is not sent again, with no sleep", async () => {
+    on("POST").reply(429, "", { headers: { "retry-after": "5" } });
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    // The hold ends at 5 s, leaving 9 s.
+    const { result, ms } = await settle(
+      http.requestWithRetry({ method: "POST", path: "/tickets" }, Date.now() + 14_000),
+    );
+
+    expect(failure(result)).toMatchObject({
+      code: "rate_limited",
+      http_status: null,
+      retryable: true,
+      retry_after_s: 5,
+    });
+    expect(ms).toBe(0);
+    expect(sent()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("a POST held by a 429 whose wait leaves exactly 10 s is sent again", async () => {
+    on("POST").reply(429, "", { headers: { "retry-after": "5" } });
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result, ms } = await settle(
+      http.requestWithRetry({ method: "POST", path: "/tickets" }, Date.now() + 15_000),
+    );
+
+    expect(result).toMatchObject({ ok: true, status: 201, attempts: 2 });
+    expect(ms).toBe(5000);
+  });
+
+  it("a POST the limiter lets go with 1 ms less than 10 s left is not sent", async () => {
+    // As if `acquire` overslept its bound: checked again after it.
+    vi.spyOn(limiter, "acquire").mockImplementation(() => {
+      vi.setSystemTime(Date.now() + 20_001);
+      return Promise.resolve({ ok: true });
+    });
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(result).toEqual({ ok: false, error: NOT_STARTED, attempts: 0 });
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("a POST the limiter lets go with exactly 10 s left is sent", async () => {
+    vi.spyOn(limiter, "acquire").mockImplementation(() => {
+      vi.setSystemTime(Date.now() + 20_000);
+      return Promise.resolve({ ok: true });
+    });
+    on("POST").reply(201, { id: 7 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ method: "POST", path: "/tickets" }));
+
+    expect(result).toMatchObject({ ok: true, status: 201 });
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("a GET with 1 s left is still sent", async () => {
+    on("GET").reply(200, { id: 1 }, { headers: JSON_TYPE });
+
+    const { result } = await settle(http.requestWithRetry({ path: "/tickets" }, Date.now() + 1000));
+
+    expect(result).toMatchObject({ ok: true, body: { id: 1 } });
+    expect(sent()).toHaveLength(1);
   });
 });
