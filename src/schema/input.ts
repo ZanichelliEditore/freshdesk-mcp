@@ -27,6 +27,15 @@
 //                               (agent, group and requester stay ids)
 //     A status, priority or source name two ids share is refused; a status
 //     key that is not a whole number is not offered.
+//   - Every call takes an allow set (`FieldSet`), required, with no default:
+//     the write entry point's set from the core's table (RFC
+//     2026-11-25-write-safety-core, OD-2). A default field is writable when
+//     its API name is in `defaults`, a custom field when `custom` is true. A
+//     field outside the set is refused as `field_not_writable`, naming what
+//     the set allows, before its value is looked at. A call without a set, or
+//     with something else, throws a `TypeError`. This module takes the set as
+//     a plain value and does not import src/core (as `readCursor`'s
+//     `maxPosition`, T-053).
 //   - `null` clears a field (every level of a nested one); a key not given
 //     is not sent. `null` and absent `choices` are alike.
 //   - Every problem is reported, as one `validation` error whose `errors[]`
@@ -50,6 +59,15 @@ import { fold, ticketKey } from "./output.js";
 type Raw = Record<string, unknown>;
 
 export type InputResult = { ok: true; body: Raw } | { ok: false; error: FreshdeskError };
+
+/**
+ * The fields a caller may set: default fields by API name, and every custom
+ * field or none. The core's allow sets are these (src/core/allow-sets.ts).
+ */
+export interface FieldSet {
+  readonly defaults: readonly string[];
+  readonly custom: boolean;
+}
 
 /** Characters of an echoed key or value, and of a list of choices, in a message. */
 const MAX_QUOTE = 80;
@@ -248,7 +266,34 @@ function fieldValues(field: TicketField, value: unknown): [string, unknown][] | 
   return [[field.name, value]];
 }
 
-export function ticketInput(schema: Schema, input: Raw): InputResult {
+/** Throws `TypeError` unless `allow` is a `FieldSet`: there is no set by default. */
+function checkFieldSet(allow: unknown): asserts allow is FieldSet {
+  if (
+    !isRecord(allow) ||
+    !Array.isArray(allow.defaults) ||
+    !allow.defaults.every((name) => typeof name === "string") ||
+    typeof allow.custom !== "boolean"
+  ) {
+    throw new TypeError("ticketInput takes an allow set: { defaults: string[], custom: boolean }.");
+  }
+}
+
+/** Whether the set lets the field be set, and if not, why. */
+function writable(field: TicketField, allow: FieldSet): Refusal | null {
+  const allowed = field.default ? allow.defaults.includes(field.name) : allow.custom;
+  if (allowed) return null;
+  const defaults =
+    allow.defaults.length > 0 ? `the default fields ${listed(allow.defaults)}` : "no default field";
+  const custom = allow.custom ? "any custom field" : "no custom field";
+  return new Refusal(
+    "field_not_writable",
+    `Field ${field.label} cannot be set by this tool. It can set ${defaults} and ${custom}.`,
+  );
+}
+
+/** Throws `TypeError` when `allow` is not a `FieldSet`. */
+export function ticketInput(schema: Schema, input: Raw, allow: FieldSet): InputResult {
+  checkFieldSet(allow);
   const body: Raw = {};
   const custom: Raw = {};
   const seen = new Set<string>();
@@ -259,9 +304,10 @@ export function ticketInput(schema: Schema, input: Raw): InputResult {
     let values =
       field instanceof Refusal
         ? field
-        : seen.has(field.name)
-          ? new Refusal("duplicate_field", `Field ${field.label} is given more than once.`)
-          : fieldValues(field, value);
+        : (writable(field, allow) ??
+          (seen.has(field.name)
+            ? new Refusal("duplicate_field", `Field ${field.label} is given more than once.`)
+            : fieldValues(field, value)));
     const isDefault = !(field instanceof Refusal) && field.default;
     const target = isDefault ? body : custom;
     if (

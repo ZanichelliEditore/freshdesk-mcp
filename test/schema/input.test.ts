@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 import type { FieldError } from "../../src/client/errors.js";
 import type { TicketField } from "../../src/client/resources/ticket-fields.js";
+import { readFileSync } from "node:fs";
+import { allowSet, type WriteEntry } from "../../src/core/allow-sets.js";
 import type { Schema } from "../../src/schema/index.js";
-import { ticketInput } from "../../src/schema/input.js";
+import { type FieldSet, ticketInput } from "../../src/schema/input.js";
 import { schemaFieldsPayload } from "../fixtures/schema.js";
+
+/**
+ * Every field the fixtures hold: the mapping's own tests are not about allow
+ * sets (those are below, with the core's table).
+ */
+const ALL: FieldSet = {
+  defaults: [
+    "subject",
+    "description",
+    "status",
+    "priority",
+    "source",
+    "agent",
+    "group",
+    "ticket_type",
+    "requester",
+    "company",
+    "product",
+  ],
+  custom: true,
+};
 
 /** A schema built by hand: the mapping needs no HTTP, nor agents or groups. */
 function schema(extra: object[] = []): Schema {
@@ -14,14 +37,18 @@ function schema(extra: object[] = []): Schema {
   };
 }
 
-function body(input: Record<string, unknown>, s: Schema = schema()) {
-  const result = ticketInput(s, input);
+function body(input: Record<string, unknown>, s: Schema = schema(), allow: FieldSet = ALL) {
+  const result = ticketInput(s, input, allow);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.error)}`);
   return result.body;
 }
 
-function errors(input: Record<string, unknown>, s: Schema = schema()): FieldError[] {
-  const result = ticketInput(s, input);
+function errors(
+  input: Record<string, unknown>,
+  s: Schema = schema(),
+  allow: FieldSet = ALL,
+): FieldError[] {
+  const result = ticketInput(s, input, allow);
   if (result.ok) throw new Error(`expected an error, got ${JSON.stringify(result.body)}`);
   expect(result.error).toMatchObject({ code: "validation", http_status: null, retryable: false });
   return result.error.errors ?? [];
@@ -325,7 +352,7 @@ describe("ticketInput: fail-closed edges", () => {
       choices: ["A"],
     };
     const s = schema([multi]);
-    expect(ticketInput(s, { Tags: { any: "object" } }).ok).toBe(false);
+    expect(ticketInput(s, { Tags: { any: "object" } }, ALL).ok).toBe(false);
     expect(errors({ Tags: "B" }, s)[0]).toMatchObject({ code: "invalid_choice" });
     expect(body({ Tags: "a" }, s)).toEqual({ custom_fields: { cf_tags: "A" } });
   });
@@ -456,11 +483,236 @@ describe("ticketInput: fail-closed edges", () => {
 
   it("clips a long key and caps the number of errors", () => {
     const input = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, 1]));
-    const result = ticketInput(schema(), { ["q".repeat(1000)]: 1, ...input });
+    const result = ticketInput(schema(), { ["q".repeat(1000)]: 1, ...input }, ALL);
     if (result.ok) throw new Error("expected an error");
     expect(result.error.errors).toHaveLength(50);
     expect(result.error.errors![0]!.field!.length).toBeLessThanOrEqual(500);
     expect(result.error.errors![0]!.message).not.toContain("q".repeat(100));
     expect(result.error.message).toContain("11 more problems are not listed");
+  });
+});
+
+/** Default fields no set may hold: the fixtures lack description and due_by. */
+const NEVER_FIELDS = [
+  {
+    id: 2101,
+    name: "description",
+    label: "Description",
+    type: "default_description",
+    default: true,
+  },
+  { id: 2102, name: "due_by", label: "Due by", type: "default_due_by", default: true },
+];
+
+/** Keys naming each of them alone (`product` alone is ambiguous in the fixture). */
+const NEVER: Record<string, unknown> = {
+  Catalogue: 7001,
+  Requester: 9001,
+  Subject: "Hi",
+  Description: "Text",
+  Source: "Email",
+  "Due by": "2026-12-01T00:00:00Z",
+};
+
+const ENTRIES: WriteEntry[] = ["update_ticket", "categorize_tickets", "hand_off_draft", "add_note"];
+
+/** One allowed field per set, with the body it builds; `add_note` has none. */
+const ALLOWED: Record<WriteEntry, [Record<string, unknown>, Record<string, unknown>] | null> = {
+  update_ticket: [
+    { Status: "Closed", Priority: "High", Type: "Incident", Agent: 502, Group: 703, Hobby: "x" },
+    {
+      status: 5,
+      priority: 3,
+      type: "Incident",
+      responder_id: 502,
+      group_id: 703,
+      custom_fields: { cf_hobby: "x" },
+    },
+  ],
+  categorize_tickets: [{ Type: "Question" }, { type: "Question" }],
+  hand_off_draft: [
+    { Agent: 502, Group: 703 },
+    { responder_id: 502, group_id: 703 },
+  ],
+  add_note: null,
+};
+
+/** One field outside each set. */
+const OUTSIDE: Record<WriteEntry, Record<string, unknown>> = {
+  update_ticket: { Subject: "Hi" },
+  categorize_tickets: { Status: "Open" },
+  hand_off_draft: { Type: "Question" },
+  add_note: { Hobby: "x" },
+};
+
+function refused(
+  allow: FieldSet,
+  input: Record<string, unknown>,
+  s: Schema = schema(NEVER_FIELDS),
+) {
+  const result = ticketInput(s, input, allow);
+  if (result.ok) throw new Error(`expected an error, got ${JSON.stringify(result.body)}`);
+  expect(result).not.toHaveProperty("body");
+  expect(result.error).toMatchObject({ code: "validation", http_status: null, retryable: false });
+  return result.error.errors ?? [];
+}
+
+describe("ticketInput: allow sets", () => {
+  it.each(ENTRIES)("%s: builds an allowed field", (entry) => {
+    const allowed = ALLOWED[entry];
+    if (allowed === null) return;
+    expect(body(allowed[0], schema(NEVER_FIELDS), allowSet(entry))).toEqual(allowed[1]);
+  });
+
+  it.each(ENTRIES)(
+    "%s: refuses a field outside the set as field_not_writable, naming the set's fields",
+    (entry) => {
+      const set = allowSet(entry);
+      const [key] = Object.keys(OUTSIDE[entry]);
+      const problems = refused(set, OUTSIDE[entry]);
+      expect(problems).toEqual([
+        expect.objectContaining({ field: key, code: "field_not_writable" }),
+      ]);
+      const message = problems[0]!.message;
+      for (const name of set.defaults) expect(message).toContain(`"${name}"`);
+      expect(message).toContain(set.custom ? "any custom field" : "no custom field");
+      if (set.defaults.length === 0) expect(message).toContain("no default field");
+    },
+  );
+
+  it.each(ENTRIES)(
+    "%s: builds nothing when an allowed and a refused field come together",
+    (entry) => {
+      const allowed = ALLOWED[entry]?.[0] ?? {};
+      const problems = refused(allowSet(entry), { ...allowed, ...OUTSIDE[entry] });
+      expect(problems.map((p) => p.code)).toEqual(["field_not_writable"]);
+    },
+  );
+
+  it.each(ENTRIES)(
+    "%s: refuses product, requester, subject, description, source and due_by",
+    (entry) => {
+      expect(refused(allowSet(entry), NEVER)).toEqual(
+        Object.keys(NEVER).map((key) =>
+          expect.objectContaining({ field: key, code: "field_not_writable" }),
+        ),
+      );
+    },
+  );
+
+  it("refuses a field no schema has as unknown, whatever the set", () => {
+    // Without the synthetic due_by field, due_by is still refused.
+    for (const entry of ENTRIES) {
+      expect(refused(allowSet(entry), { due_by: "2026-12-01" }, schema())).toEqual([
+        expect.objectContaining({ field: "due_by", code: "unknown_field" }),
+      ]);
+    }
+  });
+
+  it("add_note: refuses every field, custom included", () => {
+    const s = schema(NEVER_FIELDS);
+    // `product` alone is ambiguous in the fixture: its label names it alone.
+    const input = Object.fromEntries(
+      s.fields.map((field) => [field.name === "product" ? field.label : field.name, null]),
+    );
+    const problems = refused(allowSet("add_note"), input, s);
+    expect(problems).toHaveLength(s.fields.length);
+    for (const problem of problems) expect(problem.code).toBe("field_not_writable");
+  });
+
+  it("categorize_tickets: refuses status, priority, group and agent", () => {
+    expect(
+      refused(allowSet("categorize_tickets"), {
+        Status: "Open",
+        Priority: "Low",
+        Group: 703,
+        Agent: 502,
+      }).map((p) => [p.field, p.code]),
+    ).toEqual([
+      ["Status", "field_not_writable"],
+      ["Priority", "field_not_writable"],
+      ["Group", "field_not_writable"],
+      ["Agent", "field_not_writable"],
+    ]);
+  });
+
+  it("categorize_tickets: takes any custom field, nested and added later included", () => {
+    const later = {
+      id: 2103,
+      name: "cf_later",
+      label: "Later",
+      type: "custom_text",
+      default: false,
+    };
+    expect(
+      body(
+        {
+          Colour: "Teal",
+          Product: "Tools > Spanners",
+          Shelf: "North > Top",
+          Hobby: "chess",
+          Notes: null,
+          Later: "x",
+        },
+        schema([later]),
+        allowSet("categorize_tickets"),
+      ),
+    ).toEqual({
+      custom_fields: {
+        cf_colour: "Teal",
+        cf_kit: "Tools",
+        cf_family: "Spanners",
+        cf_model: null,
+        cf_shelf: "North",
+        cf_tier: "Top",
+        cf_hobby: "chess",
+        cf_notes: null,
+        cf_later: "x",
+      },
+    });
+  });
+
+  it("checks the set before the value: a refused field's choices are not listed", () => {
+    const [problem] = refused(allowSet("hand_off_draft"), { Status: "Nope" });
+    expect(problem).toMatchObject({ code: "field_not_writable" });
+    expect(problem!.message).not.toContain("Open");
+  });
+
+  it("takes a default field only by its own name, not a custom field named like it", () => {
+    const lookalike = {
+      id: 2104,
+      name: "cf_status",
+      label: "status",
+      type: "custom_text",
+      default: false,
+    };
+    // The key "status" is the default field's API name and the custom one's label.
+    expect(
+      refused({ defaults: [], custom: true }, { Status: "Open" }, schema([lookalike])),
+    ).toEqual([expect.objectContaining({ code: "ambiguous_field" })]);
+    expect(
+      refused({ defaults: ["cf_status"], custom: false }, { cf_status: "x" }, schema([lookalike])),
+    ).toEqual([expect.objectContaining({ code: "field_not_writable" })]);
+  });
+
+  it.each([
+    ["no set", undefined],
+    ["null", null],
+    ["an empty object", {}],
+    ["a string", "update_ticket"],
+    ["defaults not an array", { defaults: "status", custom: true }],
+    ["a default not a string", { defaults: [1], custom: true }],
+    ["custom not a boolean", { defaults: [], custom: "yes" }],
+    ["custom missing", { defaults: ["status"] }],
+  ])("throws TypeError for %s", (_, allow) => {
+    const call = ticketInput as (s: Schema, i: Record<string, unknown>, a?: unknown) => unknown;
+    expect(() => call(schema(), { Status: "Open" }, allow)).toThrow(TypeError);
+    expect(() => call(schema(), {}, allow)).toThrow(TypeError);
+  });
+
+  it("does not import src/core: the set is a plain value the caller passes", () => {
+    const source = readFileSync(new URL("../../src/schema/input.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/from\s+["'][^"']*core\//);
+    expect(source).not.toMatch(/import\(\s*["'][^"']*core\//);
   });
 });
