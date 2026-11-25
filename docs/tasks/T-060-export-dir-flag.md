@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-037, T-038
 - **Created:** 2026-11-25
 
@@ -114,5 +114,7 @@ low | ok | tight | overflowed — and, if tight or overflowed, how it should
 have been split.
 
 ## Next action
+Build in a fresh session (`/pickup`). The RFC is done: `docs/rfc/active/2026-11-25-export-dir-flag.md`, Active (owner, 2026-11-25), commits `89fb9cf`, `a3f5c94`, `1ed19e8`. No code written yet (owner stopped the build to start a proper session, 2026-11-25).
+
 Only if the status is still `doing`: the exact first step for the next
 session.
