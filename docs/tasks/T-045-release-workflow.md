@@ -62,17 +62,19 @@ publishing) asserts on `release.yml`: the publish job's condition is the
 push of a `v*` tag alone and names no `workflow_dispatch` input; it `needs`
 the quality, gitleaks and build jobs, and what it publishes is what that
 chain built; a step before the publish runs the version script on the tag
-and fails on a mismatch; it is gated by the mechanism T-048 chose; workflow
-`permissions` are `contents: read`, and `id-token: write` appears on the
-publish job only; a token, if any, appears only in the publish step's `env`;
-the dry-run job references no secret; every `uses:` carries a 40-hex commit
-SHA; a step before the publish fails unless the tagged commit is an ancestor
-of `origin/main`; the publish carries `--provenance` and `--access public`.
-The version script's unit test runs it with a matching and a mismatched tag
-and version. `README.md` carries the version policy line (asserted). A
-`workflow_dispatch` dry run is observed green on GitHub, its URL in HANDOFF;
-no tag exists on the remote and the package is not on npm after the session;
-`make quality` green.
+and fails on a mismatch; it publishes by npm trusted publishing (RFC
+2026-11-25, release on npm): the publish job declares `environment: npm`,
+and no job references an npm token or a secret; `package.json`
+`repository.url` is `https://github.com/ZanichelliEditore/freshdesk-mcp`;
+workflow `permissions` are `contents: read`, and `id-token: write` appears
+on the publish job only; the dry-run job references no secret; every `uses:`
+carries a 40-hex commit SHA; a step before the publish fails unless the
+tagged commit is an ancestor of `origin/main`; the publish carries
+`--provenance` and `--access public`. The version script's unit test runs it
+with a matching and a mismatched tag and version. `README.md` carries the
+version policy line (asserted). A `workflow_dispatch` dry run is observed
+green on GitHub, its URL in HANDOFF; no tag exists on the remote and the
+package is not on npm after the session; `make quality` green.
 
 ---
 *Filled at `/handoff`:*
