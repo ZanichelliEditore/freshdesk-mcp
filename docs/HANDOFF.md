@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T14:39:10+01:00`
-- **Describes commit:** filled by the stamp commit right after the handoff
-  commit. **CI:** filled there too.
+- **Describes commit:** `d74dd15`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the handoff commit). **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45625932608
+  (workflow `quality`, ran on `d74dd15`: `quality (22.19)`, `quality (24)`,
+  `checks` all success). This file's hash and CI line arrive in the commit
+  right after it.
 
 - **Current task:** plan session (`/decompose` scoped to owner rows, by the
   owner's delegation to the orchestrator) `done (2026-11-25)`. T-062:
