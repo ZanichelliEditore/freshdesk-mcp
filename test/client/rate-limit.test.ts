@@ -65,6 +65,20 @@ describe("headers", () => {
     expect((await limiterAt(200, 40).acquire("expensive")).ok).toBe(true);
   });
 
+  // The real account sends both counts in decimal form (smoke run, 2026-11-25).
+  it.each([
+    ["5000.0", "4910.0"],
+    ["5000.00", "4910.000"],
+    ["5000.0", "4910"],
+  ])("reads a whole number written %s / %s as that number", async (total, remaining) => {
+    const limiter = limiterAt(100, 10);
+    limiter.observe(200, budget(total, remaining));
+    expect((await limiter.acquire("expensive")).ok).toBe(true);
+    const drained = new RateLimiter(limits);
+    drained.observe(200, budget(total.replace("5000", "200"), remaining.replace("4910", "39")));
+    expect(refusal(await drained.acquire("expensive")).message).toContain("39 of 200");
+  });
+
   it("a later response replaces the earlier state", async () => {
     const limiter = limiterAt(100, 10);
     limiter.observe(200, budget(100, 90));
@@ -78,6 +92,11 @@ describe("headers", () => {
     ["text", budget("abc", "def")],
     ["a negative Remaining", budget(100, -1)],
     ["a fraction", budget(100, "9.5")],
+    ["a fraction in Total", budget("5000.5", "4910.0")],
+    ["a negative Remaining in decimal form", budget("5000.0", "-1.0")],
+    ["an exponent", budget("1e3", "9e2")],
+    ["empty values", budget("", "")],
+    ["a bare point", budget("100.", ".0")],
     ["a zero Total", budget(0, 0)],
     ["Remaining above Total", budget(100, 101)],
     ["numbers too large to count with", budget("9".repeat(20), "9".repeat(20))],
@@ -400,6 +419,11 @@ describe("429 and Retry-After", () => {
     vi.advanceTimersByTime(5000);
     limiter.observe(200, budget(100, 19));
     expect(refusal(await limiter.acquire("expensive")).message).toContain("19 of 100");
+  });
+
+  // The same parser reads Retry-After: its decimal-zero form is the number too.
+  it("reads a Retry-After of 7.0 as 7 s", () => {
+    expect(new RateLimiter(limits).observe(429, retryAfter("7.0"))).toBe(7000);
   });
 
   it.each(["0", "000"])("a Retry-After of %s still holds for MIN_HOLD_S", async (value) => {

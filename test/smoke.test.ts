@@ -1238,8 +1238,8 @@ const CORE_NOW = Date.parse("2026-03-10T12:00:00Z");
 const IN_PERIOD = "2026-03-09T10:00:00Z";
 const RATE_HEADERS = {
   ...JSON_TYPE,
-  "x-ratelimit-total": "5000",
-  "x-ratelimit-remaining": "4990",
+  "x-ratelimit-total": "5000.0",
+  "x-ratelimit-remaining": "4990.0",
   "x-ratelimit-used-currentrequest": "1",
 };
 

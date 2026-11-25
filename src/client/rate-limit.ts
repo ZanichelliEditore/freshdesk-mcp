@@ -210,11 +210,17 @@ function refuse(why: string, waitMs: number): Refused {
   };
 }
 
-/** A header holding a whole number of calls or seconds; anything else is no value. */
+/**
+ * A header holding a whole number of calls or seconds, digits with an
+ * optional fraction of zeros only ("5000" or "5000.0": the real account sends
+ * the rate-limit counts in that form, smoke run of 2026-11-25); anything else
+ * is no value. It reads Retry-After too, where "7.0" is 7.
+ */
 function count(value: string | null): number | undefined {
   const trimmed = value?.trim();
-  if (trimmed === undefined || !/^\d+$/.test(trimmed)) return undefined;
-  const number = Number(trimmed);
+  const whole = trimmed === undefined ? null : /^(\d+)(?:\.0+)?$/.exec(trimmed);
+  if (whole === null) return undefined;
+  const number = Number(whole[1]);
   return Number.isSafeInteger(number) ? number : undefined;
 }
 

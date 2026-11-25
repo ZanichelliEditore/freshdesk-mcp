@@ -416,6 +416,24 @@ describe("HttpClient: rate limiter", () => {
     expect(sent()).toHaveLength(1);
   });
 
+  // Tests elsewhere send "100" and "5000"; the real account sends "5000.0"
+  // (smoke run, 2026-11-25): the client path is covered here in that form.
+  it("reads the counts in decimal form, as the real account sends them", async () => {
+    reply("GET", "/api/v2/tickets", 200, [], {
+      ...JSON_TYPE,
+      "x-ratelimit-total": "100.0",
+      "x-ratelimit-remaining": "10.0",
+    });
+    const http = client();
+
+    expect((await http.request({ path: "/tickets", cost: "expensive" })).ok).toBe(true);
+    const second = await http.request({ path: "/tickets", cost: "expensive" });
+
+    expect(failure(second)).toMatchObject({ code: "rate_limited", http_status: null });
+    expect(failure(second).message).toContain("of 100 API calls");
+    expect(sent()).toHaveLength(1);
+  });
+
   it("feeds the headers of an error response too", async () => {
     reply("GET", "/api/v2/tickets/1", 404, {}, budget(10));
     const http = client();
