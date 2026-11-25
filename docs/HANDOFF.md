@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T23:09:20+01:00`
-- **Describes commit:** `<hash>` (the T-041 handoff commit). **CI:** filled
-  in by the stamp commit.
+- **Describes commit:** `a923651` (the T-041 handoff commit), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45711055889
+  (workflow `quality`, ran on `a923651`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-041 (`ticketInput`: agent and group by name or id)
   `done (2026-11-25)`. Commits `2ccf988` (implementation), `b80b69a`
