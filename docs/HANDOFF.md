@@ -4,75 +4,65 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T10:59:27+01:00`
-- **Describes commit:** `e092544`
-  (`e092544464cb47754263ea7bc5e23ff27bc4c095`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45590849715
-  (workflow `quality`, ran on `e092544`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T11:37:43+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-058 `done (2026-11-25)`, `list_solution_tree`
-  takes an optional `category`,
-  `docs/tasks/T-058-solution-tree-category.md` ("Done"). Commits
-  `c14c8c0` (status), `59dc763` (`getCategory`, the tool's `category`,
-  smoke prefers it), `f0f9869` (review records, done). Built by a builder
-  agent under the orchestrator.
-  - **Real run** (orchestrator, owner's authorisation, GET only,
-    2026-11-25, `make smoke-core` at `59dc763`; raw in the gitignored
-    `docs/private/account-facts.md`): "17 tool lines, 17 pass, 0 pass
-    (empty), 0 not exercised, 0 refused (budget), 0 fail; 102 calls",
-    `smoke core: ok`; `list_solution_tree category: pass, categories 1,
-    folders 11, articles 35, calls 13`.
+- **Current task:** T-059 `done (2026-11-25)`, a late request with no
+  time left to retry is a cut, `docs/tasks/T-059-late-attempt-cut.md`
+  ("Done"). Commits `b599dd2` (task, status), `68453a8` (the client marks
+  a GET's late `network` failure; `isCut` asks `http.reachedDeadline`),
+  `c4d8548` (only a GET's expiry is marked), `b84dd3e` (lists B parked,
+  done), `d528723` (`CHANGELOG.md` 0.1.0 dated; CI green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45596975181).
+  Owner's go: 2026-11-25.
+  - Earlier today: CI red on `91b6eec` fixed in `1d51e20` (15 timing
+    tests deterministic); T-058 done (HANDOFF at `91b6eec`).
 
-- **Next action:** no build task left on the path to the first release.
-  The owner:
-  - **Release, RFC 2026-11-25 steps 0–6** (HANDOFF at `c6dba4b`): steps
-    1–2 (environment `npm`, `v*` tag ruleset, `main` ruleset) can be done
-    by the orchestrator with `gh` if the owner is a repository admin and
-    says go; steps 3–4 and 6 need the owner's npm login; step 5 (tag
-    `v0.1.0`) by the orchestrator on the owner's go.
-  - **T-057 (rule 9):** accept the unreviewed scoped list A fixes
-    (`ba6ea89`), or ask for a review.
-  - **T-057:** list-scan same-second tie exception: keep, or fix at one
-    `GET /tickets/{id}` per resumed call.
-  - Then `/pickup` by PLAN's rule (still `proposed`: T-041, T-052, T-049;
-    M2 gates T-040, T-014).
+- **Release state (2026-11-25):**
+  - Step 0: repository public. Steps 1–2 done by the orchestrator with
+    `gh` (owner's go, owner is admin): environment `npm` (custom policy,
+    only `tag:v*`), ruleset `release tags` (id 28066875: restrict
+    create/update/delete of `refs/tags/v*`), ruleset `main` (id 28066876:
+    pull request + `quality (22.19)`, `quality (24)`); both bypass:
+    repository admins, always.
+  - Step 3 done by the owner: `0.0.0` published by hand; npm also created
+    `0.0.0-stage` (it is `latest`); both deprecated ("Placeholder, not a
+    release. Use 0.1.0 or later.").
+  - Step 4 done by the owner: npm trusted publisher (GitHub Actions,
+    `ZanichelliEditore` / `freshdesk-mcp` / `release.yml` / `npm`,
+    publish action only). The 2-day window runs from 2026-11-25.
 
-- **Read before anything else:** the RFC's manual steps; T-057's task
-  file "Open doubts".
+- **Next action:** step 5, on the owner's explicit go: tag `v0.1.0` on
+  `main` (`package.json` is `0.1.0`), push it, watch `release.yml`, check
+  the provenance on npmjs.com. Then step 6 (owner: "Require two-factor
+  authentication and disallow tokens").
+  - **Owner, open:** none blocking. Accepted on 2026-11-25: T-057's
+    unreviewed scoped fixes (`ba6ea89`) and its same-second tie exception.
 
-- **Reviews:** full round on `90ce4a8..59dc763`, R1 = `59dc763`. The four
-  quotes matched for all three. compliance: Wireframes `none`. security:
-  no finding, 1 info (folders read with the id from Freshdesk's reply).
-  code-reviewer: clean, 3 Low. Parked, `docs/improvements.md` entry
-  `59dc763`. No code after R1, no scoped round. SPEC §8.2 checked by the
-  orchestrator: it names the tool, not its inputs.
+- **Read before anything else:**
+  `docs/rfc/active/2026-11-25-release-on-npm.md` steps 5–6.
 
-- **Proposed plan changes:** a new build task (found while fixing
-  `1d51e20`, 2026-11-25): a request that starts between 19.5 s and 20 s
-  and hangs times out as `network` just before the 30 s call deadline, so
-  `isCut` counts it a failure and `count_tickets`/`export_tickets` lose
-  the rows read instead of returning them `truncated` (fails safe, no
-  wrong data). Fix: treat a `network` error with no time left for a retry
-  as a cut, or have the client mark it a deadline expiry. Owner to say
-  go (rule 9: shared mechanism).
+- **Reviews (T-059):**
+  - **Full round** on `9f7c032..68453a8`, R1 = `68453a8`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security: no
+    fail-open; 1 Low (a write's expiry was marked), 1 info. code-reviewer:
+    clean against the acceptance; 2 Low (the same; a write test that could
+    barely fail); one Bash call, against rule 8. Fixed in `c4d8548`.
+  - **Scoped round** on `68453a8..c4d8548`. The four quotes matched for
+    all three; list A empty for all three. Lists B parked, entry
+    `c4d8548`.
 
-- **Open doubts (owner):** see "Next action"; earlier: HANDOFF at
-  `aff4666`, `c6dba4b`, `d1c7efe`, `fe81a3c`.
+- **Proposed plan changes:** none new.
 
-- **Dead ends:** a bad `category` is refused by the SDK's input check, not
-  the tool's `validation` (T-058 task file).
+- **Open doubts (owner):** see the T-057, T-058, T-059 task files.
 
-- **Known red:** none. CI was red on `91b6eec`
-  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45588346392,
-  a deadline-abort test: the settle loop counted real I/O as fake time);
-  fixed in `1d51e20` (15 timing tests made deterministic,
-  `test/support/slow-replies.ts`). Earlier red on `1afbd08`, fixed in
-  `c23a682`.
+- **Dead ends:** see the T-059 task file.
+
+- **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `f0f9869`; the builder on `1d51e20` (2591 tests):
-  - vitest "Test Files 39 passed (39)", "Tests 2591 passed (2591)";
+  orchestrator on `b84dd3e`:
+  - vitest "Test Files 39 passed (39)", "Tests 2604 passed (2604)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
