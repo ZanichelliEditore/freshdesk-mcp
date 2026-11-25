@@ -390,8 +390,8 @@ describe("the built cli", () => {
       ["alone", ["--version"]],
       ["after --export-dir /a", ["--export-dir", "/a", "--version"]],
       ["before --export-dir=/a", ["--version", "--export-dir=/a"]],
-    ])("--version %s prints 0.2.0 and exits 0, with no environment set", (_, args) => {
-      expect(runBuiltCli(out, {}, args)).toEqual({ status: 0, stdout: "0.2.0\n", stderr: "" });
+    ])("--version %s prints 0.3.0 and exits 0, with no environment set", (_, args) => {
+      expect(runBuiltCli(out, {}, args)).toEqual({ status: 0, stdout: "0.3.0\n", stderr: "" });
     });
 
     it("a refusal wins over --version", () => {
