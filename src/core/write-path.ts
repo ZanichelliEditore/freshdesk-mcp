@@ -16,8 +16,9 @@
 //     whether it came through `request`, `requestWithRetry` or `paginate`.
 //     A method is read twice: one that answers differently the second time
 //     (a getter, a Proxy) is refused, not trusted once. What goes to the
-//     client is a copy whose method is the literal GET, so no later read of
-//     the caller's object can turn it into a write.
+//     client is a copy whose method is the literal GET and with no body, so
+//     no later read of the caller's object can turn it into a write and no
+//     payload goes out with a read.
 //   - `GetView` is a wrapper holding the client in a private field, not a
 //     subclass: there is no base `request` on its prototype chain to reach
 //     with `super` or a prototype call. The instance is frozen and has no
@@ -37,6 +38,7 @@ import {
   type GetRequest,
   HttpClient,
   type HttpClientOptions,
+  type HttpRequest,
   type HttpResult,
   type PageCap,
   type PageEnd,
@@ -84,6 +86,11 @@ function readsAsGet(request: unknown): boolean {
   return isGet(method()) && isGet(method());
 }
 
+/** What goes to the client: the method the literal GET, and no body (a GET carries none). */
+function getCopy(request: GetRequest): HttpRequest {
+  return { ...request, method: "GET", body: undefined };
+}
+
 export class GetView implements GetHttp {
   readonly #client: HttpClient;
 
@@ -94,12 +101,12 @@ export class GetView implements GetHttp {
 
   request(request: GetRequest, deadline?: number): Promise<HttpResult> {
     if (!readsAsGet(request)) return Promise.resolve(notGet());
-    return this.#client.request({ ...request, method: "GET" }, deadline);
+    return this.#client.request(getCopy(request), deadline);
   }
 
   requestWithRetry(request: GetRequest, callerDeadline?: number): Promise<RetryResult> {
     if (!readsAsGet(request)) return Promise.resolve({ ...notGet(), attempts: 0 });
-    return this.#client.requestWithRetry({ ...request, method: "GET" }, callerDeadline);
+    return this.#client.requestWithRetry(getCopy(request), callerDeadline);
   }
 
   async *paginate(

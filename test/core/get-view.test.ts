@@ -151,6 +151,33 @@ describe("the GET-only view passes a GET", () => {
     ).toEqual(["GET", "GET"]);
   });
 
+  it("sends a GET without the body a cast gave it", async () => {
+    mock.get(ORIGIN).intercept({ path: "/api/v2/tickets/1", method: "GET" }).reply(
+      200,
+      {},
+      {
+        headers: JSON_TYPE,
+      },
+    );
+    mock.get(ORIGIN).intercept({ path: "/api/v2/tickets/1", method: "GET" }).reply(
+      200,
+      {},
+      {
+        headers: JSON_TYPE,
+      },
+    );
+    const http = view();
+    const request = { path: "/tickets/1", body: { status: 5 } } as never;
+
+    expect((await http.request(request)).ok).toBe(true);
+    expect((await http.requestWithRetry(request)).ok).toBe(true);
+    const sent = mock.getCallHistory()?.calls() ?? [];
+    expect(sent.map((call) => [call.method, call.body ?? null])).toEqual([
+      ["GET", null],
+      ["GET", null],
+    ]);
+  });
+
   it("paginate, through a resource that takes the view", async () => {
     mock
       .get(ORIGIN)

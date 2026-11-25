@@ -181,8 +181,11 @@ export interface PageCap {
   items?: number;
 }
 
-/** A request whose method can only be GET, or absent (RFC 2026-11-25-write-safety-core, invariant 1). */
-export type GetRequest = Omit<HttpRequest, "method"> & { method?: "GET" };
+/**
+ * A request whose method can only be GET, or absent, and with no body (RFC
+ * 2026-11-25-write-safety-core, invariant 1).
+ */
+export type GetRequest = Omit<HttpRequest, "method" | "body"> & { method?: "GET" };
 
 /**
  * What a reader takes: the client's surface with GET-only requests. The

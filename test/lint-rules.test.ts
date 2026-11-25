@@ -3,7 +3,7 @@
 // a wrong glob or pattern in eslint.config.mjs would otherwise pass unnoticed,
 // because no committed file breaks them.
 import { readdirSync } from "node:fs";
-import { join, matchesGlob, relative, sep } from "node:path";
+import { join, matchesGlob, posix, relative, sep } from "node:path";
 import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 import toolImports from "../eslint.tool-imports.json" with { type: "json" };
@@ -326,8 +326,21 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
   // RFC 2026-11-25-write-safety-core, invariant 1 (T-064): the core holds the
   // one client; only src/tools/context.ts, which builds the context, imports it.
   it("lists no src/core path for any place", () => {
-    const listed = [bare, ...places.flatMap((p) => [p.value, p.type ?? []])].flat();
-    expect(listed.filter((spec) => /(^|\/)core\/write-path|\.\.\/core\//.test(spec))).toEqual([]);
+    // Each entry resolved from its place's directory (a glob's fixed part):
+    // `./core/index.js` in src/tools/toolsets/ is the toolset, not src/core.
+    const resolved = places.flatMap((p) =>
+      p.files.flatMap((glob) =>
+        [...p.value, ...(p.type ?? [])].map((spec) =>
+          posix.join(glob.slice(0, glob.lastIndexOf("/")), spec),
+        ),
+      ),
+    );
+    expect(resolved.length).toBeGreaterThan(0);
+    const inCore = (path: string) => path === "src/core" || path.startsWith("src/core/");
+    expect(resolved.filter(inCore)).toEqual([]);
+    expect([...bare, ...resolved].filter((spec) => spec.includes("src/core"))).toEqual([]);
+    // The check can fail: an entry for the core, from any place, is caught.
+    expect(inCore(posix.join("src/tools/toolsets/core", "../../../core/notify.js"))).toBe(true);
   });
 
   it.each([
