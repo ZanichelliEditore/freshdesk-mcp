@@ -160,15 +160,19 @@ of a ticket with that in mind.
   the result carries `next_cursor`: call again with the same arguments and
   `cursor` set to it for the next tickets. Each call writes its own new file;
   the last call's result has no `next_cursor`. Across the files of one
-  period no ticket is written twice, and none that matched at the first call
-  is skipped unless it left the filters; a ticket created while the calls
+  period no ticket is written twice, and between two calls none that matched
+  at the first call is skipped unless it left the filters; a ticket created while the calls
   run can be left out. Past 300 matches, two tickets created in the same
   second as the last one written, one of which entered or left the filters
   between two calls, are the exception: one can be skipped or written twice.
   A call cut by the budget, the time limit or the rate limit also says
   `truncated: true`, beside its `next_cursor`; cut before it wrote a row, it
-  says `truncated: true` with no `next_cursor`: narrow the period, or call
-  again later.
+  says `truncated: true` with no `next_cursor`: call again later with the
+  same cursor, or narrow the period (which starts over). Paging relies on
+  Freshdesk's search giving ticket ids newest first; a resumed call that
+  finds them out of order is refused with nothing kept, and a first call
+  that finds them so gives no `next_cursor`: export the rest in shorter
+  periods.
 - A cursor works only with the arguments it came with: used with any other
   (another format, period, filter, `max_tickets`, `conversations` or
   `confirm`), or edited, it is refused before anything is sent or written.

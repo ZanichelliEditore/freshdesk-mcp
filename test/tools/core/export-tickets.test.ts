@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { type AppContext, createContext } from "../../../src/tools/context.js";
+import { listEnvelope } from "../../../src/tools/list.js";
 import { LIST_PAGE_SIZE } from "../../../src/tools/toolsets/core/count-tickets.js";
 import { MAX_TICKETS } from "../../../src/tools/toolsets/core/export-tickets.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
@@ -1031,10 +1032,10 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
 
   it("max_tickets bounds the rows a call writes; more left: next_cursor, not truncated", async () => {
     const { session } = await warm();
-    reply(searchPath(PERIOD_QUERY), found(many(4301, 5)));
+    reply(searchPath(PERIOD_QUERY), found(down(4305, 5)));
     const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 2 })));
     expect(result.rows).toBe(2);
-    expect(ids(result.path)).toEqual([4301, 4302]);
+    expect(ids(result.path)).toEqual([4305, 4304]);
     expect(result.next_cursor).toEqual(expect.any(String));
     expect(result).not.toHaveProperty("truncated");
     expect(result.api_calls_used).toBe(1);
@@ -1151,7 +1152,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     expect(result).not.toHaveProperty("next_cursor");
     const tools = await listTools(session);
     expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
-      "truncated: true without next_cursor: the call was cut before it wrote a row; narrow the period",
+      "truncated: true without next_cursor: the call was cut before it wrote a row",
     );
   });
 
@@ -1331,7 +1332,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
   describe("a cursor refused: no request, no file", () => {
     async function firstCursor(): Promise<string> {
       const { session } = await warm();
-      reply(searchPath(PERIOD_QUERY), found(many(4301, 5)));
+      reply(searchPath(PERIOD_QUERY), found(down(4305, 5)));
       const first = page(await callTool(session, TOOL, jsonl({ max_tickets: 2 })));
       rmSync(first.path);
       mock.clearCallHistory();
@@ -1381,7 +1382,7 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
   it("a search cursor once the period has grown past 300: refused after the probe, no file", async () => {
     const { session } = await warm();
     const tick = clock();
-    reply(searchPath(PERIOD_QUERY), found(many(4301, 5)));
+    reply(searchPath(PERIOD_QUERY), found(down(4305, 5)));
     const first = page(await callTool(session, TOOL, jsonl({ max_tickets: 2 })));
     rmSync(first.path);
     await tick();
@@ -1394,5 +1395,77 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
     expect(error.message).toContain("without a cursor");
     expect(sent()).toBe(1);
     expect(readdirSync(out)).toEqual([]);
+  });
+
+  describe("scoped round fixes (R2)", () => {
+    /** A cursor this server would give for `args` at `position` (tests only: the digest is unkeyed). */
+    function mint(args: Record<string, unknown>, position: number): string {
+      return listEnvelope({ tool: TOOL, args }, { items: [], next: position, api_calls_used: 0 })
+        .next_cursor!;
+    }
+    /** A search position: below `id`, the last ticket on `page`. */
+    const searchAt = (id: number, page: number) => 2 * (id * 10 + page - 1) + 1;
+
+    it("stepping back counts against the budget: a cursor at page 10 over empty pages sends at most 2", async () => {
+      const { session } = await warm({ limits: { pacing_rps: 1000, call_budget: 2 } });
+      const args = jsonl({ max_tickets: 2 });
+      for (let n = 1; n <= 10; n++) reply(searchPath(PERIOD_QUERY, n), found([], 0));
+      const result = page(
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4301, 10)) }),
+      );
+      expect(sent()).toBe(2);
+      expect(result.rows).toBe(0);
+      expect(result.truncated).toBe(true);
+      expect(result).not.toHaveProperty("next_cursor");
+    });
+
+    it("resumed: ids out of order on a page are refused, not silently dropped; nothing kept", async () => {
+      const { session } = await warm();
+      const args = jsonl({ max_tickets: 2 });
+      reply(searchPath(PERIOD_QUERY), found([4305, 4310, 4304].map((id) => ticket(id))));
+      const error = refusal(
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4306, 1)) }),
+      );
+      expect(error.code).toBe("validation");
+      expect(error.message).toContain("out of id order");
+      expect(readdirSync(out)).toEqual([]);
+    });
+
+    it("resumed: an earlier page stepped back to that does not fall into the next is refused", async () => {
+      const { session } = await warm();
+      const args = jsonl({ max_tickets: 2 });
+      reply(searchPath(PERIOD_QUERY, 2), found(down(4309, 9), 39));
+      reply(searchPath(PERIOD_QUERY, 1), found(down(4300, 30), 39));
+      const error = refusal(
+        await callTool(session, TOOL, { ...args, cursor: mint(args, searchAt(4311, 2)) }),
+      );
+      expect(error.message).toContain("out of id order");
+      expect(readdirSync(out)).toEqual([]);
+    });
+
+    it("fresh: ids out of order are written, and the stop gives no next_cursor: truncated: true", async () => {
+      const { session } = await warm();
+      reply(searchPath(PERIOD_QUERY), found([4305, 4310, 4304].map((id) => ticket(id))));
+      const result = page(await callTool(session, TOOL, jsonl({ max_tickets: 2 })));
+      expect(ids(result.path)).toEqual([4305, 4310]);
+      expect(result.truncated).toBe(true);
+      expect(result).not.toHaveProperty("next_cursor");
+    });
+
+    it("a search position below id 1 is refused before any request", async () => {
+      const { session } = await cold();
+      const args = jsonl({ max_tickets: 2 });
+      const result = await callTool(session, TOOL, { ...args, cursor: mint(args, 1) });
+      expect(result.isError).toBe(true);
+      expect(sent()).toBe(0);
+      expect(readdirSync(out)).toEqual([]);
+    });
+
+    it("the description gives the zero-row advice", async () => {
+      const tools = await listTools((await cold()).session);
+      expect(tools.find((listed) => listed.name === TOOL)?.description).toContain(
+        "call again later with the same cursor, or narrow the period, which starts over",
+      );
+    });
   });
 });

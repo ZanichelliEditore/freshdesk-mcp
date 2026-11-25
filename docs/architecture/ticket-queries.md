@@ -317,7 +317,12 @@ A ticket updated between calls that was created before that second does not
 shift the position, as a page or offset would. Ties in that second are
 skipped by count (a second and an id do not fit one cursor position): a tie
 that entered or left the filters between calls makes one skipped or written
-twice. A cut before any row is written gives no cursor.
+twice. A cut before any row is written gives no cursor. The order measured
+cannot tell whether search sorts by `created_at` or by id (they agreed on the
+sample; an imported, back-dated ticket would set them apart), so a resumed
+read checks that ids fall strictly on every page it reads and is refused
+otherwise; a step back to an earlier page counts against the budget and the
+time limit (T-057 scoped round, 2026-11-25).
 - A read cut by the budget, the time limit, page 300, a later request the
   limiter refuses or a later request aborted at the call's deadline
   (`network` once it is reached: `isCut`, which `count_tickets` shares since

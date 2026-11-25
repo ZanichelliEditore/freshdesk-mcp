@@ -197,9 +197,19 @@ export type Resume =
   | { path: "search"; below: number; page: number }
   | { path: "list"; second: number; ties: number };
 
-/** A read's outcome: `next`, where to resume, present exactly when it stopped before the period's end. */
+/**
+ * A read's outcome: `next`, where to resume, present when it stopped before
+ * the period's end and a position can be given; `unordered` when it stopped
+ * on search results whose ids did not fall, so no position can be (T-057).
+ */
 export type PeriodResult =
-  { ok: true; truncated: boolean; next?: Resume } | { ok: false; error: FreshdeskError };
+  | { ok: true; truncated: boolean; next?: Resume; unordered?: true }
+  | { ok: false; error: FreshdeskError };
+
+/** Whether the ids fall strictly, as search's order (measured 2026-11-25) gives them. */
+function falls(tickets: readonly Ticket[]): boolean {
+  return tickets.every((ticket, i) => i === 0 || ticket.id < tickets[i - 1]!.id);
+}
 
 function refused(problem: FieldError): { ok: false; error: FreshdeskError } {
   return {
@@ -405,9 +415,21 @@ export async function readPeriod(
   if (!probe.ok) return probe;
   meter.used += probe.attempts;
   meter.requests += probe.attempts;
+  /** A search position holds only while ids fall: past a disorder, a resumed read fails closed. */
+  const disordered = () =>
+    spent({
+      code: "validation",
+      http_status: null,
+      message:
+        "Freshdesk's search gave this period's tickets out of id order, so it cannot be paged safely from a cursor: nothing was kept. Export it without max_tickets and without a cursor, in shorter periods.",
+      retryable: false,
+    });
+  if (below !== undefined && !falls(probe.results)) return disordered();
   // Tickets that left the results since moved the rest forward: while the page starts
   // below the boundary (or is empty), the boundary is on an earlier page.
   while (below !== undefined && firstPage > 1 && (probe.results[0]?.id ?? 0) < below) {
+    // Counted against the budget and the time limit like any later page; the position stays.
+    if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return cut(from);
     firstPage -= 1;
     const earlier = await searchTickets(
       context.http,
@@ -424,6 +446,9 @@ export async function readPeriod(
     }
     meter.used += earlier.attempts;
     meter.requests += earlier.attempts;
+    const after = probe.results[0];
+    const last = earlier.results.at(-1);
+    if (!falls(earlier.results) || (after && last && last.id <= after.id)) return disordered();
     probe = earlier;
   }
 
@@ -451,27 +476,38 @@ export async function readPeriod(
     if (refusal) return spent(refusal);
     /** The lowest id taken, and the page that held it. */
     let lowest = from.path === "search" ? { below: from.below, page: from.page } : undefined;
-    const here = (): Resume =>
-      lowest === undefined ? { path: "start" } : { path: "search", ...lowest };
+    /** The id before, across every page read: a fresh read past a disorder gives no position. */
+    let previous: number | undefined;
+    let unordered = false;
+    const stopped = () =>
+      unordered
+        ? { ok: true as const, truncated: true, unordered: true as const }
+        : cut(lowest === undefined ? { path: "start" } : { path: "search", ...lowest });
     const pages = Math.ceil(probe.total / SEARCH_PAGE_SIZE);
     let results = probe.results;
     for (let page = firstPage; ; page++) {
       if (page > firstPage) {
         if (page > pages) break;
         // Ticket requests, retries included, at the budget: no further page (the local checks can drop results).
-        if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return cut(here());
+        if (meter.requests >= budget || Date.now() - started >= SCAN_START_MS) return stopped();
         const found = await searchTickets(context.http, query.query, page, deadline, "expensive");
         if (!found.ok) {
           if (!isCut(found.error, deadline)) return found;
           meter.used += found.attempts ?? 0;
           meter.requests += found.attempts ?? 0;
-          return cut(here());
+          return stopped();
         }
         meter.used += found.attempts;
         meter.requests += found.attempts;
         results = found.results;
       }
       for (const ticket of results) {
+        if (previous !== undefined && ticket.id >= previous) {
+          // Resumed: the boundary may have dropped a ticket unseen. Fresh: nothing was skipped.
+          if (below !== undefined) return disordered();
+          unordered = true;
+        }
+        previous = ticket.id;
         // At or past the boundary: taken by an earlier call, or created since the first.
         if (below !== undefined && ticket.id >= below) continue;
         if (!matchesLocal(query, ticket)) continue;
@@ -479,7 +515,7 @@ export async function readPeriod(
         if (seen.has(ticket.id)) continue;
         seen.add(ticket.id);
         const taken = await take(ticket);
-        if (taken === false) return cut(here());
+        if (taken === false) return stopped();
         if (taken !== true) return { ok: false, error: taken };
         if (lowest === undefined || ticket.id < lowest.below) lowest = { below: ticket.id, page };
       }
