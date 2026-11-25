@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-038, T-048
 - **Created:** 2026-11-23
 - **Gates:** Before the first tag the owner does steps 0-2 of RFC
@@ -197,9 +197,14 @@ none
 ## Context pressure
 Moderate: one task, two review rounds, no reread of large files.
 
+## Dry run observed (orchestrator, 2026-11-25)
+- `workflow_dispatch` on `main` (`66cb17b`):
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45580075912,
+  conclusion success: quality (22.19), quality (24), gitleaks, build,
+  dry-run success; publish skipped.
+- After the run: `git ls-remote --tags origin` 0 lines;
+  `npm view @zanichelli/freshdesk-mcp` E404. RFC 2026-11-25's
+  Implemented box ticked.
+
 ## Next action
-Orchestrator/owner: push, run `release.yml` by `workflow_dispatch` on
-`main`, observe quality x2, gitleaks, build, dry-run green and publish
-skipped; record the URL; confirm no remote tag and
-`npm view @zanichelli/freshdesk-mcp` 404; then tick the RFC's Implemented
-box and set done.
+none: done.

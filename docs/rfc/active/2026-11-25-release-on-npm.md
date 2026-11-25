@@ -3,7 +3,7 @@
 - **Status:** Active (owner, 2026-11-25)
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
-- [ ] Implemented
+- [x] Implemented
 
 ## Context
 
