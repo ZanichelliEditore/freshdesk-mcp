@@ -23,6 +23,28 @@ preferably while M1 waits on an owner's run (owner, 2026-11-23).
 - `rfc-reviewer` on the draft; the owner accepts or rejects. If a safety
   core is adopted: `proposed` rows for it, before any write resource.
 
+## Owner's evidence (2026-11-25)
+From the owner's manual test on a test ticket tagged `mcp-test` in group
+`MCP Test`, requester an internal contact, on the real account:
+
+- Freshdesk's own spam filter marked the ticket as spam at creation (no
+  automation rule involved); the owner restored it by hand. Relevant to C8
+  (tickets created by the server): a created ticket can land in spam.
+- Creation, a private note, adding the tag, and status changes
+  Open→Pending→Open: the activity log shows no automation rule fired.
+- The Default SLA Policy applied (group-based SLA policies do not filter
+  by tag). Setting the status to Pending pauses the SLA timer (the due date
+  shifted accordingly), so keeping test tickets Pending when idle avoids
+  SLA escalations.
+- Time triggers: not yet verified; the owner checks the activity log on
+  2026-11-26.
+- The owner cannot edit the dozens of automation rules. Proposed reading of
+  M2's "automations confirmed to skip the tag first" (SPEC §13): "no
+  automation rule acted on `mcp-test` tickets, confirmed by the activity log
+  after each kind of write M2 performs". **For this RFC to take up:** the
+  planning session did not change SPEC §13; the RFC proposes the wording and
+  the owner accepts it.
+
 ## Out of scope
 - Any code; the M2 decomposition (`/decompose M2`, after this).
 

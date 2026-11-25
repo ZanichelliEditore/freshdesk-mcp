@@ -95,6 +95,8 @@ none
   beyond the task's "checked before and after `acquire`": it refuses a hold
   that would leave under 10 s at once, with `retry_after_s`, instead of
   sleeping through it and spending a token. Owner may judge it.
+  **Closed (2026-11-25):** accepted by the orchestrator under the owner's
+  delegation; the bound stays.
 
 ## Context pressure
 ok
