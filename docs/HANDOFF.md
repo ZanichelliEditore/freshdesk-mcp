@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T13:21:50+01:00`
-- **Describes commit:** see the stamp commit right after it (hash and CI
-  arrive there).
+- **Describes commit:** `2664688`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45613202518
+  (workflow `quality`, ran on `2664688`). This file's hash and CI line
+  arrive in the commit right after it.
 
 - **Current task:** T-046 `done (2026-11-25)`: `docs/tool-catalogue.md`,
   21 active tools (SPEC §8.2) and 99 catalogue tools (SPEC §8.3), one line
