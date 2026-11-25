@@ -141,7 +141,9 @@ stop paging, and the file and its row count go to the user, not to the
 injector. A key would have to live in the process
 (nothing else stores one), so every restart, which MCP clients do freely,
 would invalidate every cursor. **Owner, 2026-11-25: unkeyed, the forgery
-risk accepted for this reason.**
+risk accepted for this reason.** Confirmed by the owner after T-066's
+handoff (2026-11-25, relayed by the orchestrator at `/decompose M2`): the
+prompt-injection path stays accepted.
 
 A `next_cursor` now shows, in clear, the ids of tickets already written in
 its second. They are the caller's own tickets, already in the file the

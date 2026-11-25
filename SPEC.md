@@ -53,7 +53,7 @@ what Claude (the model) does with it.
 | C1 | List recent **uncategorised** tickets; categorise them automatically with a quick approval | `list_tickets(uncategorized)`, `get_ticket_schema`, `categorize_tickets` (preview → confirm) | proposes product/sub-product/issue type per ticket; shows the table; applies on approval |
 | C2 | Find the **most urgent** tickets | `triage_queue`: open tickets with urgency signals (priority, `due_by`/`fr_due_by`, overdue, age, customer replies waiting) | ranks and explains |
 | C3 | For a ticket, find **similar past cases** and prepare a **draft reply** to validate | `get_ticket`, `find_similar_tickets` (best effort, §7.3), KB and canned search | writes the draft in chat, or saves it via C6 |
-| C4 | **Ask feedback** from colleagues | inside Freshdesk: `add_note` (private, `notify_emails`), `update_ticket` (reassign); outside Freshdesk (internal teams): `forward_ticket` (confirm + allow-list) | picks the route, writes the request |
+| C4 | **Ask feedback** from colleagues | inside Freshdesk: `add_note` (private only, notifies agents named by id), `update_ticket` (reassign); outside Freshdesk (internal teams): `forward_ticket` (confirm + allow-list) | picks the route, writes the request |
 | C5 | **Update** and **reply** to a ticket | `update_ticket`, `reply_to_ticket` (confirm, off by default) | — |
 | C6 | Prepare a **draft another agent takes over** | `hand_off_draft`: private note marked as draft + assign to agent/group + notify | — |
 | C7 | **Statistics** on tickets | `count_tickets` (aggregates in code, server-side) and `export_tickets` (JSONL/CSV file) | interprets; deeper analysis on the export |
@@ -277,9 +277,9 @@ costs in API calls when it is more than one.
 
 | Tool | Purpose |
 |---|---|
-| `update_ticket` | status, priority, type, group, agent, tags (add/remove), custom fields by label |
+| `update_ticket` | status, priority, type, group, agent, tags (add/remove), custom fields by label; no other field (RFC `2026-11-25-write-safety-core`). Resolved and Closed are allowed: the description says Freshdesk may then email the requester and send a satisfaction survey |
 | `categorize_tickets` | bulk set of category fields on a list of `{ticket_id, fields}`. Without `confirm` returns a **preview** table (current → new) and a `preview_id`; with `confirm:true` + `preview_id` applies, one `PUT` per ticket, per-ticket result. Cap (default 50) refused, not truncated |
-| `add_note` | private note by default; `notify_emails` (agents) for internal feedback (C4); `private:false` only if explicitly passed |
+| `add_note` | private note only, no `private` input; agents to notify, by agent id, for internal feedback (C4). A public note is a `send` capability (M3) |
 | `hand_off_draft` | C6 in one call: private note with a clear `DRAFT REPLY` header + assign to agent/group + notify them |
 
 **`send`** — customer- or outside-facing, off by default
@@ -288,6 +288,10 @@ costs in API calls when it is more than one.
 |---|---|
 | `reply_to_ticket` | public reply to the requester; `confirm:true` required (§9) |
 | `forward_ticket` | forward to people outside Freshdesk (internal teams); `confirm:true` required; recipients must match the allow-list (e.g. `@example.com`), others refused |
+
+A public note (`private: false`) is `send`'s too (owner, 2026-11-25, RFC
+`2026-11-25-write-safety-core`): it can reach the requester, so it is
+designed in M3 with confirm and allow-list.
 
 ### 8.3 Prepared, not active (catalogue)
 
@@ -324,9 +328,9 @@ tests, land with the toolset that first uses them (M5+).
 |---|---|
 | Writes need the `write` toolset enabled; customer/outside sends need `send` | config |
 | `reply_to_ticket`, `forward_ticket`: **confirm-by-argument** — without `confirm:true` the tool does nothing and returns "Not sent. Show the user the exact text and recipients; call again with confirm:true only after they approve." | `confirm.ts` |
-| Bulk changes: preview → `preview_id` → confirm; changed ticket set or fields invalidates the preview | `categorize_tickets` |
+| Bulk changes: preview → `preview_id` → confirm; a ticket added or a field changed invalidates the preview; a confirm of only the tickets a cut left not attempted keeps it (owner, 2026-11-25, PLAN OD-13) | `categorize_tickets` |
 | Forward recipients on an allow-list; reply goes only to the ticket's requester (cc only from the allow-list) | config |
-| Notes private unless `private:false` is passed explicitly | `add_note` |
+| Notes written by `write` are private, always: no `private` input, the core sets it; a public note is a `send` capability (M3) | the write path (`add_note`, `hand_off_draft`) |
 | No secret or ticket content in logs; stderr logs method, path template, status, duration only | `http.ts` |
 
 The **real** human gate is the client's tool-approval prompt (Claude
