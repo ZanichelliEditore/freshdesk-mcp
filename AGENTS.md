@@ -48,7 +48,9 @@ generic engineering contract; where the two overlap, this section wins.
 
 ### Hard rules
 
-1. **The safety core: none.**
+1. **The safety core: the write path**, the one path every request
+   other than GET takes to Freshdesk (RFC
+   `docs/rfc/active/2026-11-25-write-safety-core.md`, owner, 2026-11-25).
    - If that is not `none`: it is the one path the project's dangerous
      capability goes through. Never add a second path, a bypass flag, an
      environment override or an escape hatch, and never weaken its checks.

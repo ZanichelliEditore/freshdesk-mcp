@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M2
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-23
 
@@ -73,35 +73,43 @@ any write resource; `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
-- RFC drafted: `docs/rfc/proposed/2026-11-25-write-safety-core.md`,
-  Status Proposed (commits `a9b7aa9`, `c928102` and this handoff). OD-3:
-  a small safety core, the write path (invariants 1 to 6). OD-2: a per-tool
-  allow set table, default fields fail closed. Proposed wording for M2's
-  "automations confirmed to skip the tag first", conditional on the
-  time-trigger check (2026-11-26). Spam marking: binds M2's test
-  procedure, not code (no M2 tool creates tickets).
-- `rfc-reviewer`: full and scoped rounds, resolved in the RFC ("Review").
-  Handoff R1 (`code-reviewer`, `security-reviewer`) fixes in `c928102`.
+- RFC `docs/rfc/active/2026-11-25-write-safety-core.md`, Status Active
+  (owner, 2026-11-25), moved by `make rfc-sync`. Drafted in `a9b7aa9`,
+  `c928102` and `6c8d615`; accepted in this handoff's commit.
+- OD-3: a small safety core, the write path (invariants 1 to 6). OD-2: a
+  fixed per-tool table of writable fields in the core. Each with the
+  alternatives rejected ("Alternatives considered").
+- Owner's decisions (2026-11-25), in the RFC's "The owner's decisions":
+  public notes (`add_note` `private: false`) move to `send` (M3), so
+  `write` notes are private only; every custom field writable by
+  `update_ticket` and `categorize_tickets`, default `product` in no set;
+  Resolved and Closed allowed in `update_ticket`, its description saying
+  Freshdesk may email the requester; "C8 (new tickets)" means
+  categorising newly arrived tickets, no create tool in M2.
+- Applied on acceptance (task file "Files expected to change", RFC
+  "Consequences"): AGENTS.md rule 1 and SPEC §9 name the write path;
+  `.claude/commands/decompose.md` step 4 too. T-064's acceptance line
+  amended (RFC acceptance, decompose step 6 exception).
+- `rfc-reviewer`: full and scoped rounds, resolved in the RFC ("Review");
+  no third round for the owner's decisions (rule 9).
 - PLAN: `proposed` rows T-064 (the write path) and T-065 (allow sets),
-  valid only if the owner accepts the RFC.
-- Not met yet: the RFC in `docs/rfc/active/`, Status Active by the
-  owner's word. Waiting on the owner.
+  sized by `/decompose M2`; OD-2 and OD-3 answered.
 
 ## Dead ends
 none
 
 ## Open doubts
-- The RFC's six "Questions for the owner": accept OD-2/OD-3; `add_note`
-  `private: false` in `write`; M2's "C8 (new tickets)" read as
-  categorising arrivals; `product` and custom fields fail-open;
-  time-trigger outcome; Resolved/Closed requester notifications via
-  `update_ticket`'s status.
+- M2's SPEC §13 wording: the time-trigger clause waits on the owner's
+  activity-log check (2026-11-26): as proposed, or option (a) or (b);
+  settled before M2's first real test.
+- SPEC changes the decisions imply, left for `/decompose M2`: §8.2 and
+  §9's `add_note` rows (private only in `write`, public notes in `send`),
+  §8.2's `update_ticket` purpose (Resolved and Closed may notify the
+  requester).
 
 ## Context pressure
 ok
 
 ## Next action
-The owner reads the RFC and answers its questions. On acceptance: set
-Status Active (owner, date), `make rfc-sync`, apply AGENTS.md rule 1 and
-SPEC §9, set T-040 `done`; after the 2026-11-26 check, write the M2
-wording into SPEC §13 in the form the check allows. Then `/decompose M2`.
+`/decompose M2`, on the owner's go. Before M2's first real test: the
+owner's time-trigger check (2026-11-26) and the §13 wording.

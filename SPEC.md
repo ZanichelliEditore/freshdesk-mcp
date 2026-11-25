@@ -336,11 +336,13 @@ acting on injected ticket text. Docs tell users never to "always allow"
 the `send` tools.
 
 Deliberately not adopted from customer-square: guard/pin checks and a
-single-module write gate as a governed file (safety core: `none`). Kept
-from the faigo kit (owner, 2026-11-20): new dependencies go through
-`/rfc`, the gitleaks hooks run on every commit, and before the first
-caller of a `write` or `send` tool an RFC decides whether the project
-needs a safety core (`AGENTS.md`, rule 1).
+governed write-gate file. Adopted instead (owner, 2026-11-25, RFC
+`2026-11-25-write-safety-core`): the safety core is **the write path**,
+the one path every request other than GET takes to Freshdesk; tools get
+a GET-only view, each write tool its own entry point with a fixed set of
+writable fields (`AGENTS.md`, rule 1). Kept from the faigo kit (owner,
+2026-11-20): new dependencies go through `/rfc` and the gitleaks hooks
+run on every commit.
 
 ## 10. Configuration
 

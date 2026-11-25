@@ -1,6 +1,6 @@
 # A small safety core for writes, and a per-tool allow set of writable fields
 
-- **Status:** Proposed
+- **Status:** Active (owner, 2026-11-25)
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
 - [ ] Implemented
@@ -114,11 +114,12 @@ The core is small. It holds these invariants and nothing else:
    emails (`src/schema/index.ts:29-30`); the core keeps none. Mail to
    people outside Freshdesk is `forward_ticket`'s, in `send`, with its
    allow-list (SPEC §8.2, §9).
-5. **Notes are private.** `add_note`'s note is private unless the caller
-   passes `private: false`; the core sets `private: true` itself when the
-   flag is absent (SPEC §9's `add_note` row, moved into the core).
-   `hand_off_draft`'s note is always private: its entry point has no
-   `private` input, so a "DRAFT REPLY" can never reach the requester.
+5. **Notes in `write` are private.** `add_note` and `hand_off_draft`
+   write private notes only: their entry points have no `private` input,
+   and the core sets `private: true` itself, so a note or a "DRAFT REPLY"
+   from a `write` tool can never reach the requester. A public note
+   (`private: false`) is a `send` capability (owner, 2026-11-25, question
+   2), designed with M3's confirm and allow-list.
 6. **The core builds every note payload itself, from a closed key set:**
    the body, `private` and the resolved notify addresses. A tool cannot
    pass any other key the notes endpoint takes (`user_id`, which shows
@@ -157,12 +158,13 @@ sets follow SPEC §8.2:
 | `update_ticket` | status, priority, type, group, agent; tags (add/remove) | all |
 | `categorize_tickets` | type | all |
 | `hand_off_draft` | group, agent | none |
-| `add_note` | none (note body, `private`, agents to notify only) | none |
+| `add_note` | none (note body and agents to notify only; always private) | none |
 
 No set holds requester, email, phone, name, company, source, subject,
 description, product, due dates or any other default field. A default
 field Freshdesk adds later is in no set until a reviewed change puts it
-there: the default-field sets fail closed (custom fields: question 4).
+there: the default-field sets fail closed. Custom fields fail open, by
+the owner's choice (2026-11-25, question 4).
 `categorize_tickets` cannot change status, priority, group or agent
 directly, so a bulk change recategorises but does
 not itself reroute or close tickets; those go one ticket at a time through
@@ -207,7 +209,10 @@ the owner picks one of:
   Freshdesk", the triggers seen named in `docs/private/account-facts.md`.
 
 The RFC can be accepted before 2026-11-26; the wording goes into SPEC §13
-only after the check, in the form the check allows.
+only after the check, in the form the check allows. **Open** at
+acceptance (owner, 2026-11-25): the wording above with options (a) and
+(b) stays the open item, settled after the owner's activity-log check on
+2026-11-26 and before M2's first real test.
 
 ### Spam marking of created tickets (C8)
 
@@ -222,6 +227,8 @@ would then miss it. When a create tool is designed, its result reports the
 ticket's `spam` flag; that is that tool's RFC, not this one.
 
 ### Questions for the owner
+
+Answered by the owner on 2026-11-25; the answers follow the questions.
 
 1. Accept OD-3 (the write path as safety core) and OD-2 (the table above).
 2. `add_note` with `private: false` (SPEC §8.2, §9) is in `write`, the
@@ -243,6 +250,28 @@ ticket's `spam` flag; that is that tool's RFC, not this one.
    the owner's test covered Open → Pending → Open only. Keep Resolved and
    Closed out of `update_ticket`'s values, or allow them and say in its
    description that the requester may be notified?
+
+### The owner's decisions (2026-11-25)
+
+1. **Accepted as proposed:** OD-3, a small safety core, the write path;
+   OD-2, the fixed per-tool table of writable fields in the core. This
+   makes the RFC Active.
+2. **`add_note` with `private: false` moves to `send`** (M3, with confirm
+   and allow-list like replies). In `write`, `add_note` writes private
+   notes only (invariant 5 and the table above). The design of the public
+   note is M3's amendment to this RFC.
+3. **"C8 (new tickets)" means categorising newly arrived tickets**, as
+   the RFC read it (SPEC §3, C8: bulk re-categorisation of old tickets is
+   not committed). No ticket-create tool in M2.
+4. **Custom fields: all writable** by `update_ticket` and
+   `categorize_tickets`, including ones an admin adds later, as proposed.
+   The default `product` field stays in no set.
+5. **Time-trigger clause: open.** The owner checks the activity log on
+   2026-11-26; the wording, or (a) or (b), is settled before M2's first
+   real test.
+6. **Resolved and Closed are allowed in `update_ticket`.** Its description
+   must say that Freshdesk may email the requester (and may send a
+   satisfaction survey) when a ticket is set to Resolved or Closed.
 
 ## Consequences
 
@@ -270,9 +299,9 @@ ticket's `spam` flag; that is that tool's RFC, not this one.
 - **Not covered:** hostile code in the process (as T-050); a production
   automation fired by a correct write (as for an agent), including one
   that reroutes or notifies on a custom field any write tool set; the
-  requester notified by Freshdesk on a status change (question 6), until
-  the owner answers it; hidden fields
-  on input (OD-1).
+  requester notified by Freshdesk when `update_ticket` sets Resolved or
+  Closed (allowed by the owner, question 6; the tool's description says
+  so); hidden fields on input (OD-1).
 
 ## Alternatives considered
 
@@ -331,3 +360,14 @@ payload built by the core from a closed key set (invariant 6); custom
 fields named as fail-open and the requester's status notifications put
 to the owner (questions 4 and 6); "Not covered" widened to every write
 tool.
+
+Acceptance, 2026-11-25: the owner's answers above are decisions, not
+review fixes, so no third `rfc-reviewer` round was opened. In the commit
+that makes this RFC Active: AGENTS.md rule 1, SPEC §9's safety-core
+sentence and `/decompose`'s step 4 name the write path; T-064's
+acceptance line in `docs/tasks/PLAN.md` drops "AGENTS.md rule 1 and SPEC
+§9 name the core" (done here) and names `add_note`'s private-only entry
+point. SPEC changes left for `/decompose M2`: §8.2 and §9's `add_note`
+rows (private only in `write`; public notes in `send`), §8.2's
+`update_ticket` purpose (Resolved and Closed may notify the requester),
+§13's M2 wording (after the 2026-11-26 check).

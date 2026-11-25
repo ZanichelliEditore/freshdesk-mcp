@@ -3,7 +3,7 @@ Decompose a phase of `SPEC.md` §13 into session-sized tasks. Argument: the phas
 1. Read `AGENTS.md`, `docs/tasks/PLAN.md`, and the `SPEC.md` sections that the phase's acceptance criteria reference. Read `SPEC.md` §14.1 for the sizing heuristic.
 2. Use the `planner` sub-agent (read-only) to propose a decomposition. You, the main session, write the result.
 3. For each task: id in the form `T-NNN` (continue numbering), title, type (`build | spike | port | plan`), depends-on, spec sections to read (at most three), files expected to change, one-line acceptance test. Size every task to fit in about half a context window; when in doubt, split. For a task likely to outgrow a session anyway, draw its split point now, in its task file, and count it in PLAN's sizing calibration.
-4. Order tasks so that every task leaves `make quality` green, and by the project's safety core, which is: none.
+4. Order tasks so that every task leaves `make quality` green, and by the project's safety core, which is: the write path (RFC `2026-11-25-write-safety-core`).
    - Unless that answer is `none`, the safety core and its tests come before any code that could call it.
    - With `none`, an RFC that decides whether a safety core is needed comes before any task that would give the project its first genuinely dangerous capability; if the RFC adds one, it lands before that capability's first caller. `none` is an honest answer: never invent a safety core to fill the slot.
 5. Write the tasks into `docs/tasks/PLAN.md` under the phase heading, and create one `docs/tasks/<id>-<slug>.md` per task from `docs/tasks/_template.md`, with status `todo` and `Created:` from `date +%F`.
