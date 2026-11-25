@@ -4,13 +4,9 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T11:37:43+01:00`
-- **Describes commit:** `1258ea6`
-  (`1258ea6a19cde63d6644fa4ed050636012ab1d42`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45597346778
-  (workflow `quality`, ran on `1258ea6`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T12:02:50+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
 - **Current task:** T-059 `done (2026-11-25)`, a late request with no
   time left to retry is a cut, `docs/tasks/T-059-late-attempt-cut.md`
@@ -37,12 +33,22 @@
     `ZanichelliEditore` / `freshdesk-mcp` / `release.yml` / `npm`,
     publish action only). The 2-day window runs from 2026-11-25.
 
-- **Next action:** step 5, on the owner's explicit go: tag `v0.1.0` on
-  `main` (`package.json` is `0.1.0`), push it, watch `release.yml`, check
-  the provenance on npmjs.com. Then step 6 (owner: "Require two-factor
-  authentication and disallow tokens").
-  - **Owner, open:** none blocking. Accepted on 2026-11-25: T-057's
-    unreviewed scoped fixes (`ba6ea89`) and its same-second tie exception.
+- **Released (2026-11-25):** `@zanichelli/freshdesk-mcp@0.1.0` on public
+  npm, `latest`. Tag `v0.1.0` on `63cebb9`, pushed by the orchestrator on
+  the owner's explicit go. Release run:
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45599837663
+  (quality x2, gitleaks, build, publish success; dry-run skipped).
+  Provenance signed from GitHub Actions, transparency log
+  https://search.sigstore.dev/?logIndex=4100091271. Checked:
+  `npm view` latest `0.1.0`, license MIT, bin `freshdesk-mcp`;
+  `npx -y @zanichelli/freshdesk-mcp@0.1.0 --version` prints `0.1.0`.
+
+- **Next action:**
+  - **The owner:** RFC step 6, npm package settings, Publishing access,
+    "Require two-factor authentication and disallow tokens".
+  - Then `/pickup` by PLAN's rule (still `proposed`: T-041, T-052,
+    T-049; M2 gates T-040, T-014). README examples still run unpinned
+    (`docs/improvements.md` entry `03561f8`).
 
 - **Read before anything else:**
   `docs/rfc/active/2026-11-25-release-on-npm.md` steps 5–6.
