@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T16:58:57+01:00`
-- **Describes commit:** `<hash>` (the T-066 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled by the stamp>`.
+- **Describes commit:** `8d0aa8f` (the T-066 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45650306886
+  (workflow `quality`, ran on `8d0aa8f`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-066 (a search cursor holds the second and the ids
   written in it) `done (2026-11-25)`. RFC
