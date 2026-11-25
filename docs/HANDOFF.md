@@ -4,13 +4,9 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T10:26:01+01:00`
-- **Describes commit:** `1afbd08`
-  (`1afbd0873ad0bec6095787277664eec27d8860ba`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** red (see Known red),
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45585485882
-  (workflow `quality`, ran on `1afbd08`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T10:31:58+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
 - **Current task:** T-057 `done (2026-11-25)`, `export_tickets` pages
   (`max_tickets`, cursor, one file per call),
@@ -18,7 +14,11 @@
   (status), `c9f2b3d` (build), `97709eb` (full-round fixes: search cursor
   by lowest id written, no cursor without progress, search budget check),
   `ba6ea89` (scoped list A fixes: budget and time checks on step-back
-  pages; id order checked fail-closed), `fdc1057` (done). Built by a
+  pages; id order checked fail-closed), `fdc1057` (done), `c23a682`
+  (deterministic SCAN_START_MS thread test: CI was red on `1afbd08`,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45585485882,
+  quality (24) `expected 2 to be 3`; the fake clock counted real I/O as
+  time, a T-037 test; fixed by faking `Date` only). Built by a
   builder agent under the orchestrator.
   - **Measured (orchestrator, real account, GET, 2026-11-25):** search
     results come back in the same order on repeated calls, sorted by
@@ -68,7 +68,7 @@
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `fdc1057`:
+  orchestrator on `fdc1057`; the builder on `c23a682` (2565 tests):
   - vitest "Test Files 39 passed (39)", "Tests 2565 passed (2565)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
