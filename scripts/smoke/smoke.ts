@@ -37,6 +37,11 @@
 //
 // `runCore` (`make smoke-core`, T-039, ./core.ts) is the fourth: every `core`
 // tool through the server in process, over this client.
+//
+// `runOrderProbe` (`make smoke-order-probe`, T-063) is the fifth: whether
+// search's order on one UTC day is the pair export_tickets' cursor resumes
+// on, under the same rules; it prints the date, counts and yes/no. Exit code
+// 1 when a page fails (its code printed), 0 otherwise.
 
 import type { Dispatcher } from "undici";
 import {
@@ -50,6 +55,7 @@ import {
 import { RateLimiter } from "../../src/client/rate-limit.js";
 import { listAgents } from "../../src/client/resources/agents.js";
 import { listGroups } from "../../src/client/resources/groups.js";
+import { MAX_SEARCH_PAGE, SEARCH_PER_PAGE } from "../../src/client/resources/search.js";
 import type { ListResult } from "../../src/client/resources/list-all.js";
 import { listTicketFields } from "../../src/client/resources/ticket-fields.js";
 import { type Config, ConfigError, loadConfig } from "../../src/config.js";
@@ -956,12 +962,112 @@ export async function runDateProbes(
   return 0;
 }
 
-export type Mode = "report" | "probes" | "dates" | "core";
+// ---------------------------------------------------------------------------
+// T-063's order probe (`make smoke-order-probe`): export_tickets resumes a
+// search read after the pair (created_at, id) of the last ticket written,
+// taking search's order to be created_at descending, then id descending
+// (T-057 measured only that ids and created_at agreed on a sample). One UTC
+// day's search results, every page (at most MAX_SEARCH_PAGE), each result
+// set beside the one before it. Printed: the date, counts and yes/no; never
+// an id, a created_at value or any other ticket value.
+
+/** The probed day: `value` when it is a UTC date as YYYY-MM-DD, yesterday (UTC) when absent or empty. */
+export function orderDay(value: string | undefined, now: number): string | undefined {
+  if (value === undefined || value === "") return day(now - DAY_MS);
+  if (!/^\d{4}-\d\d-\d\d$/.test(value)) return undefined;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return !Number.isNaN(time) && day(time) === value ? value : undefined;
+}
+
+/** A result's place in the pair order; `undefined` when its created_at or id does not read. */
+function orderKey(item: unknown): { second: number; id: number } | undefined {
+  if (!isRecord(item)) return undefined;
+  const time = typeof item.created_at === "string" ? Date.parse(item.created_at) : Number.NaN;
+  const id = positiveId(item.id);
+  return Number.isNaN(time) || id === undefined
+    ? undefined
+    : { second: Math.floor(time / 1000), id };
+}
+
+/** The order probe, one line each to `out`. Returns 0 when every page was read, 1 when one failed. */
+export async function runOrderProbe(http: SmokeClient, out: Out, d: string): Promise<number> {
+  out(
+    "order probe: GET only; the date, counts and yes/no, no names, ids or times. Keep this output in docs/private/account-facts.md (gitignored); copy only these lines into tracked files.",
+  );
+  const name = `probe search_order ${d}`;
+  // One day, as export_tickets asks it (`>` and `<` keep the day given, T-055).
+  const query = `created_at:>'${d}' AND created_at:<'${d}'`;
+  const keys: ({ second: number; id: number } | undefined)[] = [];
+  let total: number | undefined;
+  let pages = 0;
+  for (let n = 1; n <= MAX_SEARCH_PAGE; n++) {
+    const result = await http.requestWithRetry({ ...search(query, { page: n }), method: "GET" });
+    pages += 1;
+    if (!result.ok) {
+      out(`${name}: ${failure(result.error)}`);
+      return 1;
+    }
+    const body = result.body;
+    if (!isRecord(body) || !Array.isArray(body.results)) {
+      out(`${name}: not a search body`);
+      return 1;
+    }
+    const results: unknown[] = body.results;
+    if (n === 1 && typeof body.total === "number" && Number.isSafeInteger(body.total)) {
+      total = body.total;
+    }
+    keys.push(...results.map(orderKey));
+    if (results.length < SEARCH_PER_PAGE || n * SEARCH_PER_PAGE >= (total ?? 0)) break;
+  }
+
+  let pairs = 0;
+  let rises = 0;
+  let disagree = 0;
+  let shared = 0;
+  let notFalling = 0;
+  keys.forEach((key, i) => {
+    const before = i === 0 ? undefined : keys[i - 1];
+    if (key === undefined || before === undefined) return;
+    pairs += 1;
+    if (key.second > before.second) rises += 1;
+    if (key.second === before.second) {
+      shared += 1;
+      if (key.id >= before.id) notFalling += 1;
+    } else if (key.second < before.second !== key.id < before.id) {
+      disagree += 1;
+    }
+  });
+  const unreadable = keys.filter((key) => key === undefined).length;
+  out(
+    `${name}: results ${total ?? "?"}, read ${keys.length}, pages read ${pages} (cap ${MAX_SEARCH_PAGE}), unreadable created_at or id ${unreadable}`,
+  );
+  out(`${name}: neighbouring pairs ${pairs}, created_at rising between neighbours ${rises}`);
+  out(
+    `${name}: id order agrees with created_at order: ${yes(disagree === 0)} (neighbouring pairs that disagree ${disagree})`,
+  );
+  out(
+    `${name}: neighbouring pairs sharing a created_at second ${shared}; within a shared created_at second, ids fall: ${yes(notFalling === 0)} (pairs whose ids do not fall ${notFalling})`,
+  );
+  out(
+    `${name}: search's order is created_at, then id, both descending: ${yes(pairs > 0 && rises === 0 && notFalling === 0 && unreadable === 0)}`,
+  );
+  out("order probe: done");
+  return 0;
+}
+
+export type Mode = "report" | "probes" | "dates" | "core" | "order";
+
+/** The smoke run's options: `core`'s, and the order probe's day (`--day`). */
+export interface SmokeOptions extends CoreOptions {
+  /** `--day` as given; undefined or empty for yesterday (UTC). */
+  day?: string;
+}
 
 /**
  * Loads the configuration from `env` as the server does and runs the report
  * (or, in `probes` mode, T-022's probes; in `dates` mode, T-055's; in `core`
- * mode, T-039's run of every `core` tool, with `options`).
+ * mode, T-039's run of every `core` tool, with `options`; in `order` mode,
+ * T-063's order probe of `options.day`).
  * A configuration that cannot be loaded prints one fixed line: its message
  * may quote the team file's path. Any other error is thrown.
  */
@@ -970,7 +1076,7 @@ export async function smoke(
   dispatcher: Dispatcher,
   out: Out,
   mode: Mode = "report",
-  options: CoreOptions = {},
+  options: SmokeOptions = {},
 ): Promise<number> {
   if (env.FRESHDESK_HOST_OVERRIDE) {
     out(
@@ -981,6 +1087,11 @@ export async function smoke(
   const days = parseDays(options.days);
   if (mode === "core" && days === undefined) {
     out(`config: fail (--days takes a whole number of days, 1 to 366)`);
+    return 1;
+  }
+  const orderAt = orderDay(options.day, options.now ?? Date.now());
+  if (mode === "order" && orderAt === undefined) {
+    out("config: fail (--day takes a UTC date as YYYY-MM-DD)");
     return 1;
   }
   // In core mode every request is counted at the dispatcher, retries included.
@@ -1009,6 +1120,7 @@ export async function smoke(
   }
   if (mode === "core") return runCore(config, http, () => requests, out, days!, options);
   if (mode === "dates") return runDateProbes(http, out);
+  if (mode === "order") return runOrderProbe(http, out, orderAt!);
   return mode === "probes" ? runProbes(http, out) : runSmoke(http, out);
 }
 
@@ -1018,7 +1130,7 @@ export async function main(
   dispatcher: Dispatcher,
   out: Out,
   mode: Mode = "report",
-  options: CoreOptions = {},
+  options: SmokeOptions = {},
 ): Promise<number> {
   try {
     return await smoke(env, dispatcher, out, mode, options);

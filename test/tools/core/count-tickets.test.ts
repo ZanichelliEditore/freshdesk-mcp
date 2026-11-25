@@ -417,6 +417,31 @@ describe("count_tickets: each ticket once, the group cap, shared names", () => {
     expect(result.groups).toEqual([{ values: { Status: "Open" }, count: 44 }]);
   });
 
+  // T-063: export_tickets' search position changed; count_tickets reads the same way and must not.
+  it.each([
+    [
+      "ids and created_at in different orders",
+      [
+        ticket(9001, { created_at: "2026-01-02T10:00:00Z" }),
+        ticket(4000, { created_at: "2026-01-02T09:00:00Z" }),
+        ticket(9000, { created_at: "2026-01-02T08:00:00Z" }),
+      ],
+    ],
+    [
+      "a result missing created_at (the period's guard drops it)",
+      [ticket(4303), ticket(4302, { created_at: undefined }), ticket(4301), ticket(4300)],
+    ],
+  ])("%s: counted as before, 3, not truncated", async (_what, results) => {
+    const { session } = await warm();
+    reply(searchPath(PERIOD_QUERY), found(results));
+    const result = output(
+      await callTool(session, TOOL, { group_by: ["Status"], created_between: PERIOD }),
+    );
+    expect(result.total).toBe(3);
+    expect(result.groups).toEqual([{ values: { Status: "Open" }, count: 3 }]);
+    expect(result).not.toHaveProperty("truncated");
+  });
+
   it("past GROUP_CAP groups: the largest shown, groups_not_shown and truncated: true", async () => {
     const { session } = await warm();
     // 210 tickets: units 0 on six of them, then 204 other values, one each: 205 groups.

@@ -303,11 +303,22 @@ T-057's choices (2026-11-25): search answers by `created_at` descending,
 then id descending, and gave the same order on two reads, not by
 `updated_at`, with no id twice (measured 2026-11-25, real account, `GET`,
 one day of 405 results, pages 1-3 read twice). So a page's position on
-search is the lowest id written and the search page that held it: the next
-call starts at that page, goes back a page while it starts below that id,
-and writes only lower ids. A ticket created in the period between calls
-(a higher id, first in the results) is left out, none is written twice, and
-none that matched at the first call is skipped unless it left the filters.
+search is the pair (`created_at`, id) of the last ticket written, the key
+search sorts by, and the search page that held it (T-063, 2026-11-25; it
+was the lowest id written, which refused a period holding a ticket with a
+higher id but an older `created_at`: phone tickets, merges, restores,
+back-dated ones). The next call starts at that page, goes back a page while
+the page starts after that pair, and writes only tickets strictly after it
+in search's order. A ticket created in the period between calls with a
+later `created_at` (first in the results) is left out; one back-dated
+before the pair is written. None is written twice, and none that matched at
+the first call is skipped unless it left the filters. The pair is one safe
+integer, `2*((id*S + rel)*10 + page-1) + 1`, `S` the period's length in
+seconds and `rel` the `created_at` second from the period's start; a pair
+too large for it (a very large id over a long period) gives no cursor
+after the file is kept: `truncated: true` and a note to narrow the period.
+Every cursor's digest binds the form, `cursor_form: 2`, so cursors given
+before T-063 are refused once, the list scan's included.
 On the list scan the position is the UTC second of the latest ticket
 written and how many created in that second were written, and the next call
 reads the list from `updated_since` one second before that second (every
@@ -317,11 +328,12 @@ A ticket updated between calls that was created before that second does not
 shift the position, as a page or offset would. Ties in that second are
 skipped by count (a second and an id do not fit one cursor position): a tie
 that entered or left the filters between calls makes one skipped or written
-twice. A cut before any row is written gives no cursor. The order measured
-cannot tell whether search sorts by `created_at` or by id (they agreed on the
-sample; an imported, back-dated ticket would set them apart), so a resumed
-read checks that ids fall strictly on every page it reads and is refused
-otherwise; a step back to an earlier page counts against the budget and the
+twice. A cut before any row is written gives no cursor. That search breaks
+`created_at` ties by id descending is not measured yet (`make
+smoke-order-probe`, T-063), so a resumed read checks that the pairs fall
+strictly, and that every `created_at` reads, on every page it reads, and is
+refused otherwise: a wrong tie-break refuses a resumed read, it never skips
+a ticket. A step back to an earlier page counts against the budget and the
 time limit (T-057 scoped round, 2026-11-25).
 - A read cut by the budget, the time limit, page 300, a later request the
   limiter refuses or a later request aborted at the call's deadline

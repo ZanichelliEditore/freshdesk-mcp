@@ -3,6 +3,24 @@
 All notable changes to `@zanichelli/freshdesk-mcp`. Versions follow semver
 and stay 0.x until milestone M4, then 1.0.0.
 
+## Unreleased
+
+- **Fixed:** `export_tickets` resumed with `next_cursor` on a period of 300
+  matches or fewer is no longer refused ("out of order") when a ticket has a
+  higher id but an older `created_at` (phone tickets, merges, restores,
+  back-dated tickets). The cursor now resumes after the last ticket
+  written as search orders it, by `created_at` and then id. A ticket created
+  between calls with a later `created_at` is left out; a back-dated one is
+  written.
+- **Changed:** cursors given by `export_tickets` before this version are
+  refused, once: "Call again without a cursor to start over". This holds for
+  both kinds of cursor, the one for 300 matches or fewer and the one for
+  larger periods. Start the export of that period again.
+- On a very long period, a ticket with a very large id cannot be held in a
+  cursor. The call keeps its file and says `truncated: true` with no
+  `next_cursor`, and a `note` asks you to export the rest in shorter
+  periods.
+
 ## 0.2.0 (2026-11-25)
 
 - The export directory is set with a command-line argument in the MCP

@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { types } from "node:util";
@@ -19,6 +27,7 @@ import {
   type DateReading,
   elapsedBand,
   main,
+  orderDay,
   probeDays,
   resolveZone,
   runDateProbes,
@@ -1708,5 +1717,138 @@ describe("smoke core: the real registry's descriptions", () => {
     }
     expect(withText).toEqual(expect.arrayContaining(["get_ticket", "get_canned_response"]));
     await server.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-063's order probe. Ids, subjects and times are invented and must not
+// appear in the output.
+
+const ORDER_DAY = "2026-11-23";
+const ORDER_QUERY = `created_at:>'${ORDER_DAY}' AND created_at:<'${ORDER_DAY}'`;
+
+/** A search result of ORDER_DAY at `time`. */
+function orderTicket(id: number, time: string) {
+  return { id, subject: `Quillmoor gasket ${id}`, created_at: `${ORDER_DAY}T${time}Z` };
+}
+
+/** 45 results in the pair order: created_at descending, ids falling within a second. */
+function inOrder() {
+  return Array.from({ length: 45 }, (_, i) =>
+    orderTicket(77100 - i, `${String(20 - Math.floor(i / 3)).padStart(2, "0")}:00:00`),
+  );
+}
+
+function orderSearch(results: unknown[], status = 200): (path: string) => Route {
+  return (path) => {
+    if (!path.startsWith("/api/v2/search/tickets"))
+      return { status: 404, body: { message: CANARY } };
+    if (status !== 200) return { status, body: { description: CANARY } };
+    const page = Number(new URL(path, ORIGIN).searchParams.get("page") ?? "1");
+    return {
+      status: 200,
+      body: { total: results.length, results: results.slice((page - 1) * 30, page * 30) },
+    };
+  };
+}
+
+async function orderProbe(route: (path: string) => Route, day: string = ORDER_DAY) {
+  serve(route);
+  const lines: string[] = [];
+  const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY };
+  const code = await main(env, mock, (line) => lines.push(line), "order", { day, now: NOW });
+  return { code, lines, out: [...lines, ...stderr].join("\n") };
+}
+
+describe("smoke order probe (T-063)", () => {
+  it("reads every page of one day's search, GET only, and answers both questions: yes", async () => {
+    const { code, lines } = await orderProbe(orderSearch(inOrder()));
+    expect(code).toBe(0);
+    expect(new Set(sent().map((call) => call.method))).toEqual(new Set(["GET"]));
+    const query = encodeURIComponent(`"${ORDER_QUERY}"`).replace(/%20/g, "+").replace(/'/g, "%27");
+    expect(paths()).toEqual([
+      `/api/v2/search/tickets?query=${query}&page=1`,
+      `/api/v2/search/tickets?query=${query}&page=2`,
+    ]);
+    expect(lines).toEqual([
+      expect.stringMatching(/^order probe: GET only;/),
+      `probe search_order ${ORDER_DAY}: results 45, read 45, pages read 2 (cap 10), unreadable created_at or id 0`,
+      `probe search_order ${ORDER_DAY}: neighbouring pairs 44, created_at rising between neighbours 0`,
+      `probe search_order ${ORDER_DAY}: id order agrees with created_at order: yes (neighbouring pairs that disagree 0)`,
+      `probe search_order ${ORDER_DAY}: neighbouring pairs sharing a created_at second 30; within a shared created_at second, ids fall: yes (pairs whose ids do not fall 0)`,
+      `probe search_order ${ORDER_DAY}: search's order is created_at, then id, both descending: yes`,
+      "order probe: done",
+    ]);
+  });
+
+  it("a back-dated ticket and ids rising within a second: both answers no", async () => {
+    const results = [
+      orderTicket(77100, "12:00:00"),
+      orderTicket(77300, "11:00:00"), // a higher id, an older created_at
+      orderTicket(77050, "11:00:00"), // falls within the second
+      orderTicket(77060, "11:00:00"), // rises within the second
+      { id: 77010, subject: "Quillmoor gasket", created_at: "soon" },
+      orderTicket(77000, "10:00:00"),
+    ];
+    const { code, lines } = await orderProbe(orderSearch(results));
+    expect(code).toBe(0);
+    expect(lines).toContain(
+      `probe search_order ${ORDER_DAY}: results 6, read 6, pages read 1 (cap 10), unreadable created_at or id 1`,
+    );
+    expect(lines).toContain(
+      `probe search_order ${ORDER_DAY}: id order agrees with created_at order: no (neighbouring pairs that disagree 1)`,
+    );
+    expect(lines).toContain(
+      `probe search_order ${ORDER_DAY}: neighbouring pairs sharing a created_at second 2; within a shared created_at second, ids fall: no (pairs whose ids do not fall 1)`,
+    );
+    expect(lines).toContain(
+      `probe search_order ${ORDER_DAY}: search's order is created_at, then id, both descending: no`,
+    );
+  });
+
+  it("prints counts and yes/no only: no id, subject, created_at value, domain or key", async () => {
+    const results = inOrder();
+    const { out } = await orderProbe(orderSearch(results));
+    for (const value of [
+      ...results.map((t) => String(t.id)),
+      ...results.map((t) => t.created_at),
+      "T20:00",
+      "Quillmoor gasket",
+      "quillmoor",
+      API_KEY,
+    ]) {
+      expect(out.toLowerCase()).not.toContain(value.toLowerCase());
+    }
+  });
+
+  it("a failed page prints its error code only and exits non-zero", async () => {
+    const { code, lines, out } = await orderProbe(orderSearch(inOrder(), 500));
+    expect(code).toBe(1);
+    expect(lines).toContain(`probe search_order ${ORDER_DAY}: fail server`);
+    expect(lines).not.toContain("order probe: done");
+    expect(out).not.toContain(CANARY);
+  });
+
+  it("a body that is not a search exits non-zero", async () => {
+    const { code, lines } = await orderProbe(() => ({ status: 200, body: { note: CANARY } }));
+    expect(code).toBe(1);
+    expect(lines).toContain(`probe search_order ${ORDER_DAY}: not a search body`);
+  });
+
+  it("probes yesterday (UTC) by default; a day not written YYYY-MM-DD is refused, nothing sent", async () => {
+    expect(orderDay(undefined, NOW)).toBe("2026-11-23");
+    expect(orderDay("", NOW)).toBe("2026-11-23");
+    expect(orderDay("2026-02-30", NOW)).toBeUndefined();
+    expect(orderDay("23/11/2026", NOW)).toBeUndefined();
+    const { code, lines } = await orderProbe(orderSearch(inOrder()), "$(id)");
+    expect(code).toBe(1);
+    expect(lines).toEqual(["config: fail (--day takes a UTC date as YYYY-MM-DD)"]);
+    expect(sent()).toEqual([]);
+  });
+
+  it("its make target has a one-line description", () => {
+    const makefile = readFileSync(join(import.meta.dirname, "..", "Makefile"), "utf8");
+    expect(makefile).toMatch(/^smoke-order-probe: ## T-063's GET-only probe [^\n]+$/m);
+    expect(makefile).toMatch(/cli\.js --order --day "\$\$\{DAY:-\}"$/m);
   });
 });

@@ -4,7 +4,7 @@ ifneq ($(filter 0 1 2 3,$(firstword $(subst ., ,$(MAKE_VERSION)))),)
 $(error GNU Make 4 or later is required, this is $(MAKE_VERSION). On macOS: brew install make, then put its gnubin directory first in PATH, e.g. export PATH="$$(brew --prefix make)/libexec/gnubin:$$PATH", or run gmake instead of make)
 endif
 
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core account-patterns-range
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core smoke-order-probe account-patterns-range
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -64,6 +64,13 @@ smoke-core: ## T-039's GET-only run of every core tool (owner runs it; same env 
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --core --days "$${DAYS:-7}"
+
+# DAY reaches the shell unexpanded, as a variable: nothing in it runs.
+smoke-order-probe: export override DAY := $(value DAY)
+smoke-order-probe: ## T-063's GET-only probe of search's order on one UTC day (owner runs it; same env as the server; DAY=YYYY-MM-DD, yesterday by default): the date, counts and yes/no, no names or ids
+	npx tsc -p tsconfig.smoke.json
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --order --day "$${DAY:-}"
 
 # RANGE reaches the shell unexpanded, as a variable: nothing in it runs.
 account-patterns-range: export override RANGE := $(value RANGE)
