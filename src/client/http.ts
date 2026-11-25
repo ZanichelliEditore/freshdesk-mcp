@@ -122,8 +122,7 @@ function tooLate(): HttpResult {
     error: {
       code: "rate_limited",
       http_status: null,
-      message:
-        "Not sent: less than 10 s was left before the call's deadline, too little for a write to finish. Nothing was applied: it is safe to try again.",
+      message: `Not sent: less than ${REQUEST_TIMEOUT_MS / 1000} s was left before the call's deadline, too little for a write to finish. Nothing was applied: it is safe to try again.`,
       retryable: true,
     },
   };

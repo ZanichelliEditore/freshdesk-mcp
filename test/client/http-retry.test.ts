@@ -456,7 +456,8 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
       on(method)
         .reply(429, "", { headers: { "retry-after": "14" } })
         .times(2);
-      slow(method).times(2);
+      // Bait for a third attempt, which is refused at 14 s: never sent.
+      slow(method);
 
       const { result, ms } = await settle(http.requestWithRetry({ method, path: "/tickets" }));
 
@@ -636,7 +637,7 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     // A write's bound keeps 10 s for its attempt: it may go out up to and
     // including 20 s, and the limiter's bound is exclusive (T-014).
     it.each([["GET", 14_000], ...WRITES.map((method) => [method, 4_001] as const)] as const)(
-      "a %s whose wait would end exactly at it is refused as rate_limited, with no sleep",
+      "a %s whose wait would end at or after its bound is refused as rate_limited, with no sleep",
       async (method, bound) => {
         const acquire = vi.spyOn(limiter, "acquire");
         holdsFrom(method, 2000);
