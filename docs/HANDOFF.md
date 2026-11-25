@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T16:15:35+01:00`
-- **Describes commit:** `<hash>` (filled by the stamp commit). **CI:**
-  `<run>`.
+- **Describes commit:** `6c8d615`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the T-040 handoff commit). **CI:**
+  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45643437587
+  (workflow `quality`, ran on `6c8d615`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Release since the last handoff:** 0.3.0, by the orchestrator: commit
   `823d4eb` "Release 0.3.0: version bumped, CHANGELOG dated" (one commit
