@@ -190,7 +190,8 @@ export interface PeriodRead {
  * A position in a period's read (export_tickets' cursor, T-057): its start;
  * on search, the last ticket taken as the pair search sorts by, `second`
  * (its `created_at`, epoch seconds, UTC) and `id` (search answers by
- * created_at descending, then id descending, measured 2026-11-25; T-063:
+ * created_at descending, measured 2026-11-25, then id descending, not yet
+ * measured: `make smoke-order-probe`, T-063;
  * what is left comes strictly after that pair), and `page`, the search page
  * that held it; on the list scan, the UTC second of the latest ticket taken
  * (epoch seconds) and how many tickets created in that second were taken.

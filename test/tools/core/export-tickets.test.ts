@@ -1782,17 +1782,45 @@ describe("export_tickets: pages, max_tickets and the cursor (T-057)", () => {
       );
       const result = await callTool(session, TOOL, jsonl({ max_tickets: 2 }));
       expect(result.isError).toBe(true);
+      // positionOf's throw, not a refusal: the registry's internal error.
+      expect(result.content[0].text).toBe("The tool export_tickets failed with an internal error.");
       expect(readdirSync(out)).toEqual([]);
+    });
+
+    it("the largest id a 31-day cursor holds: next_cursor given, and it resumes after that ticket", async () => {
+      const { session } = await warm();
+      const tick = clock();
+      const args = jsonl({ max_tickets: 1 });
+      // The page-10 slot of the last second must stay a safe integer; computed apart from the code.
+      const top = Math.floor(((Number.MAX_SAFE_INTEGER - 1) / 2 - 9) / 10 / PERIOD_S) - 1;
+      expect(searchAt(top, 10, "2026-01-31T23:59:59Z")).toBeLessThanOrEqual(
+        Number.MAX_SAFE_INTEGER,
+      );
+      const results = () =>
+        reply(searchPath(PERIOD_QUERY), found([at(top, "10:00:00"), at(top - 1, "09:00:00")]));
+      results();
+      const first = page(await callTool(session, TOOL, args));
+      expect(first.next_cursor).toEqual(expect.any(String));
+      expect(first).not.toHaveProperty("truncated");
+      await tick();
+      results();
+      const second = page(await callTool(session, TOOL, { ...args, cursor: first.next_cursor }));
+      expect(ids(second.path)).toEqual([top - 1]);
+      expect(second).not.toHaveProperty("next_cursor");
     });
 
     describe("cursors refused: no request, no file", () => {
       const args = jsonl({ max_tickets: 2 });
       it.each([
         [
-          "a search cursor as 06088a6 gave it",
+          "a search cursor as 06088a6 gave it (its position reads as id 0 now)",
           () => ({ ...args, cursor: mintAs(args, 2 * (4306 * 10) + 1) }),
         ],
         ["a list cursor as 06088a6 gave it", () => ({ ...args, cursor: mintAs(args, 2) })],
+        [
+          "a valid new-form search position with no form tag",
+          () => ({ ...args, cursor: mintAs(args, searchAt(4306, 1)) }),
+        ],
         [
           "an input with its own cursor_form",
           () => ({

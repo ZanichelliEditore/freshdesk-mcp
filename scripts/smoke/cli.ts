@@ -13,13 +13,16 @@ import { main } from "./smoke.js";
 
 const agent = new Agent();
 const argv = process.argv;
-const mode = argv.includes("--core")
+// The mode is read from the flags only: a value given to --day or --days
+// (`DAY=--core`) never picks another run.
+const flags = argv.filter((_, i) => argv[i - 1] !== "--day" && argv[i - 1] !== "--days");
+const mode = flags.includes("--core")
   ? "core"
-  : argv.includes("--order")
+  : flags.includes("--order")
     ? "order"
-    : argv.includes("--dates")
+    : flags.includes("--dates")
       ? "dates"
-      : argv.includes("--probes")
+      : flags.includes("--probes")
         ? "probes"
         : "report";
 const at = argv.indexOf("--days");

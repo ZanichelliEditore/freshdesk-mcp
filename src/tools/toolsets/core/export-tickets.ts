@@ -71,7 +71,9 @@
 //     refused, once, as one of another call). A position is 0, the start;
 //     odd, a search position; even, a list one (`Resume` in
 //     count-tickets.ts). Search answers by `created_at` descending, then id
-//     descending, the same order on two reads (measured 2026-11-25, real
+//     descending, the same order on two reads (the id tie-break within a
+//     `created_at` second not yet measured: `make smoke-order-probe`;
+//     measured 2026-11-25, real
 //     account, one day of 405 results, pages 1-3 read twice): a search
 //     position is the pair (`created_at`, id) of the last ticket written
 //     and the page that held it (T-063), as one safe integer,
