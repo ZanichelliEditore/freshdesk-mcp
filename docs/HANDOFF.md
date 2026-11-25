@@ -4,72 +4,71 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-24T20:41:58+01:00`
-- **Describes commit:** `6dd1a61`
-  (`6dd1a61f7d30a35073a95b3690bac15b056ea882`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45473182373
-  (workflow `quality`, ran on `6dd1a61`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T09:07:09+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-038 `done (2026-11-24)`, package runnable with
-  `npx`, README, `docs/tasks/T-038-npx-package.md` ("Done"). Commits
-  `3dd9a63` (status), `82ab7a6` (npx package, `--version`, README),
-  `03561f8` (full-round fixes: shebang and no-map checks, npm home in tmp,
-  README host and key), `5e2547c` (lists B parked, done). Built by a
-  builder agent under the orchestrator (owner's instruction of
-  2026-11-23).
-  - **Scope-ownership evidence (acceptance clause, checked here):** on
-    2026-11-24 the project owner confirmed that the organisation owns the
-    `@zanichelli` npm scope.
-  - **Handoff check:** `package.json` still has `"private": true`
-    (line 4); T-045 removes it.
-  - **CI green on the commit:** the CI line above, filled by the stamp.
+- **Current task:** T-039 `done (2026-11-25)`, smoke over the `core`
+  tools, M1 acceptance, `docs/tasks/T-039-m1-smoke.md` ("Done"). Commits
+  `3a90531` (status), `dd87488` (`make smoke-core`), `6bcfafb` (rate-limit
+  headers in decimal form), `670dbf3` (solutions term from a folder name),
+  `42687eb` (review records, done). Built by a builder agent under the
+  orchestrator (owner's instruction of 2026-11-23).
+  - **Real runs** (orchestrator, owner's authorisation, GET only, period
+    2026-11-19..25; raw output in the gitignored
+    `docs/private/account-facts.md`): run 1 `smoke core: fail` (3
+    `rate_limited`); run 2 after `6bcfafb` ok, 2 not exercised; run 3
+    after `670dbf3`: "16 tool lines, 15 pass, 1 pass (empty), 0 not
+    exercised, 0 refused (budget), 0 fail; 81 calls", `smoke core: ok`.
+  - **Production bug found and fixed:** Freshdesk sends the rate-limit
+    counts in decimal form; `count()` read only digits, so the limiter
+    stayed at its assumed 50 calls a minute and refused after about 40
+    (`src/client/rate-limit.ts`, `6bcfafb`;
+    `test/client/http.test.ts::reads the counts in decimal form, as the
+    real account sends them`).
+  - **Owner's acceptance (2026-11-25):** `find_similar_tickets pass
+    (empty)`, by name.
 
-- **Next action:** `/pickup`. By PLAN's rule it takes **T-039** (smoke
-  over the `core` tools; M1 acceptance; needs the owner's smoke run, which
-  the orchestrator may run on the owner's authorisation of 2026-11-23,
-  GET only).
-  - **The owner, before T-045:** confirm the publisher is a member of the
-    `@zanichelli` scope (role only); choose a license (no `LICENSE`, no
-    `license` field).
-  - **The owner:** local `node` is v26.13.1 (HANDOFF at `c7e4b3c`).
+- **Next action:** `/pickup`. By PLAN's rule it takes **T-048** (RFC:
+  release on npm). Owner decisions to record there (2026-11-25): license
+  MIT; whoever is allowed to run the publish pipeline may publish (which
+  points to npm trusted publishing over OIDC). Then T-045 (release
+  workflow, `LICENSE` file, `private: true` removed), then the owner's go
+  and tag for 0.1.0, then T-057 (export pages) and T-058 (solution tree by
+  category), added to PLAN in `b622bf6`.
 
-- **Read before anything else:** PLAN row T-039 and
-  `docs/tasks/T-039-m1-smoke.md`; `scripts/smoke/`.
+- **Read before anything else:** PLAN row T-048 and its task file;
+  `docs/rfc/active/2026-11-23-adopt-runtime-stack.md:126-128`;
+  `docs/improvements.md` entries `82ab7a6`, `03561f8` (stale `dist/`,
+  pinned version).
 
 - **Reviews:**
-  - **Full round** on `cff5d24..82ab7a6`, R1 = `82ab7a6`. The four quotes
-    matched for all three. compliance: Wireframes `none`. code-reviewer: 3
-    Medium (shebang untested; README's `FRESHDESK_HOST_OVERRIDE` text
-    wrong; the Gate's publisher half unrecorded), 3 Low, info.
-    security-reviewer: 1 Medium (a pack from a working tree ships a stale
-    `dist/`, parked for T-045), 2 Low, 1 info. Fixed in `03561f8` or parked
-    (`docs/improvements.md`, entry `82ab7a6`).
-  - **Scoped round** on `82ab7a6..03561f8`. The four quotes matched for
-    all three; list A empty for all three. Lists B parked, entry
-    `03561f8`. The code-reviewer made one Bash call (`ls -a` of the repo
-    root, no write), against rule 8; its findings are unaffected. The
-    orchestrator re-ran `make quality` on `5e2547c` (exit 0).
+  - **Full round** on `46f7610..670dbf3`, R1 = `670dbf3`. The four quotes
+    matched for all three. compliance: Wireframes `none`. security: no
+    High or Medium; 1 Low (`DAYS` injection untested: the orchestrator
+    probed `make smoke-core DAYS='$(shell touch …)'` and
+    `DAYS='$$(touch …)'`, no file created), 2 info. code-reviewer: no
+    High; 5 Medium (records and scope: recorded in `42687eb`), 7 Low
+    (parked, `docs/improvements.md` entry `670dbf3`). The code-reviewer
+    made one Bash call (`git grep`, errored, no output), against rule 8.
+  - No scoped round: no code changed after R1.
 
-- **Proposed plan changes:** none new. Still `proposed`: T-041 (can be
-  sized), T-052, T-049.
+- **Proposed plan changes:** T-057 and T-058 added (`b622bf6`, re-plan
+  note in PLAN). Still `proposed`: T-041, T-052, T-049.
 
 - **Open doubts (owner):**
-  - **T-038:** publisher membership of the scope; license; T-045 must
-    publish from a fresh CI build (task file "Open doubts").
-  - **T-037, needs your decision:** one call exports about 4,000 tickets,
-    or about 40 with their threads (30 s call deadline); SPEC §7.2's
-    2,000-with-conversations example does not fit one call.
+  - **T-039:** `list_solution_tree` reaches no article on this account
+    (T-058); a reserve refusal prints `fail rate_limited`.
+  - **T-038:** T-045 must publish from a fresh CI build.
   - **Earlier, still open for you:** see HANDOFF at `f1dde79` and
     `41de8bc`.
 
-- **Dead ends:** none this task.
+- **Dead ends:** none.
 
 - **Known red:** none.
 
 - **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `5e2547c`:
-  - vitest "Test Files 39 passed (39)", "Tests 2495 passed (2495)";
+  orchestrator on `b622bf6`:
+  - vitest "Test Files 39 passed (39)", "Tests 2528 passed (2528)";
   - `tools/checks` "Ran 54 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
