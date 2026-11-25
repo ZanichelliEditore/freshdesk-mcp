@@ -19,17 +19,20 @@
   Safety core is now **the write path**: AGENTS.md rule 1, SPEC §9,
   `.claude/commands/decompose.md` step 4.
 
-- **Next action:** `/decompose M2`, which awaits the owner's go (not run
-  in this session). It must reword SPEC §8.2/§9/C4's `add_note` rows and
-  §8.2's `update_ticket` purpose (see `docs/improvements.md` entries
-  `84dd7aa`), and size T-064 and T-065.
+- **Next action:** `/pickup` takes T-066 (search cursor: the second and
+  the ids written in it; `docs/tasks/T-066-search-cursor-tie-ids.md`),
+  planned in a worktree and merged by the orchestrator after this handoff
+  (2026-11-25). Then `/decompose M2`, which awaits the owner's go. It must
+  reword SPEC §8.2/§9/C4's `add_note` rows and §8.2's `update_ticket`
+  purpose (see `docs/improvements.md` entries `84dd7aa`), and size T-064
+  and T-065.
 
 - **Owner actions:**
   - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26:
     settles SPEC §13's M2 wording (as proposed, or (a) or (b) in the RFC)
     before M2's first real test.
-  - T-063's order probe: `make smoke-order-probe DAY=2026-11-23`; keep the
-    output in `docs/private/account-facts.md`.
+  - T-063's order probe: run by the owner 2026-11-25, output kept in
+    `docs/private/account-facts.md`; it led to T-066.
 
 - **Read before anything else:** the RFC's "Decision" and "The owner's
   decisions", then `docs/tasks/PLAN.md` M2 section.
