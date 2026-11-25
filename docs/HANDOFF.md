@@ -4,78 +4,54 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T09:43:18+01:00`
-- **Describes commit:** `e373c2e`
-  (`e373c2e4848f824e8e79d0736fbf235ed5b03f3c`), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45578904852
-  (workflow `quality`, ran on `e373c2e`; observed through the public API).
-  This file's hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T09:54:23+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-045 `doing (2026-11-25)`, release workflow,
-  `docs/tasks/T-045-release-workflow.md` ("Done" filled; "Next action"
-  open). Commits `4bf3ade` (status), `2076c9f` (`release.yml`, `LICENSE`,
-  package fields, `private: true` removed), `b3b8b07` (full-round fixes:
-  `publishConfig.provenance`, whole-block copy check, secret and
-  permission checks), `8600942` (lists B parked). Built by a builder agent
-  under the orchestrator. Decision: RFC 2026-11-25 (active).
-  - **Not yet met:** the acceptance's `workflow_dispatch` dry run observed
-    green on GitHub. `gh` is not installed here, so the orchestrator cannot
-    start it.
-  - **Checked by the orchestrator (2026-11-25):** no tag on the remote
-    (`git ls-remote --tags origin`: 0 lines); `npm view
-    @zanichelli/freshdesk-mcp`: E404. Pushing `release.yml` publishes
-    nothing: npm has no trusted publisher and the package does not exist.
+- **Current task:** T-045 `done (2026-11-25)`, release workflow,
+  `docs/tasks/T-045-release-workflow.md` ("Done", "Dry run observed").
+  Commits `4bf3ade`, `2076c9f`, `b3b8b07`, `8600942`, `3a19cc7` (dry run
+  observed, done). RFC 2026-11-25 Implemented box ticked.
+  - **Dry run:** `workflow_dispatch` on `main` (`66cb17b`), started by the
+    orchestrator with `gh` (owner logged in, 2026-11-25):
+    https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45580075912,
+    success: quality (22.19), quality (24), gitleaks, build, dry-run;
+    publish skipped.
+  - **After it:** no tag on the remote; `npm view
+    @zanichelli/freshdesk-mcp` E404.
 
-- **Next action:** finish T-045, then the first release.
-  1. **The owner or the orchestrator:** GitHub, Actions, "release", "Run
-     workflow" on `main` (or `gh workflow run release.yml --ref main`).
-     Expect quality (22.19), quality (24), gitleaks, build, dry-run green
-     and publish skipped. Record the run URL here; confirm no tag and npm
-     E404; tick the RFC's Implemented box; T-045 `done`.
-  2. **The owner, before any `v*` tag:** RFC steps 0–2: environment `npm`
-     ("Selected branches and tags", only the `v*` rule), `v*` tag ruleset,
-     `main` ruleset (its bypass list must hold the maintainers, or the
-     orchestrator's direct pushes to `main` stop).
-  3. **The owner, on the go for 0.1.0:** RFC steps 3–6 (placeholder
-     `0.0.0` by hand from an empty directory, npm trusted publisher, tag
-     `v0.1.0` within 2 days, disallow tokens).
-  4. Then T-057 (export pages) and T-058 (solution tree by category).
+- **Next action:** the first release, the owner's steps of
+  `docs/rfc/active/2026-11-25-release-on-npm.md` ("Owner's manual steps"):
+  0. repository public (it is, 2026-11-25);
+  1. environment `npm`, "Selected branches and tags", tag rule `v*` only,
+     before any `v*` tag;
+  2. `v*` tag ruleset and `main` branch ruleset, bypass list = who may
+     release (the maintainers, so direct pushes to `main` keep working);
+  3. on the go: placeholder `0.0.0` by hand from an empty directory, then
+     deprecate it (2FA, an `@zanichelli` member);
+  4. npm trusted publisher: `ZanichelliEditore` / `freshdesk-mcp` /
+     `release.yml` / environment `npm`;
+  5. within 2 days: tag `v0.1.0` on `main` (`package.json` is `0.1.0`);
+  6. then "Require two-factor authentication and disallow tokens".
+  Then `/pickup`: **T-057** (export pages), then **T-058** (solution tree
+  by category).
 
-- **Read before anything else:** the T-045 task file's "Next action";
-  `docs/rfc/active/2026-11-25-release-on-npm.md` (manual steps).
+- **Read before anything else:** the RFC's manual steps; PLAN rows T-057,
+  T-058.
 
-- **Reviews:**
-  - **Full round** on `737b262..2076c9f`, R1 = `2076c9f`. The four quotes
-    matched for all three. compliance: Wireframes `none`. security: 2
-    Medium (a laptop `npm publish` skipped CI once `private` was gone; the
-    `npm` environment can appear without its tag rule), 1 Low (new pins:
-    the orchestrator checked `upload-artifact` v7.0.2 and
-    `download-artifact` v8.0.2 with `git ls-remote`, both match), 1 info.
-    code-reviewer: 3 Medium (copy check compared only `run:` lines; secret
-    check fooled by `secrets['X']`; job-level permissions unchecked), 4
-    Low. Fixed in `b3b8b07`.
-  - **Scoped round** on `2076c9f..b3b8b07`. The four quotes matched for
-    all three; list A empty for all three. Lists B parked, entry
-    `b3b8b07`. The orchestrator re-ran `make quality` on `8600942` (exit
-    0).
+- **Reviews:** T-045's two rounds: HANDOFF at `e373c2e`. No code since.
 
 - **Proposed plan changes:** none new.
 
 - **Open doubts (owner):**
-  - **T-045:** the GitHub settings cannot be tested in the repo; after
-    0.1.0 a dry run at the same version may be refused by npm (expected);
-    `--provenance=false` typed by hand still overrides `publishConfig`
-    (accepted, RFC threat model).
+  - **T-045:** GitHub/npm settings untestable in the repo; after 0.1.0 a
+    dry run at the same version may be refused (expected); a hand-typed
+    `--provenance=false` overrides `publishConfig` (accepted).
   - **Earlier:** see HANDOFF at `d1c7efe`, `fe81a3c`, `f1dde79`.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (local Node v26.13.1), run by the
-  orchestrator on `8600942`:
-  - vitest "Test Files 39 passed (39)", "Tests 2528 passed (2528)";
-  - `tools/checks` "Ran 87 tests", OK;
-  - lint (actionlint included), format, typecheck, build and both
-    gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on `8600942` (HANDOFF at
+  `e373c2e`); `3a19cc7` changes docs only (pre-commit hooks passed).
