@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T10:43:51+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `91b6eec`
+  (`91b6eecd13bb9fb0f35b0e8c181c2956ac88fd96`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** red (see Known red),
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45588346392
+  (workflow `quality`, ran on `91b6eec`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-058 `done (2026-11-25)`, `list_solution_tree`
   takes an optional `category`,
