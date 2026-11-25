@@ -11,7 +11,7 @@ The export directory is set in the MCP client's configuration as a
 command-line argument, `--export-dir <path>`, in the server's `args` (owner's
 request, 2026-11-25, option 1). `FRESHDESK_EXPORT_DIR` stays as a fallback
 for 0.1.0 users; the flag wins when both are given. Released as 0.2.0.
-Decided in `docs/rfc/proposed/2026-11-25-export-dir-flag.md`; no code is
+Decided in `docs/rfc/active/2026-11-25-export-dir-flag.md`; no code is
 written before that RFC is Active.
 
 ## In scope
@@ -68,8 +68,8 @@ written before that RFC is Active.
   `test/tools/core/export-tickets.test.ts`, `test/package.test.ts`
 - `README.md`, `SPEC.md`, `CHANGELOG.md`, `package.json`,
   `package-lock.json`, `docs/architecture/overview.md`
-- `docs/rfc/proposed/2026-11-25-export-dir-flag.md` (moves to `active/` by
-  `make rfc-sync` once the owner approves)
+- `docs/rfc/active/2026-11-25-export-dir-flag.md` (Active by the owner's
+  approval, 2026-11-25; its Implemented box ticked by the build)
 
 ## Wireframes
 `none`

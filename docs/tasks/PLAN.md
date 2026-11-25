@@ -266,7 +266,7 @@ On 2026-11-25 the orchestrator added T-057 (owner's request: the caller asks for
 
 On 2026-11-25 the orchestrator added T-059 by the owner's go ("fix now, before the first release", 2026-11-25): a later request of `count_tickets` or `export_tickets` that fails `network` with no time left to retry before the 30 s deadline failed the call instead of cutting it (found while fixing CI in `1d51e20`, `docs/journal.md`).
 
-On 2026-11-25 the orchestrator added T-060 by the owner's request (2026-11-25): the export directory is set in the MCP client's configuration as a command-line argument (`--export-dir`, the owner's option 1), with `FRESHDESK_EXPORT_DIR` kept as a fallback (orchestrator's default, open to the owner in the RFC); released as 0.2.0. Its RFC (`docs/rfc/proposed/2026-11-25-export-dir-flag.md`) is approved before any code.
+On 2026-11-25 the orchestrator added T-060 by the owner's request (2026-11-25): the export directory is set in the MCP client's configuration as a command-line argument (`--export-dir`, the owner's option 1), with `FRESHDESK_EXPORT_DIR` kept as a fallback (orchestrator's default, open to the owner in the RFC); released as 0.2.0. Its RFC (`docs/rfc/active/2026-11-25-export-dir-flag.md`) is approved before any code.
 
 ### Not sized
 
