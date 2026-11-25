@@ -4,56 +4,63 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T13:03:28+01:00`
-- **Describes commit:** `74f6eb0`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45610210624
-  (workflow `quality`, ran on `74f6eb0`; observed with `gh api`, the public
-  API's `head_sha` filter returned no run). This file's hash and CI line
-  arrive in the commit right after it.
+- **Written:** `2026-11-25T13:21:50+01:00`
+- **Describes commit:** see the stamp commit right after it (hash and CI
+  arrive there).
 
-- **Current task:** T-060 `done (2026-11-25)`, and **0.2.0 released**
-  (2026-11-25, owner's go): `f3c53e0` dates CHANGELOG 0.2.0, `quality`
-  green on it
-  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45607931030);
-  tag `v0.2.0` on `f3c53e0`; `release` green, publish job success
-  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45608954525);
-  npm `latest` = `0.2.0`, `npx -y --prefer-online
-  @zanichelli/freshdesk-mcp@0.2.0 --version` printed `0.2.0`. See
-  `docs/tasks/T-060-export-dir-flag.md` ("Done", last bullet).
+- **Current task:** T-046 `done (2026-11-25)`: `docs/tool-catalogue.md`,
+  21 active tools (SPEC §8.2) and 99 catalogue tools (SPEC §8.3), one line
+  each for `discussions`, `surveys`, `threads`; navigation line in
+  `docs/architecture/overview.md`. Commits `9f0ebaa`, `660d5c7`,
+  `4fdaf66`. Per-resource counts: `docs/tasks/T-046-tool-catalogue.md`
+  ("Done").
 
-- **Next action:** `/pickup` takes T-046 (tool catalogue, `plan`, first
-  `todo` with dependencies done); the owner may pick T-040 or T-014 (M2
-  gates) instead.
+- **Next action:** `/pickup` takes T-040 (RFC: safety core and per-tool
+  writable fields, `plan`, first `todo` with dependencies done); the owner
+  may pick T-014 instead. Both are M2 gates; every M1 row is `done`.
 
-- **Read before anything else:** `docs/tasks/T-046-tool-catalogue.md`;
-  `docs/tasks/PLAN.md` M2 section (gates T-040, T-014).
+- **Read before anything else:** `docs/tasks/PLAN.md` M2 section;
+  `docs/tasks/T-040-rfc-write-safety.md`.
 
-- **Reviews:** full round, R1 = `f3c53e0`, range `af6fe77..f3c53e0` (one
-  line, `CHANGELOG.md`), diff file with quotes checked for all three:
-  - `code-reviewer`: 1 Low, HANDOFF stale on the release: resolved by this
-    handoff. Its caveat (a test asserting `(unreleased)`) dismissed:
-    `make quality` and the `release` run's quality jobs passed on
-    `f3c53e0`.
-  - `security-reviewer`: no findings.
-  - `compliance-reviewer`: wireframes `none`, complete.
-  - No scoped round: no fix changed a mechanism.
+- **Reviews:**
+  - Pre-check (not a round): the three reviewers on the uncommitted
+    working-tree diff with no diff-file envelope. `compliance-reviewer`
+    red gate (no task-file line), superseded by the full round;
+    `security-reviewer` 1 Medium (exports marked `read`, `export_tickets`
+    has `readOnlyHint: false`) and 1 Low (no marker for deletes,
+    outside-facing, privilege rows); `code-reviewer` 1 Medium (canned
+    responses have no draft state), 3 Low. All fixed in `660d5c7` except
+    two Low dismissed after a check of the API reference: products are
+    read-only and customer-satisfaction surveys exist.
+  - Full round, R1 = `660d5c7`, range `53d9370..660d5c7`, diff file with
+    quotes checked for all three:
+    - `code-reviewer`: no blocking; 3 Low: judgement lists incomplete,
+      export tools both start and read a job, Access definition sets
+      annotation policy. Fixed in `4fdaf66` (lists marked a minimum and
+      widened; exports split; definition made descriptive).
+      Satisfaction-rating label fixed too.
+    - `security-reviewer`: 2 Low (delete and outside-facing lists
+      incomplete), 1 Info (cite OD-5 for `export_tickets`). Fixed in
+      `4fdaf66`.
+    - `compliance-reviewer`: wireframes `none`, complete.
+  - No scoped round: the fixes are wording and a split of two catalogue
+    lines in a document; no mechanism changed.
 
 - **Proposed plan changes:** none.
 
-- **Open doubts (owner):** README snippets unpinned
-  (`npx -y @zanichelli/freshdesk-mcp`): npx's local cache can serve an
-  older version (seen with 0.2.0, `docs/journal.md` 2026-11-25); pin or
-  add `--prefer-online`? Step 6 of the release RFC on npm ("Require
-  two-factor authentication and disallow tokens") still open; see the
-  T-057, T-058, T-059 task files.
+- **Open doubts (owner):** `admin_write` has no line for roles, business
+  hours, products and email configs (no write endpoint); read as meeting
+  T-046's acceptance through their `admin_read` lines (task file, "Open
+  doubts"). Still open from before: README snippets unpinned
+  (`npx -y @zanichelli/freshdesk-mcp`, `docs/journal.md` 2026-11-25); the
+  release RFC's step 6 on npm (2FA, disallow tokens).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `f3c53e0` plus this session's
-  doc edits:
+- **Checkpoint:** `make quality` exit 0 on `660d5c7` and on `4fdaf66`
+  plus this session's doc edits:
   - vitest "Test Files 39 passed (39)", "Tests 2645 passed (2645)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.
