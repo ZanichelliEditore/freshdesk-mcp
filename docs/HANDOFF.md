@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T13:46:16+01:00`
-- **Describes commit:** `<hash>`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's
+- **Describes commit:** `4c36328`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45617076087
+  (workflow `quality`, ran on `4c36328`); the four "Dependabot Updates"
+  runs the push triggered also succeeded (e.g. run 45617096809, npm for
+  `@types/node`, `typescript`). This file's
   hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-052 (Dependabot ignore rules) `done (2026-11-25)`.
@@ -36,8 +40,10 @@
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
-  - Owner's action: close Dependabot PR #3; after the next weekly run,
-    confirm no `@types/node` >=23 or `typescript` >=7 is proposed (not
+  - PR #3 was closed by Dependabot itself at 2026-11-25T12:47:04Z
+    ("no longer being updated by Dependabot") after the push; nothing
+    left for the owner there. After the next weekly run, the owner
+    confirms no `@types/node` >=23 or `typescript` >=7 is proposed (not
     testable in the repo).
   - Carried: T-049's checkout guard (acceptance in PLAN and task file) was
     changed by the M1 plan's scoped round and not reviewed a third time;
