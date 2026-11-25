@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-012
 - **Created:** 2026-11-25
 
@@ -79,13 +79,40 @@ row lands.
 *Filled at `/handoff`:*
 
 ## Done
+- `5005334` (R1): `--range` mode in `tools/checks/account_patterns.py`
+  (`_commits`, `_texts_matching`, `_range_main`; shared `_patterns_problem`,
+  `_not_checked`, `_locations` with a target), `make account-patterns-range`
+  (`export override RANGE := $(value RANGE)`, `python3 -I`, `"$$RANGE"`),
+  CONTRIBUTING.md's commands. Tests: `tools/checks/test_account_patterns.py`
+  classes `RangeMatching`, `RangeBothLocales`, `RangeRefused` (every refusal
+  in the acceptance, each through `make` with `RANGE=` on the command line
+  and `test_range_text_never_runs` from the environment too).
+- `ea88db6`: review fixes: a commit whose paths match never names a file
+  (`RangeMatching::test_file_whose_path_and_content_match_is_not_named`);
+  `_text` escapes control characters
+  (`RangeMatching::test_control_characters_in_a_path_are_escaped`); tree
+  tests in both locales; `+` refspec and `&&` in CONTRIBUTING.md; limits
+  stated (symlink targets, other headers, local squash or rebase).
+- Checkout guard: built as `git rev-list --count <head> ^<base> ^HEAD`
+  equal to the range's count, not the planned "`git merge-base HEAD <head>`
+  is an ancestor of `<base>`": plain `merge-base` returns one of several
+  merge bases and could fail open. Both reviewers judged the built guard
+  sound for a slip, fail-closed and not overbuilt.
+- Smoke on this repository with the real patterns file: a range already in
+  `main` refused (exit 2, "reaches a commit of RANGE"); a dangling commit
+  made with `git commit-tree` on HEAD's tree: `commits checked: 1`, exit 0.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Under macOS `/usr/bin/make` (GNU Make 3.81) the whole Makefile fails to
+  parse at its target-specific `export override` lines (pre-existing since
+  `smoke-core`), so the target refuses before running; GNU Make 4.x is
+  assumed. Parked in `docs/improvements.md`.
 
 ## Context pressure
+ok
 
 ## Next action
+none: done.

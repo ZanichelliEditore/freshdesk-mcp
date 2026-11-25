@@ -4,58 +4,64 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T13:46:16+01:00`
-- **Describes commit:** `4c36328`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45617076087
-  (workflow `quality`, ran on `4c36328`); the four "Dependabot Updates"
-  runs the push triggered also succeeded (e.g. run 45617096809, npm for
-  `@types/node`, `typescript`). This file's
-  hash and CI line arrive in the commit right after it.
+- **Written:** `2026-11-25T14:07:49+01:00`
+- **Describes commit:** (filled by the stamp commit) **CI:** (filled by the
+  stamp commit). This file's hash and CI line arrive in the commit right
+  after it.
 
-- **Current task:** T-052 (Dependabot ignore rules) `done (2026-11-25)`.
-  Commits `88a2a6a` (change, R1) and the handoff commit (review fixes:
-  comments only). See `docs/tasks/T-052-dependabot-ignore.md`, "Done".
+- **Current task:** T-049 (maintainer's check of a commit range for
+  account values) `done (2026-11-25)`. Commits `5005334` (R1), `ea88db6`
+  (review fixes) and the handoff commit. See
+  `docs/tasks/T-049-account-patterns-range.md`, "Done".
 
-- **Next action:** `/pickup` takes T-049 (maintainer's check of a commit
-  range; next `todo` in PLAN order after T-052).
+- **Next action:** `/pickup` takes T-040 (RFC: does the first write tool
+  need a safety core; first `todo` in PLAN order, M2 gates; all M1 rows
+  are `done`).
 
-- **Read before anything else:** `docs/tasks/T-049-*.md` and the carried
-  open doubt below on its checkout guard.
+- **Read before anything else:** `docs/tasks/T-040-rfc-write-safety.md`.
 
 - **Reviews:**
-  - Full round, R1 = `88a2a6a`, range `dc97e47..88a2a6a`, diff file in
-    the handoff format; quotes (base, HEAD, stat line, trailer) checked
-    for all three.
-    - `code-reviewer`: clean; Lows: "each range is bounded" misleading
-      (reworded); security-update note was one comment above `ignore:`,
-      not in each rule's comment (moved into each rule). Docs check:
-      `grep -i dependabot` over `docs/architecture`, SPEC, README,
-      CONTRIBUTING finds nothing to sync.
-    - `security-reviewer`: none blocking; Info: same "bounded" wording
-      (fixed).
+  - Full round, R1 = `5005334`, range `a98e51e..5005334`, diff file in the
+    handoff format; quotes (base, HEAD, stat line, trailer) checked for all
+    three.
+    - `code-reviewer`: checkout guard sound (the `rev-list --count`
+      comparison is exact; the planned `merge-base` check could fail open
+      with several merge bases), not overbuilt. Medium: CONTRIBUTING's
+      fetch could leave a stale `pr-<n>` and still run (fixed: `+`, `&&`);
+      Medium: tree scan not proven in both locales (fixed: 4 tests,
+      mutation-checked). Lows: local squash/rebase unseen (documented),
+      separate dash/empty refusal (fixed), stale docstring (fixed), two
+      untested error branches (parked).
+    - `security-reviewer`: guard sound, fail-closed. Medium: a tree match
+      printed a path that can hold the value (fixed: name withheld when
+      the commit's paths match; control characters escaped). Lows: symlink
+      targets and other commit headers unscanned (documented), stale ref
+      (fixed). Probe: make 3.81 (pre-existing parse failure, parked).
     - `compliance-reviewer`: wireframes `none`, complete.
-  - No scoped round: the fixes changed YAML comments only, no mechanism.
+  - Scoped round on `5005334..ea88db6` (the fixes changed output):
+    code-reviewer and security-reviewer found nothing that falsifies
+    acceptance or fails open; 4 items parked in `docs/improvements.md`
+    ("T-049 scoped review"); compliance-reviewer: `none`, complete. No
+    third round needed.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
-  - PR #3 was closed by Dependabot itself at 2026-11-25T12:47:04Z
-    ("no longer being updated by Dependabot") after the push; nothing
-    left for the owner there. After the next weekly run, the owner
-    confirms no `@types/node` >=23 or `typescript` >=7 is proposed (not
-    testable in the repo).
-  - Carried: T-049's checkout guard (acceptance in PLAN and task file) was
-    changed by the M1 plan's scoped round and not reviewed a third time;
-    confirm it, or have T-049's own review settle it.
+  - The repo assumes GNU Make 4.x: macOS `/usr/bin/make` 3.81 fails to
+    parse the Makefile (pre-existing; parked).
+  - Owner facts recorded 2026-11-25: step 6 of RFC 2026-11-25 (npm
+    Publishing access "Require two-factor authentication and disallow
+    tokens") is done (PLAN, "Not sized"); Dependabot PR #3 is closed,
+    nothing left there.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on the handoff tree:
-  - vitest "Test Files 39 passed (39)", "Tests 2648 passed (2648)";
-  - `tools/checks` "Ran 97 tests", OK (87 before; +10 in
-    `test_dependabot_config.py`);
-  - eslint, ruff, prettier, ruff format, typecheck, build and both
-    gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on `ea88db6`'s tree (docs only
+  since):
+  - vitest "Tests 2648 passed (2648)";
+  - `tools/checks` "Ran 134 tests", OK (97 before; +37 in
+    `test_account_patterns.py`);
+  - eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
+    scans passed.
