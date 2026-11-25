@@ -89,7 +89,7 @@ The core is small. It holds these invariants and nothing else:
    limiter, so the shared budget is not doubled (SPEC §4 goal 4). The core
    holds it; `context.http` becomes a view on it that refuses any method
    but GET with nothing sent, in the type and at runtime, as the smoke
-   client does (`scripts/smoke/smoke.ts:80-84`). The schema service is
+   client does (`scripts/smoke/smoke.ts:80-90`). The schema service is
    built on that GET-only view too, so no module outside the core holds a
    client that can write.
 2. **One entry point per write tool, and a ticket body is built by
@@ -103,11 +103,14 @@ The core is small. It holds these invariants and nothing else:
    `team.toolsets` (later `send`, for its own), so a disabled toolset has
    nothing to call, by construction rather than by a check.
 4. **Notify recipients are agents, named by agent id.** `notify_emails`
-   is not a tool input: a write tool takes agent ids (or names, resolved
-   by the schema service's id → name map), and the core fetches each
-   agent's work email at write time through the agents resource (OD-8),
-   one GET per recipient, counted in `api_calls_used`. An id with no agent
-   is refused, nothing sent. The schema service keeps dropping agent
+   is not a tool input: a write tool takes agent ids, never names (the
+   model maps names to ids from `list_agents`, so no ambiguous or unlisted
+   name reaches the core), and the core fetches each agent's work email
+   at write time through the agents resource (OD-8), one GET per
+   recipient, counted in `api_calls_used`. An id with no agent is
+   refused, and so is the whole write when any recipient's lookup fails
+   (a 5xx, a timeout, `rate_limited`): nothing is sent, never a note to
+   the recipients that did resolve. The schema service keeps dropping agent
    emails (`src/schema/index.ts:29-30`); the core keeps none. Mail to
    people outside Freshdesk is `forward_ticket`'s, in `send`, with its
    allow-list (SPEC §8.2, §9).
@@ -116,6 +119,11 @@ The core is small. It holds these invariants and nothing else:
    flag is absent (SPEC §9's `add_note` row, moved into the core).
    `hand_off_draft`'s note is always private: its entry point has no
    `private` input, so a "DRAFT REPLY" can never reach the requester.
+6. **The core builds every note payload itself, from a closed key set:**
+   the body, `private` and the resolved notify addresses. A tool cannot
+   pass any other key the notes endpoint takes (`user_id`, which shows
+   the note as another person's; `incoming`, which shows it as the
+   requester's; attachments); nothing else is sent.
 
 Each refusal is a `validation` error, `http_status: null`, with a
 per-field entry where a field is the cause, like `ticketInput`'s today.
@@ -132,7 +140,7 @@ Two `proposed` rows build it before any write resource (PLAN, M2):
 
 - **The write path:** the core holding the one client, the GET-only
   `context.http` view, one entry point per write tool built only when
-  `write` is enabled, invariants 4 and 5, and the lint entries that keep
+  `write` is enabled, invariants 4 to 6, and the lint entries that keep
   the core's client out of `src/tools/**`.
 - **The allow sets:** the table, and `ticketInput` with the allow set
   required (no default, like `readCursor`'s `maxPosition`, T-053).
@@ -222,9 +230,18 @@ ticket's `spam` flag; that is that tool's RFC, not this one.
 3. M2's "C8 (new tickets)": this RFC reads it as categorising newly
    arrived tickets, with no create tool in M2. Is that the intent?
 4. The default `product` field is in no set; C1's product is read here as
-   the custom nested field. And `categorize_tickets` may set every custom
-   field, not a named list of category fields. Are both right?
+   the custom nested field. And `update_ticket` and `categorize_tickets`
+   may set every custom field, including one an admin adds later: that is
+   fail-open for custom fields, unlike the default fields. Accept it, or
+   fix `categorize_tickets` (the bulk tool) to a named list of category
+   fields in the core table?
 5. After the 2026-11-26 check: the wording as written, or (a) or (b).
+6. `update_ticket` may set status, and Freshdesk's built-in requester
+   notifications (not automation rules), on by default, mail the requester
+   when a ticket is Resolved or Closed, and a satisfaction survey may follow;
+   the owner's test covered Open → Pending → Open only. Keep Resolved and
+   Closed out of `update_ticket`'s values, or allow them and say in its
+   description that the requester may be notified?
 
 ## Consequences
 
@@ -251,7 +268,9 @@ ticket's `spam` flag; that is that tool's RFC, not this one.
   `categorize_tickets` cannot close or reroute in bulk.
 - **Not covered:** hostile code in the process (as T-050); a production
   automation fired by a correct write (as for an agent), including one
-  that reroutes on a custom field a bulk categorisation set; hidden fields
+  that reroutes or notifies on a custom field any write tool set; the
+  requester notified by Freshdesk on a status change (question 6), until
+  the owner answers it; hidden fields
   on input (OD-1).
 
 ## Alternatives considered
@@ -303,3 +322,11 @@ named `notify_emails`, and the schema service's client was unnamed; both
 fixed (the schema service is built on the GET-only view). Two items
 parked in `docs/improvements.md` for `/decompose M2`: an ambiguous or
 unlisted agent name, and a deactivated agent's id. No third round.
+
+Handoff review (`code-reviewer`, `security-reviewer`), 2026-11-25, on
+the draft above: agent ids only (names dropped, which closes the first
+parked item); a failed recipient lookup refuses the whole write; the note
+payload built by the core from a closed key set (invariant 6); custom
+fields named as fail-open and the requester's status notifications put
+to the owner (questions 4 and 6); "Not covered" widened to every write
+tool.
