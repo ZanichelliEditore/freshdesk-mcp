@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-25T15:53:26+01:00`
-- **Describes commit:** the T-063 handoff commit (this file's hash and CI
-  line arrive in the stamp commit right after it).
+- **Describes commit:** `52e275b`, pushed to
+  `ZanichelliEditore/freshdesk-mcp` (the T-063 handoff commit). **CI:**
+  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45639319386
+  (workflow `quality`, ran on `52e275b`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-063 (a search cursor resumes on `(created_at, id)`)
   `done (2026-11-25)`. Work `a9fb027`, review fixes `9db6435`, then the
