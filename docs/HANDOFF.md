@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T12:41:39+01:00`
-- **Describes commit:** filled by the stamp commit right after this one.
-  **CI:** filled by the stamp commit.
+- **Describes commit:** `c31bdb8`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45606896974
+  (workflow `quality`, ran on `c31bdb8`; observed through the public API,
+  `gh run list` returned no run). This file's hash and CI line arrive in
+  the commit right after it.
 
 - **Current task:** T-060 `done (2026-11-25)`, `--export-dir` flag,
   `docs/tasks/T-060-export-dir-flag.md` ("Done" lists commits and tests).
