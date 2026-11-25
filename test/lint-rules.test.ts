@@ -323,6 +323,24 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     ]);
   });
 
+  // RFC 2026-11-25-write-safety-core, invariant 1 (T-064): the core holds the
+  // one client; only src/tools/context.ts, which builds the context, imports it.
+  it("lists no src/core path for any place", () => {
+    const listed = [bare, ...places.flatMap((p) => [p.value, p.type ?? []])].flat();
+    expect(listed.filter((spec) => /(^|\/)core\/write-path|\.\.\/core\//.test(spec))).toEqual([]);
+  });
+
+  it.each([
+    [T0, "../core/write-path.js"],
+    [T1, "../../core/write-path.js"],
+    [T2, "../../../core/write-path.js"],
+    [TX, "../../core/write-path.js"],
+  ])("refuses in %s an import of %s, value or type", async (filePath, spec) => {
+    expect(await verdict(value(spec), filePath)).toEqual(["list"]);
+    expect(await verdict(type(spec), filePath)).toEqual(["list"]);
+    expect(await verdict(`export * from ${JSON.stringify(spec)};`, filePath)).toEqual(["list"]);
+  });
+
   it.each([
     [T0, "../config.js"],
     [T2, "../../../config.js"],

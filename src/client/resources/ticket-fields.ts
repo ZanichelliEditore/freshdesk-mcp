@@ -21,7 +21,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 
 const names = z.array(z.string());
 const choiceTree = z.union([
@@ -55,7 +55,7 @@ export type TicketFieldsResult =
 
 /** `deadline` (epoch ms) is the caller's: see `requestWithRetry`. */
 export async function listTicketFields(
-  http: HttpClient,
+  http: GetHttp,
   deadline?: number,
 ): Promise<TicketFieldsResult> {
   const result = await http.requestWithRetry({ path: "/ticket_fields" }, deadline);

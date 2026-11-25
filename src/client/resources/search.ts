@@ -32,7 +32,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import type { CostClass } from "../rate-limit.js";
 import { type Ticket, ticket } from "./tickets.js";
 
@@ -55,7 +55,7 @@ export type SearchResult =
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export async function searchTickets(
-  http: HttpClient,
+  http: GetHttp,
   query: string,
   page = 1,
   deadline?: number,

@@ -1,13 +1,17 @@
 // App context (SPEC §7.3, §10): the one place a `Config` becomes the objects
 // the tools work with. A tool takes the context, never the config.
 //
-//   - One limiter, held by the client alone: built from the team `limits`.
-//   - One schema service on that client, its TTL `limits.schema_ttl_s`.
+//   - The write path (src/core/write-path.ts; RFC 2026-11-25-write-safety-core,
+//     invariant 1) builds the one client on the one limiter, from the team
+//     `limits`, and keeps it. The context holds only its GET-only view:
+//     `http` refuses any method but GET, in the type and at runtime, with
+//     nothing sent.
+//   - One schema service on that view, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
 //     later change to the `Config` changes nothing here.
 //   - The limiter is not on the context: a tool meets it only through
-//     `http`, whose refusals come back as `rate_limited`. The client and the
+//     `http`, whose refusals come back as `rate_limited`. The view and the
 //     schema service are frozen and keep their state in private fields, so a
 //     tool's mistake or a cast cannot re-point the host, swap the limiter or
 //     drop the cache. Not claimed: hostile code in the process, which can
@@ -19,11 +23,13 @@
 //     all of src/tools/**, this file included, the global `process` (so
 //     `process.env` and `process.getBuiltinModule`), eval, `new Function`
 //     and implied eval are refused. Not refused by lint: `.constructor` on
-//     the client or the service, which reaches the class, or on any
+//     the view or the service, which reaches the class, or on any
 //     function; a computed property on globalThis; a global `require`, if a
 //     build ever exposed one (createRequire from node:module is not listed,
 //     so it is refused as an import); a re-export through a module
 //     outside src/tools/; a symlink under src/tools/ or under a listed path.
+//     src/core/ is on no place's list (RFC 2026-11-25-write-safety-core,
+//     invariant 1): this file is the one under src/tools/ that imports it.
 //   - `ticketOutput` with the team `fields` already given.
 //   - `exportDir`: the personal export directory as set (`--export-dir`, else
 //     FRESHDESK_EXPORT_DIR), `undefined` when unset; `export_tickets` checks
@@ -41,14 +47,15 @@
 // `reserve_pct` gets the limiter's `RangeError`.
 
 import type { Dispatcher } from "undici";
-import { HttpClient } from "../client/http.js";
-import { RateLimiter } from "../client/rate-limit.js";
+import type { GetHttp } from "../client/http.js";
 import type { Config, TeamConfig } from "../config.js";
+import { createWritePath } from "../core/write-path.js";
 import { deepFreeze, type Schema, SchemaService } from "../schema/index.js";
 import { ticketOutput } from "../schema/output.js";
 
 export interface AppContext {
-  readonly http: HttpClient;
+  /** The write path's GET-only view (src/core/write-path.ts), never the client. */
+  readonly http: GetHttp;
   readonly schema: SchemaService;
   readonly team: TeamConfig;
   /** `--export-dir`, else FRESHDESK_EXPORT_DIR, as set (unchecked); `undefined` when unset. */
@@ -59,14 +66,13 @@ export interface AppContext {
 
 export function createContext(config: Config, dispatcher: Dispatcher): AppContext {
   const team = deepFreeze(structuredClone(config.team));
-  const limiter = new RateLimiter(team.limits);
-  const http = new HttpClient({
+  const http = createWritePath({
     domain: config.domain,
     apiKey: config.apiKey,
     ...(config.hostOverride === undefined ? {} : { hostOverride: config.hostOverride }),
     dispatcher,
-    limiter,
-  });
+    limits: team.limits,
+  }).view;
   return Object.freeze({
     http,
     schema: new SchemaService(http, team.limits.schema_ttl_s),

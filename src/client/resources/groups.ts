@@ -6,7 +6,7 @@
 // `list-all.ts`.
 
 import { z } from "zod";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import { listAll, type ListResult } from "./list-all.js";
 
 const group = z.looseObject({
@@ -18,6 +18,6 @@ export type Group = z.infer<typeof group>;
 
 export type GroupsResult = ListResult<Group>;
 
-export function listGroups(http: HttpClient, deadline?: number): Promise<GroupsResult> {
+export function listGroups(http: GetHttp, deadline?: number): Promise<GroupsResult> {
   return listAll(http, "/groups", group, "groups", deadline);
 }

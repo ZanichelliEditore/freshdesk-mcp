@@ -56,7 +56,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import type { CostClass } from "../rate-limit.js";
 import { listAll, type ListResult } from "./list-all.js";
 
@@ -136,7 +136,7 @@ export type ArticleSearchResult =
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export async function listCategories(
-  http: HttpClient,
+  http: GetHttp,
   deadline?: number,
   cost?: CostClass,
 ): Promise<ListResult<SolutionCategory>> {
@@ -153,7 +153,7 @@ export async function listCategories(
 }
 
 export async function listFolders(
-  http: HttpClient,
+  http: GetHttp,
   categoryId: number,
   deadline?: number,
   cost?: CostClass,
@@ -172,7 +172,7 @@ export async function listFolders(
 }
 
 export async function listArticles(
-  http: HttpClient,
+  http: GetHttp,
   folderId: number,
   deadline?: number,
   cost?: CostClass,
@@ -191,7 +191,7 @@ export async function listArticles(
 }
 
 export async function getArticle(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   deadline?: number,
 ): Promise<ArticleResult> {
@@ -214,7 +214,7 @@ export async function getArticle(
 }
 
 export async function getCategory(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   deadline?: number,
   cost?: CostClass,
@@ -233,7 +233,7 @@ export async function getCategory(
 }
 
 export async function getFolder(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   deadline?: number,
 ): Promise<FolderResult> {
@@ -251,7 +251,7 @@ export async function getFolder(
 }
 
 export async function searchArticles(
-  http: HttpClient,
+  http: GetHttp,
   term: string,
   deadline?: number,
 ): Promise<ArticleSearchResult> {

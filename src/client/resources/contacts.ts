@@ -21,7 +21,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 
 // `z.object` strips unknown keys; the result is still built field by field.
 const body = z.object({
@@ -40,7 +40,7 @@ export type ContactResult =
   { ok: true; contact: Contact; attempts: number } | { ok: false; error: FreshdeskError };
 
 export async function getContact(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   deadline?: number,
 ): Promise<ContactResult> {

@@ -181,6 +181,28 @@ export interface PageCap {
   items?: number;
 }
 
+/** A request whose method can only be GET, or absent (RFC 2026-11-25-write-safety-core, invariant 1). */
+export type GetRequest = Omit<HttpRequest, "method"> & { method?: "GET" };
+
+/**
+ * What a reader takes: the client's surface with GET-only requests. The
+ * resource modules and the schema service take it; outside the write path
+ * (src/core/write-path.ts) it is the GET-only view, which also refuses any
+ * other method at runtime. `HttpClient` fits it, so the core can pass the
+ * full client.
+ */
+export interface GetHttp {
+  request(request: GetRequest, deadline?: number): Promise<HttpResult>;
+  requestWithRetry(request: GetRequest, callerDeadline?: number): Promise<RetryResult>;
+  paginate(
+    request: PageRequest,
+    cap: PageCap,
+    deadline?: number,
+  ): AsyncGenerator<HttpResult, PageEnd, void>;
+  reserveRefusal(): FreshdeskError | undefined;
+  reachedDeadline(error: FreshdeskError): boolean;
+}
+
 export class HttpClient {
   // Real private members, and the instance frozen at the end of the
   // constructor: the key, the dispatcher, the host, the limiter and the two

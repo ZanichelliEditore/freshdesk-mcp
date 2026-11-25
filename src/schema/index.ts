@@ -32,7 +32,7 @@
 //     list is "not loaded", not "unknown" (see output.ts).
 
 import type { FreshdeskError } from "../client/errors.js";
-import type { HttpClient } from "../client/http.js";
+import type { GetHttp } from "../client/http.js";
 import { listAgents } from "../client/resources/agents.js";
 import { listGroups } from "../client/resources/groups.js";
 import { listTicketFields, type TicketField } from "../client/resources/ticket-fields.js";
@@ -121,9 +121,9 @@ export class SchemaService {
   #cached?: { schema: Schema; loadedAt: number };
   #inFlight?: Promise<SchemaResult>;
   readonly #ttlS: number;
-  readonly #http: HttpClient;
+  readonly #http: GetHttp;
 
-  constructor(http: HttpClient, ttlS: number) {
+  constructor(http: GetHttp, ttlS: number) {
     this.#http = http;
     this.#ttlS = ttlS;
     Object.freeze(this);

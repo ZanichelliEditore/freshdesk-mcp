@@ -47,7 +47,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import type { CostClass } from "../rate-limit.js";
 import { listAll, type ListResult } from "./list-all.js";
 
@@ -95,7 +95,7 @@ export type CannedResponseResult =
   | { ok: false; error: FreshdeskError; attempts?: number };
 
 export async function listCannedFolders(
-  http: HttpClient,
+  http: GetHttp,
   deadline?: number,
   cost?: CostClass,
 ): Promise<ListResult<CannedFolder>> {
@@ -118,7 +118,7 @@ export async function listCannedFolders(
 }
 
 export async function listCannedResponses(
-  http: HttpClient,
+  http: GetHttp,
   folderId: number,
   deadline?: number,
   cost?: CostClass,
@@ -145,7 +145,7 @@ export async function listCannedResponses(
 }
 
 export async function getCannedResponse(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   deadline?: number,
 ): Promise<CannedResponseResult> {

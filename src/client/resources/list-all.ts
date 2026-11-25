@@ -21,7 +21,7 @@
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import type { CostClass } from "../rate-limit.js";
 
 export const PER_PAGE = 100;
@@ -33,7 +33,7 @@ export type ListResult<T> =
 
 /** `noun` names the list in the error message: "agents", "groups", "conversations". */
 export async function listAll<T>(
-  http: HttpClient,
+  http: GetHttp,
   path: string,
   item: z.ZodType<T>,
   noun: string,

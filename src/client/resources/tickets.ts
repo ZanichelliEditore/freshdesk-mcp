@@ -47,7 +47,7 @@
 
 import { z } from "zod";
 import type { FreshdeskError } from "../errors.js";
-import type { HttpClient } from "../http.js";
+import type { GetHttp } from "../http.js";
 import type { CostClass } from "../rate-limit.js";
 import { listAll, type ListResult, PER_PAGE } from "./list-all.js";
 
@@ -122,7 +122,7 @@ const OPTIONAL = [
 ] as const;
 
 export async function listTickets(
-  http: HttpClient,
+  http: GetHttp,
   options: ListTicketsOptions = {},
   deadline?: number,
   cost?: CostClass,
@@ -169,7 +169,7 @@ export async function listTickets(
 }
 
 export async function getTicket(
-  http: HttpClient,
+  http: GetHttp,
   id: number,
   include: readonly TicketInclude[] = [],
   deadline?: number,
@@ -193,7 +193,7 @@ export async function getTicket(
 }
 
 export function listConversations(
-  http: HttpClient,
+  http: GetHttp,
   ticketId: number,
   deadline?: number,
   cost?: CostClass,
@@ -211,7 +211,7 @@ export function listConversations(
 }
 
 export async function listConversationPage(
-  http: HttpClient,
+  http: GetHttp,
   ticketId: number,
   deadline?: number,
   cost?: CostClass,
