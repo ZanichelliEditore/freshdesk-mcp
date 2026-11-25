@@ -438,3 +438,112 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     expect(await ruleIds(code, "src/server.ts")).toEqual([]);
   });
 });
+
+// T-067 (RFC 2026-11-25-write-safety-core): src/core/resources.ts sends
+// writes on the full client, so only the core imports it. The rule covers
+// src/** and scripts/**; in src/tools/** the allow-list already refuses it
+// (and replaces this rule there), in src/tools/context.ts this rule applies.
+describe("eslint: only src/core/** imports src/core/resources", () => {
+  const RULE = "@typescript-eslint/no-restricted-imports";
+  const MESSAGE =
+    "Only src/core/** may import src/core/resources (RFC 2026-11-25-write-safety-core): it sends writes on the full client.";
+
+  async function messages(code: string, filePath: string): Promise<string[]> {
+    const [result] = await eslint.lintText(code, { filePath });
+    return (
+      result.messages
+        .filter((m) => m.ruleId === null || BANS.has(m.ruleId))
+        // The rule puts its own prefix before the message: the message is the end.
+        .map((m) =>
+          m.message.endsWith(MESSAGE)
+            ? `${m.ruleId}: ${MESSAGE}`
+            : `${m.ruleId ?? "fatal"}: ${m.message}`,
+        )
+    );
+  }
+
+  // [file, the specifier that reaches src/core/resources.ts from it]
+  const outside: [string, string][] = [
+    ["src/server.ts", "./core/resources.js"],
+    ["src/cli.ts", "./core/resources.js"],
+    ["src/client/x.ts", "../core/resources.js"],
+    ["src/client/resources/x.ts", "../../core/resources.js"],
+    ["src/schema/x.ts", "../core/resources.js"],
+    ["src/tools/context.ts", "../core/resources.js"],
+    ["scripts/smoke/write.ts", "../../src/core/resources.js"],
+    ["scripts/x.ts", "../src/core/resources.js"],
+  ];
+
+  /** Other spellings of the same module that must not pass. */
+  function spellings(spec: string): string[] {
+    const head = spec.slice(0, spec.lastIndexOf("core/"));
+    return [
+      spec,
+      spec.replace(/\.js$/, ""),
+      spec.replace(/\.js$/, ".ts"),
+      `${head}core//resources.js`,
+      `${head}core/./resources.js`,
+      `${head}core/../core/resources.js`,
+      `${head}Core/Resources.js`,
+      `${spec}/`,
+    ];
+  }
+
+  const cases = outside.flatMap(([file, spec]) =>
+    spellings(spec).map((variant) => [file, variant] as const),
+  );
+
+  it.each(cases)("refuses in %s an import of %s, value, type and re-export", async (file, spec) => {
+    for (const code of [
+      `import { x } from ${JSON.stringify(spec)};`,
+      `import type { X } from ${JSON.stringify(spec)};`,
+      `import ${JSON.stringify(spec)};`,
+      `export * from ${JSON.stringify(spec)};`,
+      `export { x } from ${JSON.stringify(spec)};`,
+    ]) {
+      expect(await messages(code, file)).toEqual([`${RULE}: ${MESSAGE}`]);
+    }
+  });
+
+  it.each(outside)("refuses in %s a dynamic import of %s", async (file, spec) => {
+    expect(await messages(`void import(${JSON.stringify(spec)});`, file)).toEqual([
+      `no-restricted-syntax: ${MESSAGE}`,
+    ]);
+  });
+
+  it.each([
+    ["src/tools/x.ts", "../core/resources.js"],
+    ["src/tools/toolsets/core/x.ts", "../../../core/resources.js"],
+  ])("refuses in %s (the allow-list) an import of %s", async (file, spec) => {
+    const found = await messages(`import { x } from ${JSON.stringify(spec)};`, file);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(
+      /^@typescript-eslint\/no-restricted-imports: .* Not on the import allow-list /,
+    );
+  });
+
+  it.each([
+    ["src/core/write-path.ts", "./resources.js"],
+    ["src/core/entries.ts", "./resources.js"],
+    ["src/core/sub/x.ts", "../resources.js"],
+    ["test/core/resources.test.ts", "../../src/core/resources.js"],
+  ])("allows in %s an import of %s", async (file, spec) => {
+    expect(await messages(`import { x } from ${JSON.stringify(spec)};`, file)).toEqual([]);
+    expect(await messages(`void import(${JSON.stringify(spec)});`, file)).toEqual([]);
+  });
+
+  it.each([
+    ["src/server.ts", "./core/write-path.js"],
+    ["src/tools/context.ts", "../core/write-path.js"],
+    ["src/client/x.ts", "./resources/agents.js"],
+    ["src/tools/context.ts", "../client/resources/tickets.js"],
+    ["scripts/smoke/smoke.ts", "../../src/client/resources/agents.js"],
+  ])("leaves in %s an import of %s alone", async (file, spec) => {
+    expect(await messages(`import { x } from ${JSON.stringify(spec)};`, file)).toEqual([]);
+  });
+
+  it("lints scripts/**: no file under it is ignored", async () => {
+    expect(await eslint.isPathIgnored("scripts/smoke/write.ts")).toBe(false);
+    expect(await eslint.isPathIgnored("scripts/smoke/smoke.ts")).toBe(false);
+  });
+});

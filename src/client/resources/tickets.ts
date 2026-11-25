@@ -61,7 +61,7 @@ export const ticket = z.looseObject({
   custom_fields: z.record(z.string(), z.unknown()),
 });
 
-const conversation = z.looseObject({
+export const conversation = z.looseObject({
   id: z.number().int(),
   user_id: z.number().int(),
   body: z.string(),

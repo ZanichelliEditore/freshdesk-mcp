@@ -1,5 +1,5 @@
 // Flat config. The toolchain is pinned in package.json (npm ci installs it).
-// test/lint-rules.test.ts proves the two RFC blocks and the src/tools/** blocks below fire.
+// test/lint-rules.test.ts proves the two RFC blocks, the core-resources block and the src/tools/** blocks below fire.
 import tseslint from "typescript-eslint";
 import toolImports from "./eslint.tool-imports.json" with { type: "json" };
 
@@ -153,6 +153,37 @@ const toolImportBlocks = [
   })),
 ];
 
+// RFC 2026-11-25-write-safety-core (T-067): src/core/resources.ts sends writes
+// on the full client, so only src/core/** imports it. Refused in the rest of
+// src/** and in scripts/**, every spelling that ends in a `core` segment then
+// `resources` (an extension, `./`, `//` or `..` between them, any case), as an
+// import, a type import, a re-export or a literal dynamic import(). In
+// src/tools/** the allow-list blocks below replace this rule and refuse it as
+// off-list; src/tools/context.ts, exempt from them, gets this one. Placed
+// before them for that reason. Not claimed: an import whose source is not a
+// literal, or a symlink.
+const coreResources = String.raw`(^|/)core/(.*/)?resources(\.[cm]?[jt]s)?/*$`;
+const noCoreResources =
+  "Only src/core/** may import src/core/resources (RFC 2026-11-25-write-safety-core): it sends writes on the full client.";
+const coreResourcesBlock = {
+  files: ["src/**", "scripts/**"],
+  ignores: ["src/core/**"],
+  rules: {
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      { patterns: [{ regex: coreResources, caseSensitive: false, message: noCoreResources }] },
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        // esquery ends a regex at its first `/`, escaped or not: `\x2F` is one.
+        selector: `ImportExpression > Literal.source[value=/${coreResources.replaceAll("/", String.raw`\x2F`)}/i]`,
+        message: noCoreResources,
+      },
+    ],
+  },
+};
+
 export default tseslint.config(
   ...tseslint.configs.recommended,
   { ignores: ["dist/", "node_modules/", "**/*.gen.*"] },
@@ -181,5 +212,6 @@ export default tseslint.config(
       ),
     },
   },
+  coreResourcesBlock,
   ...toolImportBlocks,
 );

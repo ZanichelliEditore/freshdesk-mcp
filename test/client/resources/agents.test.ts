@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient } from "../../../src/client/http.js";
 import { RateLimiter } from "../../../src/client/rate-limit.js";
-import { type AgentsResult, listAgents } from "../../../src/client/resources/agents.js";
+import {
+  type AgentResult,
+  type AgentsResult,
+  getAgent,
+  listAgents,
+} from "../../../src/client/resources/agents.js";
 import { agentPages } from "../../fixtures/agents-groups.js";
 import { type MockAgent, mockDispatcher } from "../../support/mock-dispatcher.js";
 
@@ -217,4 +222,141 @@ describe("listAgents: an HTTP failure", () => {
       http_status: 403,
     });
   });
+});
+
+// T-067 (OD-14, owner 2026-11-25): an agent not clearly active is refused by
+// its caller (T-069). Freshdesk documents `contact.active` on the agent
+// object ("Set to true if the agent is verified") and `deactivated` on
+// service accounts and the availability list: active means the first is
+// `true` and the second, when present, is `false`.
+describe("getAgent", () => {
+  const record = () =>
+    clone()[0]![0]! as Record<string, unknown> & { contact: Record<string, unknown> };
+
+  function view(id: number, body: unknown, status = 200) {
+    mock
+      .get(ORIGIN)
+      .intercept({ path: `/api/v2/agents/${id}`, method: "GET" })
+      .reply(status, body as object, { headers: JSON_TYPE });
+  }
+
+  function agent(result: AgentResult) {
+    if (!result.ok) throw new Error(`expected an agent, got ${result.error.code}`);
+    return result.agent;
+  }
+
+  it("parses id, work email and the active flag, one GET", async () => {
+    view(501, record());
+
+    const result = await getAgent(http, 501);
+
+    expect(result).toEqual({
+      ok: true,
+      agent: { id: 501, email: "quill@example.com", active: true },
+      attempts: 1,
+    });
+    expect(sentPaths()).toEqual(["/api/v2/agents/501"]);
+  });
+
+  it("keeps nothing else of the record", async () => {
+    const body = record();
+    body.signature = CANARY;
+    body.contact.name = CANARY;
+    view(501, body);
+
+    expect(JSON.stringify(await getAgent(http, 501))).not.toContain(CANARY);
+  });
+
+  const notActive: [string, (body: ReturnType<typeof record>) => void][] = [
+    ["contact.active false", (b) => void (b.contact.active = false)],
+    ["contact.active missing", (b) => void delete b.contact.active],
+    ["contact.active null", (b) => void (b.contact.active = null)],
+    ['contact.active the string "true"', (b) => void (b.contact.active = "true")],
+    ["contact.active 1", (b) => void (b.contact.active = 1)],
+    ["deactivated true", (b) => void (b.deactivated = true)],
+    ['deactivated the string "false"', (b) => void (b.deactivated = "false")],
+    ["deactivated null", (b) => void (b.deactivated = null)],
+  ];
+
+  it.each(notActive)("parses a record with %s as not active", async (_, edit) => {
+    const body = record();
+    edit(body);
+    view(501, body);
+
+    expect(agent(await getAgent(http, 501)).active).toBe(false);
+  });
+
+  it("parses a record with deactivated false and contact.active true as active", async () => {
+    const body = record();
+    body.deactivated = false;
+    view(501, body);
+
+    expect(agent(await getAgent(http, 501)).active).toBe(true);
+  });
+
+  it.each<[string, unknown]>([
+    ["null", null],
+    ["missing", undefined],
+    ["empty", ""],
+  ])("passes a %s email on as null or empty, for the caller to refuse", async (_, email) => {
+    const body = record();
+    if (email === undefined) delete body.contact.email;
+    else body.contact.email = email;
+    view(501, body);
+
+    expect(agent(await getAgent(http, 501)).email).toBe(email === "" ? "" : null);
+  });
+
+  it("is not_found on a 404", async () => {
+    view(999, { code: "not_found" }, 404);
+
+    const result = await getAgent(http, 999);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "not_found", http_status: 404 },
+      attempts: 1,
+    });
+  });
+
+  it.each<[string, (body: ReturnType<typeof record>) => unknown]>([
+    ["a record that is not an object", () => [CANARY]],
+    ["an id that is not a whole number", (b) => ({ ...b, id: CANARY })],
+    ["another agent's id", (b) => ({ ...b, id: 502 })],
+    ["no contact", (b) => ({ ...b, contact: undefined, note: CANARY })],
+    ["an email that is not a string", (b) => ({ ...b, contact: { ...b.contact, email: 7 } })],
+  ])("refuses %s as server, with no body text", async (_, edit) => {
+    view(501, edit(record()) as object);
+
+    const result = await getAgent(http, 501);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "server",
+        http_status: 200,
+        message: "Freshdesk sent an agent in an unexpected shape (HTTP 200).",
+        retryable: false,
+      },
+      attempts: 1,
+    });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
+  it.each([0, -3, 2.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, "501" as never])(
+    "refuses id %s as validation, with nothing sent",
+    async (id) => {
+      expect(await getAgent(http, id)).toEqual({
+        ok: false,
+        error: {
+          code: "validation",
+          http_status: null,
+          message: "Not sent: agent id is not a valid value.",
+          retryable: false,
+        },
+        attempts: 0,
+      });
+      expect(mock.getCallHistory()?.calls() ?? []).toHaveLength(0);
+    },
+  );
 });
