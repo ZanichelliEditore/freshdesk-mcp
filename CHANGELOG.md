@@ -3,7 +3,7 @@
 All notable changes to `@zanichelli/freshdesk-mcp`. Versions follow semver
 and stay 0.x until milestone M4, then 1.0.0.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-25)
 
 - The export directory is set with a command-line argument in the MCP
   client's `args`: `--export-dir <dir>` or `--export-dir=<dir>`.
