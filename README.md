@@ -193,6 +193,8 @@ principles).
 
 Requires [`pre-commit`](https://pre-commit.com); the command surface also calls `ruff` directly, so put it on your PATH (pipx/uv/pip).
 
+The Makefile needs GNU Make 4 or later; an older make stops at once with a message naming the fix. macOS ships GNU Make 3.81 as `/usr/bin/make`: `brew install make`, then put its `gnubin` directory first in `PATH` (`export PATH="$(brew --prefix make)/libexec/gnubin:$PATH"`), or run `gmake` instead of `make`.
+
 ```bash
 make install   # set up git hooks (once)
 make quality   # run the full local gate

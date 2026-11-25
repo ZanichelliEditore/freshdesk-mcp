@@ -8,6 +8,10 @@
 3. Make the change. Keep it surgical.
 4. Run the quality gate before committing (see the command surface in `AGENTS.md`).
 
+The command surface needs GNU Make 4 or later. On macOS, `/usr/bin/make` is
+GNU Make 3.81 and stops with a message: `brew install make`, then put its
+`gnubin` directory first in `PATH`, or run `gmake` instead of `make`.
+
 ## The `account-patterns` hook
 
 The `account-patterns` commit hook checks staged content against

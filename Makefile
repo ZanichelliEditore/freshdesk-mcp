@@ -1,3 +1,9 @@
+# GNU Make 4+ only: 3.81 (macOS /usr/bin/make) cannot parse the target-specific
+# `export override` lines below, so stop here with the fix instead.
+ifneq ($(filter 0 1 2 3,$(firstword $(subst ., ,$(MAKE_VERSION)))),)
+$(error GNU Make 4 or later is required, this is $(MAKE_VERSION). On macOS: brew install make, then put its gnubin directory first in PATH, e.g. export PATH="$$(brew --prefix make)/libexec/gnubin:$$PATH", or run gmake instead of make)
+endif
+
 .PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core account-patterns-range
 
 help: ## Show available targets
