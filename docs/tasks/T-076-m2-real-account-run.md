@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-075; the owner's time-trigger check (2026-11-26) and SPEC §13's M2 wording settled
 - **Created:** 2026-11-25
 

@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-071, T-072, T-073, T-074
 - **Created:** 2026-11-25
 
@@ -32,7 +32,7 @@ A manual script, `make smoke-write`, that the owner runs to exercise each write 
 `none`
 
 ## Acceptance
-`test/smoke-write.test.ts` (MockAgent): an untagged or spam ticket gets one GET and nothing else; a tagged ticket's write reaches MockAgent only through the core (the script imports no `HttpClient` and sets no `method`, asserted on its source); output holds no id, subject, body, domain or key; a failed write prints its code only and exits non-zero; `make help` lists `smoke-write`; `make quality` green.
+`test/smoke-write.test.ts` (MockAgent): an untagged or spam ticket gets one GET and nothing else; a tagged ticket's write reaches MockAgent only through the core's entries: `scripts/smoke/write.ts` and every `scripts/` module it imports take from `src/core/` only the entry builder, import no `HttpClient` and set no `method` (asserted on their source), and the entries are built from the team `loadConfig` loads, never from a literal toolsets list; a failed tag check (5xx, 404, timeout) or a ticket whose `tags` or `spam` field is missing refuses with nothing written; output holds no id, subject, body, domain or key; a failed write prints its code only and exits non-zero; `make help` lists `smoke-write`; `make quality` green.
 
 No split point.
 

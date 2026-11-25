@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-068
 - **Created:** 2026-11-25
 
@@ -29,7 +29,7 @@ The note entries take agent ids to notify; the core fetches each agent's work em
 `none`
 
 ## Acceptance
-`test/core/notify.test.ts` (MockAgent): ids `[3, 3, 5]` give two GETs and a note whose `notify_emails` holds the two fixture emails, `api_calls_used` counting them; each of unknown id, 5xx, timeout, `rate_limited`, null email, empty email, deactivated agent, cap + 1 ids, id 0 or non-integer refuses the whole write with no POST sent; `make quality` green.
+`test/core/notify.test.ts` (MockAgent): ids `[3, 3, 5]` give two GETs and a note whose `notify_emails` holds the two fixture emails, `api_calls_used` counting them; exactly 10 distinct ids are accepted, and 11 ids that de-duplicate to 10 are accepted; no ids sends the note with no `notify_emails` key and no GET; each of unknown id, 5xx, timeout, `rate_limited`, null email, empty email, deactivated agent, an agent record with the active flag missing or not a boolean, 11 distinct ids, id 0 or non-integer refuses the whole write with no POST sent; `make quality` green.
 
 No split point.
 

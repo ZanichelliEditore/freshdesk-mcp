@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-065; OD-4 (answered 2026-11-24)
 - **Created:** 2026-11-25
 

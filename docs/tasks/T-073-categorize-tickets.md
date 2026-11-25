@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-070, T-071
 - **Created:** 2026-11-25
 
@@ -32,7 +32,7 @@
 `none`
 
 ## Acceptance
-`test/tools/write/categorize-tickets.test.ts` (MockAgent): a preview sends GETs only and returns current → new and a `preview_id`; confirm with that id sends one PUT per ticket and a per-ticket result; confirm with a changed set or field is refused with 0 PUTs; cap + 1 items refused with nothing sent; status, group or agent in fields `field_not_writable`; a deadline or budget cut reports the rest as not attempted, and a second confirm with the same `preview_id` for those tickets only writes them; `make quality` green.
+`test/tools/write/categorize-tickets.test.ts` (MockAgent): a preview sends GETs only and returns current → new and a `preview_id`; confirm with that id sends one PUT per ticket and a per-ticket result; confirm with a ticket added or a field changed is refused with 0 PUTs; cap + 1 items refused with nothing sent; a preview cut by the call's deadline or budget lists the tickets not read as not previewed, and its `preview_id` covers only those read; status, group or agent in fields `field_not_writable`; a deadline or budget cut reports the rest as not attempted, and a second confirm with the same `preview_id` for those tickets only writes them; `make quality` green.
 
 Split point: the preview path first, the confirm path second.
 

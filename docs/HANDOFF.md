@@ -4,71 +4,70 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T16:58:57+01:00`
-- **Describes commit:** `8d0aa8f` (the T-066 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45650306886
-  (workflow `quality`, ran on `8d0aa8f`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-25T17:44:58+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by
+  the stamp commit.
 
-- **Current task:** T-066 (a search cursor holds the second and the ids
-  written in it) `done (2026-11-25)`. RFC
-  `docs/rfc/active/2026-11-25-search-cursor-tie-ids.md`, Active by the
-  owner's word (2026-11-25), commit `5bf5c8a`. Code `67b2173`; review
-  fixes in the handoff commit. Regression:
-  `test/tools/core/export-tickets.test.ts`, describe "T-066 …" >
-  "regression: a tie of 3 in one second, ids ascending, across pages 1
-  and 2" (shown failing on `dd33b08`'s `src/`). CHANGELOG "Unreleased".
+- **Current task:** `/decompose M2` (a plan session, owner's go and
+  approval of the plan as is, 2026-11-25) `done (2026-11-25)`. Plan
+  `b3d1971`; review fixes in the handoff commit. PLAN M2: T-064, T-065,
+  T-041, T-067 to T-076, all `todo (2026-11-25)`, one task file each.
+  OD-4 answered (owner's smoke run, 2026-11-24); OD-13 to OD-16 answered
+  by the owner (2026-11-25, builder's proposals). SPEC C4, §8.2
+  (`update_ticket`, `categorize_tickets`, `add_note`, public note in
+  `send`) and §9 (bulk and notes rows) reworded. T-066's RFC records the
+  owner's confirmation that the prompt-injection path stays accepted.
 
-- **Released 0.3.1** (2026-11-25, orchestrator, owner pre-authorised):
-  `b005bd0` bumps the version and dates CHANGELOG; `quality` green
-  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45650992436);
-  tag `v0.3.1` on `b005bd0`; `release` green, publish success
-  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45651149214);
-  npm `latest` = `0.3.1`, `npx -y --prefer-online
-  @zanichelli/freshdesk-mcp@0.3.1 --version` printed `0.3.1`.
-
-- **Next action:** `/decompose M2`, which awaits the
-  owner's go: it must reword SPEC §8.2/§9/C4's `add_note` rows and §8.2's
-  `update_ticket` purpose (`docs/improvements.md` entries `84dd7aa`), and
-  size T-064 and T-065.
+- **Next action:** `/pickup` T-064 (the write path holds the one client;
+  `context.http` is a GET-only view).
 
 - **Owner actions:**
-  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26
-    (settles SPEC §13's M2 wording).
-  - Confirm the RFC's threat model: the owner accepted the unkeyed
-    digest's forgery risk; the `rfc-reviewer` named a prompt-injection
-    path (a model steered by ticket text passing a forged id set). The
-    RFC records it as accepted under that word; confirm or reopen.
+  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26,
+    then SPEC §13's M2 wording (as written, (a) or (b), RFC
+    `2026-11-25-write-safety-core`). T-076 waits on it; no real-account
+    write before then (PLAN M2, owner actions).
 
-- **Read before anything else:** the RFC's "Decision" and "Threat model",
-  then `docs/tasks/PLAN.md` M2 section.
+- **Read before anything else:** PLAN.md M2 section (intro, owner
+  actions, OD-13 to OD-16), then `docs/tasks/T-064-get-only-view.md` and
+  the RFC's "Decision", invariant 1.
 
 - **Reviews:**
-  - `rfc-reviewer` on the draft: no design-changing finding; seven
-    wording findings resolved in the RFC (no second round: no mechanism
-    changed).
-  - Handoff full round R1 = `67b2173`, range `8f0d8d0..67b2173`; all
-    three quoted base, HEAD, stat line and trailer correctly. No scoped
-    round: the fixes are one added test, a test rename and wording.
-  - `code-reviewer`: no blocker. Medium: the highest valid search
-    position not shown accepted (test added). Low: stale test name
-    (renamed); regression proof not recorded (in the task's "Done");
-    the 31-id case untested under a cut (parked,
-    `docs/improvements.md`). Nits: CHANGELOG label, ticket-queries
-    wording, RFC "Implemented" box (all fixed).
-  - `security-reviewer`: no blocking finding. Low: an id ≤ 0 from
-    Freshdesk fails the call (parked, `.positive()` on the schema).
-    Info: RFC sentence "no second party" narrowed to name the
-    injection path (fixed).
+  - Full round R1 = `b3d1971`, range `1c458e9..b3d1971`; all three
+    quoted base, HEAD, stat line and trailer correctly. No scoped round:
+    the fixes tighten acceptance lines and SPEC wording to what the plan
+    and the owner's answers already decided; no code mechanism exists yet
+    to change.
+  - `code-reviewer`: High: T-070/T-073 refused a removed ticket and
+    accepted a subset (fixed: subset checks, added ticket or changed
+    field refused); SPEC §9 promised a "not attempted only" check a
+    stateless id cannot make (fixed: any subset, repeat within TTL
+    stated). Medium: T-064 type side untested (`@ts-expect-error` case;
+    split-off row a dependency of T-068); OD-14 missing-flag case, T-069
+    boundaries (10, 11 → 10, empty); T-065 schema → core import (plain
+    set); invariant 2 untested (T-071 wiring clause); preview under the
+    deadline (T-073 clause). Low: lint clauses that could not fail
+    (reworded), SPEC §8.2 categorize row, undated `todo` (dated), vague
+    "every proposal" (listed), Closed untested (added). Dismissed: the
+    T-066 RFC note belongs elsewhere (the orchestrator asked for it in
+    this session); OD-16 has no mechanical check (releases are the
+    owner's go).
+  - `security-reviewer`: Medium: T-075 could write around the core
+    (fixed: imports from `src/core` only the entry builder, entries from
+    `loadConfig`'s team, lint keeps `src/core/resources` to `src/core/**`
+    incl. `scripts/**`); subset contradiction (as above); no real-account
+    write before the check (owner-action line); invariant 2 (as above).
+    Low: missing active flag (T-067, T-069), HMAC details (T-070), view a
+    wrapper not a subclass (T-064), tag-check failures (T-075), all
+    fixed. Dismissed: the owner's confirmation recorded as relayed by the
+    orchestrator (that is the only record this session has).
   - `compliance-reviewer`: wireframes `none`.
 
 - **Proposed plan changes:** none.
 
-- **Open doubts:** the threat model's injection path (owner action
-  above). From T-040, unchecked: whether `agent-native-setup update`
-  would revert the safety-core value in `.claude/commands/decompose.md`
-  step 4; `.claude/worktrees/` is not gitignored (parked).
+- **Open doubts:** from T-040, unchecked: whether `agent-native-setup
+  update` would revert the safety-core value in
+  `.claude/commands/decompose.md` step 4; `.claude/worktrees/` is not
+  gitignored (parked).
 
 - **Dead ends:** none.
 

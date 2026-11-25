@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-041, T-068
 - **Created:** 2026-11-25
 
@@ -38,7 +38,7 @@
 `none`
 
 ## Acceptance
-`test/tools/write/update-ticket.test.ts` (MockAgent): a status/agent/custom-field change sends one PUT with ids; tags add/remove merged from the current tags; Resolved allowed; a requester or subject input refused `field_not_writable` with 0 dispatches; the description holds both sentences; `test/server.test.ts`: a team file with `write` lists `update_ticket` with `destructiveHint`, without it the tool is absent; `send` still a `ConfigError`; `make quality` green.
+`test/tools/write/update-ticket.test.ts` (MockAgent): a status/agent/custom-field change sends one PUT with ids; tags add/remove merged from the current tags; Resolved and Closed allowed; a requester or subject input refused `field_not_writable` with 0 dispatches; the description holds both sentences; `test/server.test.ts`: a team file with `write` lists `update_ticket` with `destructiveHint`, without it the tool is absent; `send` still a `ConfigError`; the wiring hands each write factory exactly its own entry point and no entries object (asserted on what each factory receives); `make quality` green.
 
 Split point: the registry wiring and `server.ts` first, the tool second.
 

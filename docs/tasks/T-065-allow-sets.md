@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo
+- **Status:** todo (2026-11-25)
 - **Depends on:** T-064
 - **Created:** 2026-11-25
 
@@ -11,7 +11,7 @@ The core holds the RFC's OD-2 table of writable fields, keyed by write entry poi
 
 ## In scope
 - `src/core/allow-sets.ts`: the four sets of the RFC's OD-2 table (`update_ticket`, `categorize_tickets`, `hand_off_draft`, `add_note`); default fields fail closed, custom fields all writable for `update_ticket` and `categorize_tickets` (owner, 2026-11-25).
-- `ticketInput(schema, input, allow)`: `allow` required (like `readCursor`'s `maxPosition`, T-053); a new code `field_not_writable` whose message names the fields the set allows.
+- `ticketInput(schema, input, allow)`: `allow` a plain field set, required, so `src/schema` does not import `src/core` (like `readCursor`'s `maxPosition`, T-053); a new code `field_not_writable` whose message names the fields the set allows.
 - Existing `ticketInput` tests re-pointed to pass a set.
 
 ## Out of scope
@@ -33,7 +33,7 @@ The core holds the RFC's OD-2 table of writable fields, keyed by write entry poi
 `none`
 
 ## Acceptance
-`test/core/allow-sets.test.ts`: the four sets equal the RFC's OD-2 table; `test/schema/input.test.ts`: per set, an allowed field is built, a field outside it gives `field_not_writable` naming the set's fields and nothing is built; `product`, `requester`, `subject`, `description`, `source` and `due_by` are refused by every set; `add_note`'s empty set refuses every field, custom included; `categorize_tickets`' set refuses status, priority, group and agent and takes any custom field; a call without a set, or with a set not in the table, throws `TypeError`; `make quality` green.
+`test/core/allow-sets.test.ts`: the four sets equal the RFC's OD-2 table; `test/schema/input.test.ts`: per set, an allowed field is built, a field outside it gives `field_not_writable` naming the set's fields and nothing is built; `product`, `requester`, `subject`, `description`, `source` and `due_by` are refused by every set; `add_note`'s empty set refuses every field, custom included; `categorize_tickets`' set refuses status, priority, group and agent and takes any custom field; a call without a set throws `TypeError` (`ticketInput` takes a plain field set and does not import `src/core`); in `test/core/allow-sets.test.ts`, the core's lookup of an entry point not in the table throws `TypeError`; `make quality` green.
 
 No split point: one module, one signature, its tests.
 
