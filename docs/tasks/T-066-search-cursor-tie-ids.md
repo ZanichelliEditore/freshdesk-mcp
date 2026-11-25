@@ -42,27 +42,55 @@ Owner-approved design (2026-11-25), not to be redesigned:
   ticket created since with a later `created_at` is left out; a back-dated
   one is written.
 - **Step-back.** Go back a page while the page is empty or its first
-  result's second is at or after `S` (`<= S` as epoch seconds, i.e. not
-  strictly newer). The whole tie run of `S` is then read, whatever its id
-  order. The join check is "`created_at` does not rise". Each step counts
+  result is not newer than `S` (its second `<= S`). The whole tie run of
+  `S` is then read, whatever its id order. The join check is "`created_at` does not rise". Each step counts
   against the budget and the time limit, as now.
 - **The bound.** When the call stops and the set for the last second would
   hold more than 30 ids, the call keeps its file and returns
-  `truncated: true` with no `next_cursor`. Its `note` says to export the
-  rest in shorter periods (narrow `created_between`) and not to call again
-  with the same cursor. This replaces T-063's `UNHELD` case: the search
-  integer no longer holds an id, so a large id can no longer overflow it.
+  `truncated: true` with no `next_cursor`. Its `note` says not to call
+  again with the same cursor, and to export the period without
+  `max_tickets` (up to 300 matches fit one call, budget permitting) or in
+  shorter periods. A one-day period cannot be narrowed further.
+  The description says the same. This replaces T-063's `UNHELD` case: the
+  search integer no longer holds an id, so a large id can no longer
+  overflow it.
+- **The set resets.** It holds only the ids of `S`. When a call writes a
+  ticket of an older second, the set starts again with that ticket's id.
 - **Encoding (planner, 2026-11-25).**
   - `src/tools/list.ts` gains one separate reader and minter, used by
     `export_tickets` only. Its form is `<position>.<id>-<id>-….<digest>`,
     or the plain form when the set is empty.
-  - The ids are safe integers of 1 or more, strictly ascending, at most a
+  - The ids are canonical decimals (`[1-9][0-9]{0,15}`, no leading zero,
+    sign or empty segment), safe integers, strictly ascending, at most a
     bound the caller passes (30).
-  - The digest covers the tool, the arguments, the position and the ids.
-  - It has its own length cap, the longest cursor it mints (about 600
-    characters).
+  - The reader checks the length first, then one anchored pattern with no
+    nested quantifiers. It still takes a `maxPosition`; for
+    `export_tickets` that becomes the period's real bound, since the
+    position no longer holds an id.
+  - The minter throws a `TypeError` for more ids than the bound, ids not
+    strictly ascending, an id below 1 or an unsafe one: it never trims or
+    sorts (as `listEnvelope` throws today, `list.ts:74-76`).
+  - The digest covers the tool, the arguments, the position and the ids
+    array, the empty array included, so a plain cursor and an ids cursor
+    never verify as each other.
+  - Its length cap is the longest cursor it can mint, computed (a 16-digit
+    position, 30 ids of 16 digits, their dashes, two dots and the 43-character
+    digest), not a round figure.
   - The reader returns the position and the ids, numbers only. The ids are
     compared, never sent, so no cursor content reaches a URL, host or path.
+  - `resumeAt` refuses, after the digest: an odd position whose second is
+    outside the period or whose page is over `MAX_SEARCH_PAGE`, and ids on
+    position 0 or on an even (list) position.
+  - **Threat model** (security-reviewer, 2026-11-25). The digest stays
+    unkeyed. It catches mistakes and edits, not forgery: anyone can
+    recompute it. A forged position can already skip every ticket newer
+    than a chosen second; a forged id set adds the skipping of chosen ids
+    in that second. The RFC states this and either accepts it, with the
+    reason, or keys the digest (a per-process key also refuses cursors
+    after a restart). `list.ts`'s header (lines 16-19, "can only carry a
+    whole number") is rewritten either way. The RFC also says, in one
+    sentence, that a `next_cursor` now shows ids of tickets already
+    written.
   - `readCursor`, `listEnvelope` and `CURSOR_MAX_LENGTH` stay as they are,
     so the other list tools do not change.
   - The odd search position drops the id: `2*(rel*MAX_SEARCH_PAGE +
@@ -76,7 +104,10 @@ Owner-approved design (2026-11-25), not to be redesigned:
   weighed and rejected: keep one integer and stop only on a second's
   boundary, dropping the unfinished tie run. That changes what
   `max_tickets` means, and a tie run longer than `max_tickets` never moves
-  forward.
+  forward. Write the RFC first and ask for the owner's word early: the
+  design is already approved. If the word does not come in the session,
+  the session ends with the RFC Proposed and no code, and hands off as
+  `doing` (as T-040 did).
 - **Old cursors** (decided 2026-11-25 by this planning session under the
   owner's delegation): `CURSOR_FORM` becomes 3, so every cursor minted
   before (form 2, T-063 / 0.3.0) is refused once more, with nothing sent.
@@ -95,6 +126,9 @@ Owner-approved design (2026-11-25), not to be redesigned:
     entry is left as it is)
   - the `export-tickets.ts` header (about lines 64-110)
   - the `count-tickets.ts` `Resume` doc comment and the disorder message
+  - `overview.md` line 55: drop "(export_tickets' cursor pair)"
+  - `ticket-queries.md` about line 329: "a second and an id do not fit one
+    cursor position" becomes "the list scan keeps ties by count"
 
   Each says the second plus the id set, and the step-back rule.
   `CHANGELOG.md` gets an "Unreleased" entry.
@@ -134,17 +168,25 @@ dismissed in it. It states:
 - the ids form and its bound;
 - the amended `list.ts` invariant;
 - the one-integer alternative and why it was rejected;
-- form-2 cursors refused.
+- form-2 cursors refused;
+- the threat model: the unkeyed digest accepted with its reason, or keyed;
+  and that a `next_cursor` shows ids already written.
 
 **`test/tools/list.test.ts`.**
-- The ids form round-trips, with the empty set included.
+- The ids form round-trips, with the empty set included. The longest
+  cursor (the highest position, 30 ids of `Number.MAX_SAFE_INTEGER`)
+  round-trips; one character more is refused.
 - Each of these is refused as `validation`, `http_status: null`, its
   message not quoting the cursor:
   - ids unsorted, duplicated, 0, or past the safe-integer range;
+  - a leading zero, a sign, an empty segment (`..`, `--`, a trailing `-`);
   - more ids than the bound;
   - over the length cap;
   - an id or the position edited;
-  - an ids-form cursor given to `readCursor`.
+  - an ids-form cursor given to `readCursor`, and a plain cursor from
+    `listEnvelope` given to the ids reader.
+- The minter throws a `TypeError` for more ids than the bound, ids not
+  strictly ascending, an id below 1 and an unsafe id.
 - The existing `readCursor` and `listEnvelope` tests pass unchanged.
 
 **`test/tools/core/export-tickets.test.ts`** (MockAgent), a new `describe`
@@ -163,11 +205,18 @@ dismissed in it. It states:
   - An id not in the set is written, whether higher or lower than the ids
     in the set.
   - Across two resumes inside one tie run, the set is the union.
+  - The set resets: 20 ids written in second S1, then a resume that writes
+    tickets of an older second S2 gives a cursor holding only S2's ids,
+    and the bound counts only them.
 - **Outside `S`.** A ticket created since with a later `created_at` is left
   out; a back-dated one is written.
-- **Step-back.** A written ticket left the results, so an unwritten ticket
-  of `S` now sits on the page before the position's page. That ticket is
-  written once.
+- **Step-back.**
+  - A written ticket left the results, so an unwritten ticket of `S` now
+    sits on the page before the position's page, and the position's page
+    starts with a ticket whose second equals `S` (T-063's strict rule would
+    not step back there). That ticket is written once.
+  - A resumed page that starts with the last ticket written steps back one
+    page: one more request is sent (MockAgent count).
 - **`created_at` rises.**
   - A resumed call is refused, nothing kept.
   - A fresh call gives `unordered` and no cursor.
@@ -177,13 +226,16 @@ dismissed in it. It states:
   - Exactly 30 ids written in `S` gives a `next_cursor` that resumes
     correctly.
   - 31 keeps the file, with `truncated: true`, no `next_cursor`, and the
-    note saying to narrow the period and not to reuse the cursor (the
-    description says the same).
+    note saying not to reuse the cursor and to export without
+    `max_tickets` or in shorter periods (the description says the same).
 - **Cursors refused**, each with no request and no file:
   - a form-2 search cursor and a form-2 list cursor (minted as `dd33b08`
     mints them);
   - an input carrying its own `cursor_form`;
-  - a forged ids-form cursor whose digest does not match.
+  - an ids-form cursor whose digest does not match;
+  - validly digested ids cursors (minted by the test) whose second is at
+    or past the period's end, whose page is over 10, or that carry ids on
+    position 0 or on an even position.
 - **T-063's tests.** They are re-minted on form 3. "the largest id a 31-day
   cursor holds" is replaced by the bound cases.
 
@@ -191,9 +243,10 @@ dismissed in it. It states:
 one second, and T-063's diverging and missing-`created_at` fixtures, each
 count the asserted total with no `truncated` key.
 
-**Docs.** `ticket-queries.md`, `overview.md` (lines 36, 48 and 49) and the
-`export-tickets.ts` header no longer claim "created_at, then id, both
-descending". They name the second plus the id set, the bound and the
+**Docs.** `ticket-queries.md`, `overview.md` (lines 36, 48, 49 and 55),
+`list.ts`'s header and the `export-tickets.ts` header no longer claim
+"created_at, then id, both descending" or that a cursor carries only a
+whole number. They name the second plus the id set, the bound and the
 step-back rule. The `CHANGELOG.md` "Unreleased" entry says:
 - the tie fix;
 - form-2 cursors are refused once;
@@ -208,7 +261,8 @@ step-back rule. The `CHANGELOG.md` "Unreleased" entry says:
   as its own row.
 
 (a) alone must not be released: 0.3.1 waits for (b). Say so in "Done" if
-(b) is split off.
+(b) is split off. If the owner's word on the RFC does not come in the
+session, the session stops at the RFC Proposed, before (a)'s code.
 
 ---
 *Filled at `/handoff`:*
