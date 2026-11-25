@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core account-patterns-range
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -58,6 +58,11 @@ smoke-core: ## T-039's GET-only run of every core tool (owner runs it; same env 
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --core --days "$${DAYS:-7}"
+
+# RANGE reaches the shell unexpanded, as a variable: nothing in it runs.
+account-patterns-range: export override RANGE := $(value RANGE)
+account-patterns-range: ## maintainer's check of a pull request's commits for account values, run from main (RANGE=<base>..<head>; CONTRIBUTING.md)
+	@python3 -I tools/checks/account_patterns.py --range "$$RANGE"
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py

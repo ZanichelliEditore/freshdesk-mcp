@@ -306,5 +306,281 @@ class CannotCheck(_Repo):
         self.assertIn("Fix:", output)
 
 
+_MAKEFILE = _SCRIPT.parents[2] / "Makefile"
+_IDENTITY = {
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@example.invalid",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@example.invalid",
+}
+
+
+class _RangeRepo(_Repo):
+    """main holds the Makefile and the checker; branch `pr` adds commits.
+
+    The checks run through `make account-patterns-range`, from main.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.env.update(_IDENTITY)
+        self.git("checkout", "-q", "-b", "main")
+        self.patterns()
+        self.stage("Makefile", _MAKEFILE.read_bytes())
+        self.stage("tools/checks/account_patterns.py", _SCRIPT.read_bytes())
+        self.stage("README", b"clean\n")
+        self.git("commit", "-q", "-m", "main")
+        self.git("checkout", "-q", "-b", "pr")
+
+    def commit(self, message: str = "change", **files: bytes) -> str:
+        for name, content in files.items():
+            self.stage(name, content)
+        self.git("commit", "-q", "--allow-empty", "-m", message)
+        return self.rev("HEAD")
+
+    def rev(self, name: str) -> str:
+        return subprocess.run(
+            ["git", "rev-parse", name],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def run_range(
+        self,
+        spec: str | None = "main..pr",
+        cwd: Path | None = None,
+        from_env: bool = False,
+    ) -> tuple[int, str, str]:
+        """Run the target as CONTRIBUTING.md says, `RANGE=` on the command line."""
+        env = {k: v for k, v in self.env.items() if k != "RANGE"}
+        args = ["make", "-s", "account-patterns-range"]
+        if spec is not None and from_env:
+            env["RANGE"] = spec
+        elif spec is not None:
+            args.append(f"RANGE={spec}")
+        done = subprocess.run(
+            args,
+            cwd=cwd or self.root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return done.returncode, done.stdout, done.stderr
+
+    def assert_refused(self, needle: str, spec: str | None = "main..pr") -> str:
+        code, out, err = self.run_range(spec)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(out, "")
+        self.assertIn(needle, err)
+        self.assertIn("Fix:", err)
+        self.assert_no_leak(out + err)
+        return err
+
+
+class RangeMatching(_RangeRepo):
+    def test_clean_range_prints_only_the_number_of_commits(self) -> None:
+        self.commit(a=b"one\n")
+        self.commit(b=b"two\n")
+        self.git("checkout", "-q", "main")
+        self.assertEqual(self.run_range(), (0, "commits checked: 2\n", ""))
+
+    def test_value_added_in_a_middle_commit_and_removed_at_head(self) -> None:
+        self.commit(a=b"one\n")
+        middle = self.commit(**{"src/b.txt": f"x\n{_VALUE}\n".encode()})
+        self.commit(**{"src/b.txt": b"x\nclean\n"})
+        self.git("checkout", "-q", "main")
+        code, out, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertEqual(out, "")
+        self.assertIn(f"{middle[:12]} src/b.txt:2", err)
+        self.assertEqual(err.count("src/b.txt"), 1)
+        self.assert_no_leak(err)
+
+    def test_match_in_a_binary_file_names_commit_and_file(self) -> None:
+        added = self.commit(**{"blob.dat": b"\x00" + _VALUE.encode()})
+        self.git("checkout", "-q", "main")
+        code, _, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"{added[:12]} blob.dat (binary)", err)
+        self.assert_no_leak(err)
+
+    def test_value_in_a_commit_message_names_commit_and_message_only(self) -> None:
+        self.commit(a=b"one\n")
+        bad = self.commit(f"fix for {_VALUE}", b=b"two\n")
+        self.git("checkout", "-q", "main")
+        code, out, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"  {bad[:12]} message\n", err)
+        self.assertEqual(err.count(bad[:12]), 1)
+        self.assert_no_leak(out + err)
+
+    def test_value_in_a_path_names_commit_and_path_only(self) -> None:
+        bad = self.commit(**{f"docs/{_VALUE}.txt": b"clean\n"})
+        self.git("checkout", "-q", "main")
+        code, out, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"  {bad[:12]} path\n", err)
+        self.assertNotIn("docs/", err.split("Fix:")[0])
+        self.assert_no_leak(out + err)
+
+    def test_commits_outside_the_range_are_not_checked(self) -> None:
+        self.git("checkout", "-q", "main")
+        self.commit(f"main says {_VALUE}")
+        self.git("checkout", "-q", "pr")
+        self.commit(a=b"one\n")
+        self.git("checkout", "-q", "main")
+        self.assertEqual(self.run_range("main~1..pr"), (0, "commits checked: 1\n", ""))
+
+    def test_range_text_never_runs(self) -> None:
+        self.commit(a=b"one\n")
+        self.git("checkout", "-q", "main")
+        marker = self.root.parent / f"{self.root.name}-ran"
+        for spec in (
+            f"$(shell touch {marker})..pr",
+            f"$$(touch {marker})..pr",
+            f"$(touch {marker})..pr",
+            f'main..pr" ; touch "{marker}',
+        ):
+            for from_env in (False, True):
+                code, out, err = self.run_range(spec, from_env=from_env)
+                self.assertNotEqual(code, 0)
+                self.assertIn("does not name a commit", err)
+        self.assertFalse(marker.exists())
+
+    def test_range_from_the_environment(self) -> None:
+        self.commit(a=b"one\n")
+        self.git("checkout", "-q", "main")
+        self.assertEqual(self.run_range(from_env=True), (0, "commits checked: 1\n", ""))
+
+
+@unittest.skipUnless(_UTF8, "no UTF-8 locale on this machine")
+class RangeBothLocales(_RangeRepo):
+    def test_accented_letter_in_another_case_in_a_message_is_caught(self) -> None:
+        self.patterns("zq-società-[0-9]+\n".encode())
+        self.env["LC_ALL"] = _UTF8
+        bad = self.commit("about ZQ-SOCIETÀ-1")
+        self.git("checkout", "-q", "main")
+        code, _, err = self.run_range()
+        self.assertNotEqual(code, 0)
+        self.assertIn(f"{bad[:12]} message", err)
+
+
+class RangeRefused(_RangeRepo):
+    def setUp(self) -> None:
+        super().setUp()
+        # A match on the pull request, so a check that went on would answer 1.
+        self.commit(a=f"{_VALUE}\n".encode())
+        self.git("checkout", "-q", "main")
+
+    def test_unset(self) -> None:
+        self.assert_refused("RANGE must be", None)
+
+    def test_without_two_dots(self) -> None:
+        self.assert_refused("RANGE must be", "main")
+
+    def test_three_dots(self) -> None:
+        self.assert_refused("RANGE must be", "main...pr")
+
+    def test_more_than_one_two_dots(self) -> None:
+        self.assert_refused("RANGE must be", "main..pr..pr")
+
+    def test_end_starting_with_a_dash(self) -> None:
+        self.assert_refused("starts with `-`", "main..--all")
+
+    def test_base_starting_with_a_dash(self) -> None:
+        self.assert_refused("starts with `-`", "--all..pr")
+
+    def test_empty_end(self) -> None:
+        self.assert_refused("is empty", "main..")
+
+    def test_end_that_does_not_resolve(self) -> None:
+        self.assert_refused("does not name a commit", "main..nope")
+
+    def test_end_that_is_not_a_commit(self) -> None:
+        self.assert_refused("does not name a commit", "main..pr^{tree}")
+
+    def test_base_not_an_ancestor_of_the_head(self) -> None:
+        self.assert_refused("not an ancestor", "pr..main")
+
+    def test_range_with_no_commit(self) -> None:
+        self.assert_refused("no commit", "pr..pr")
+
+    def test_shallow_repository(self) -> None:
+        clone = self.root / "clone"
+        self.git(
+            "clone",
+            "-q",
+            "--depth",
+            "1",
+            "--no-single-branch",
+            f"file://{self.root}",
+            str(clone),
+        )
+        target = clone / "docs" / "private" / "account-patterns"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(_PATTERN.encode() + b"\n")
+        code, out, err = self.run_range("origin/main..origin/pr", cwd=clone)
+        self.assertNotEqual(code, 0)
+        self.assertIn("shallow", err)
+        self.assertIn("Fix:", err)
+        self.assert_no_leak(out + err)
+
+    def test_checkout_of_the_pull_request(self) -> None:
+        self.git("checkout", "-q", "pr")
+        self.assert_refused("reaches a commit of RANGE")
+
+    def test_checkout_with_the_pull_request_merged(self) -> None:
+        self.git("merge", "-q", "--no-ff", "-m", "merge", "pr")
+        self.assert_refused("reaches a commit of RANGE", "main~1..pr")
+
+    def test_checkout_with_an_earlier_commit_of_the_range_merged(self) -> None:
+        base = self.rev("main")
+        self.git("checkout", "-q", "pr")
+        self.commit(b=b"two\n")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge", "pr~1")
+        self.assert_refused("reaches a commit of RANGE", f"{base}..pr")
+
+    def test_makefile_changed(self) -> None:
+        with (self.root / "Makefile").open("a") as f:
+            f.write("\n# changed\n")
+        self.assert_refused("Makefile or tools/")
+
+    def test_tools_change_staged(self) -> None:
+        self.stage("tools/checks/account_patterns.py", _SCRIPT.read_bytes() + b"\n")
+        self.assert_refused("Makefile or tools/")
+
+    def test_untracked_file_under_tools(self) -> None:
+        (self.root / "tools" / "checks" / "subprocess.py").write_text("")
+        self.assert_refused("Makefile or tools/")
+
+    def test_missing_patterns_file(self) -> None:
+        (self.root / "docs" / "private" / "account-patterns").unlink()
+        self.assert_refused("missing")
+
+    def test_empty_patterns_file(self) -> None:
+        self.patterns(b"")
+        self.assert_refused("no pattern")
+
+    def test_invalid_patterns_file(self) -> None:
+        self.patterns(b"zq-synth-(unclosed\n")
+        self.assert_refused("git grep")
+
+    def test_commented_patterns_file(self) -> None:
+        self.patterns(b"# zq-synth note\n")
+        self.assert_refused("line 1")
+
+    def test_unreadable_blob_names_its_commit(self) -> None:
+        commit = self.rev("pr")
+        blob = self.rev("pr:a")
+        (self.root / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+        err = self.assert_refused(commit[:12])
+        self.assertIn("not checked", err)
+
+
 if __name__ == "__main__":
     unittest.main()
