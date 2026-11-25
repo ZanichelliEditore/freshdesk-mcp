@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** none (T-057, done)
 - **Created:** 2026-11-25
 
@@ -127,13 +127,67 @@ tie-break makes a resumed read refuse (fails closed), not skip. Say so in
 *Filled at `/handoff`:*
 
 ## Done
+Split point not taken: (a) and (b) both delivered in this session. Work
+`a9fb027`, review fixes `9db6435`.
+- Regression, shown failing on `06088a6`'s `src/` (identical to `691ab1f`'s,
+  `git diff 06088a6 691ab1f -- src scripts` empty): `test/tools/core/export-tickets.test.ts::export_tickets: pages, max_tickets and the cursor (T-057) > T-063: a search position is (created_at, id), not the lowest id > regression: ids and created_at in different orders, resumed twice, write all three once each`.
+  Before the fix it failed at the second call (`expect(result.isError).toBeFalsy()`:
+  the resumed call was refused out of id order); after, it passes.
+- Pair (`count-tickets.ts`: `keyOf`, `precedes`, `falls`, the step-back's
+  `startsAfter` and join check, the skip and `lowest` in the search loop):
+  same `describe`, cases "same second: a lower id is written, a higher id
+  (or the same) is skipped", "created since: a later created_at is left
+  out, a back-dated one ... is written", "the step-back follows the pair",
+  "resumed: a pair that does not fall strictly is refused ...", and
+  "a created_at missing or unreadable" (fresh, resumed, between two out of
+  order, first on a stepped-back page; each for missing and unreadable).
+- Encoding (`export-tickets.ts`: `resumeAt`, `positionOf`, `CURSOR_FORM`
+  bound after the arguments' spread; `UNHELD` note): cases "a pair the
+  position cannot hold ...", "the largest id a 31-day cursor holds ...",
+  "a position outside the search ... still fails the call" (asserts the
+  registry's internal-error text), and "cursors refused: no request, no
+  file" (`06088a6` search and list cursors, an untagged new-form search
+  position, an input with its own `cursor_form`, a forged id 0). The
+  untagged case was shown failing with the tag removed from the `ListCall`.
+  The R2 tests were re-minted with the new form and encoding.
+- `count_tickets` unchanged: `test/tools/core/count-tickets.test.ts`,
+  "ids and created_at in different orders" and "a result missing
+  created_at" each count 3, no `truncated`.
+- Smoke probe: `scripts/smoke/smoke.ts` `runOrderProbe`, `orderDay`;
+  `cli.ts --order --day`; `make smoke-order-probe` (`DAY=YYYY-MM-DD`,
+  yesterday UTC by default). `test/smoke.test.ts` "smoke order probe
+  (T-063)": GET only, every page, both answers yes and no, no id, subject,
+  time, domain or key in the output, a failed page prints its code and
+  exits 1, a bad day refused with nothing sent, the make target's one-line
+  description. By hand (`9db6435`, empty environment, so no request):
+  `cli.js --order --day --core` printed
+  `config: fail (--day takes a UTC date as YYYY-MM-DD)`, exit 1.
+- Docs: `docs/architecture/ticket-queries.md` (T-057's choices),
+  `docs/architecture/overview.md` (count-tickets, export-tickets and
+  scripts/smoke entries), the export-tickets.ts header and description,
+  `CHANGELOG.md` "Unreleased" (old cursors refused once).
+- Not measured yet: search's tie-break within one `created_at` second (id
+  descending). Unmeasured, a wrong tie-break makes a resumed read refuse
+  (fails closed), never skip. Owner action: run `make smoke-order-probe`
+  (or `make smoke-order-probe DAY=YYYY-MM-DD` for a busy weekday, e.g. the
+  day of 177 tickets) and read the line
+  `... within a shared created_at second, ids fall: yes|no`, and the last
+  line `... search's order is created_at, then id, both descending: yes|no`.
+  Keep the output in `docs/private/account-facts.md`.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The probe's answer is pending (owner). If it says ids do not fall within
+  a shared second, resumed reads on such days are refused (fail closed);
+  a follow-up row would change the tie-break. No row proposed until the
+  probe says so.
+- The day's exact result count is printed (security-reviewer, info): a
+  count, allowed by the acceptance; dismissed.
 
 ## Context pressure
+ok
 
 ## Next action
+none (done). Owner: run `make smoke-order-probe` as in "Done".

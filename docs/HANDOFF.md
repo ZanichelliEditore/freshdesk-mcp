@@ -4,52 +4,52 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T14:46:31+01:00`
-- **Describes commit:** `8f0569f`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the CI fix after the handoff commit
-  `2ef129d`). **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45627751721
-  (workflow `quality`, ran on `8f0569f`: `quality (22.19)`, `quality (24)`,
-  `checks` all success). Red before it on `2ef129d`:
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45627169277
-  (`UnicodeDecodeError`, fixed by `8f0569f`). This file's hash and CI line
-  arrive in the commit right after it.
+- **Written:** `2026-11-25T15:53:26+01:00`
+- **Describes commit:** the T-063 handoff commit (this file's hash and CI
+  line arrive in the stamp commit right after it).
 
-- **Current task:** T-062 (the Makefile asks for GNU Make 4 and says how
-  to get it) `done (2026-11-25)`. Work `37aa821`, handoff `2ef129d` (CI
-  red: the test read files as ASCII under the runner's locale), then the
-  CI fix commit this file describes.
-  See `docs/tasks/T-062-gnu-make-guard.md` "Done" (the hand demo with
-  `/usr/bin/make` 3.81 is quoted there).
+- **Current task:** T-063 (a search cursor resumes on `(created_at, id)`)
+  `done (2026-11-25)`. Work `a9fb027`, review fixes `9db6435`, then the
+  handoff commit. Split point not taken: the fix and the smoke probe both
+  shipped. See `docs/tasks/T-063-search-cursor-pair.md` "Done".
 
-- **Next action:** `/pickup` takes T-063 (a search cursor resumes on
-  `(created_at, id)`; first `todo` in PLAN order). Then T-040.
+- **Next action:** `/pickup` takes T-040 (RFC: does the first write tool
+  need a safety core; first `todo` in PLAN order).
 
-- **Read before anything else:** `docs/tasks/T-063-search-cursor-pair.md`.
+- **Read before anything else:** `docs/tasks/T-040-rfc-write-safety.md`.
 
-- **Reviews:** one full round, R1 = `37aa821`, range `de24a88..37aa821`;
-  no scoped round (no fix changed a mechanism). All three quoted base,
-  HEAD, stat line and trailer correctly, and none used Bash.
-  - `code-reviewer`: Medium, the "Done" quote of `/usr/bin/make help` was
-    missing (written in the task file at handoff); Low, the empty
-    `MAKE_VERSION` choice unrecorded (recorded in "Done"); nit, "guard not
-    listed" checked through the fix words (dismissed: it fails if the
-    guard ever matches `help`'s regex); nit, `GNUMAKEFLAGS` not removed
-    from the test's environment (parked in `docs/improvements.md`,
-    `37aa821`).
-  - `security-reviewer`: no finding.
-  - `compliance-reviewer`: wireframes `none`.
-  - The CI fix after R1 (three `encoding="utf-8"` arguments in the
-    test file) was not reviewed: no mechanism changed.
+- **Reviews:** full round R1 = `a9fb027`, range `691ab1f..a9fb027`; scoped
+  round range `a9fb027..9db6435`. All six dispatches quoted base, HEAD,
+  stat line and trailer correctly; none used Bash.
+  - R1 `code-reviewer`: no blocking finding; four Low, all fixed in
+    `9db6435` (an untagged new-form search cursor test; a largest-id
+    resume test; the out-of-search throw asserts the internal-error text;
+    "tie-break measured" wording corrected in count-tickets.ts,
+    export-tickets.ts and overview.md). Note "task file not in range":
+    filled at this handoff.
+  - R1 `security-reviewer`: Low, `make smoke-order-probe DAY=--core` ran
+    `runCore` (fixed in `9db6435`: the mode is read from flags only; hand
+    demo in the task file); info, the day's exact count is printed
+    (dismissed: a count, the acceptance asks for it).
+  - R1 `compliance-reviewer`: wireframes `none`.
+  - Scoped: `code-reviewer` and `security-reviewer` no finding that
+    falsifies an acceptance line or opens a fail-open path; three items
+    parked in `docs/improvements.md` (`9db6435` entry);
+    `compliance-reviewer` wireframes `none`. No third round.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
-  - T-063 refuses cursors minted before it (search and list) once; the
-    planning session decided this under the owner's delegation. Owner may
-    overrule before T-063 starts.
-  - T-063's acceptance is large; its split point (the smoke probe) is
-    likely to be taken.
+  - Owner action: run `make smoke-order-probe` (yesterday UTC) or
+    `make smoke-order-probe DAY=YYYY-MM-DD` on a busy weekday. The answer
+    is the line `probe search_order <day>: ... within a shared created_at
+    second, ids fall: yes|no` and the last
+    `... search's order is created_at, then id, both descending: yes|no`.
+    `no` means resumed reads on such days are refused (fail closed) and a
+    follow-up row is needed; keep the output in
+    `docs/private/account-facts.md`.
+  - `CHANGELOG.md` has an "Unreleased" section (old cursors refused once):
+    the owner decides when to release.
   - Time triggers on `mcp-test` tickets: the owner checks the activity log
     on 2026-11-26 (T-040 task file, "Owner's evidence (2026-11-25)").
   - T-040's RFC takes up the proposed reading of M2's "automations
@@ -59,9 +59,8 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on the handoff tree:
-  - vitest "Tests 2661 passed (2661)";
-  - `tools/checks` "Ran 138 tests", OK (134 + 4 in
-    `tools/checks/test_make_version.py`);
+- **Checkpoint:** `make quality` exit 0 on `9db6435`:
+  - vitest "Tests 2691 passed (2691)";
+  - `tools/checks` "Ran 138 tests", OK;
   - eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
     scans passed.
