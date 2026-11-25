@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M1
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-23
 
