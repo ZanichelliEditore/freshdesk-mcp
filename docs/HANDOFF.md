@@ -5,14 +5,17 @@
 "none".*
 
 - **Written:** `2026-11-25T13:32:19+01:00`
-- **Describes commit:** filled by the stamp commit right after this one.
-  **CI:** filled by the stamp commit.
+- **Describes commit:** `bae5314`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45614884589
+  (workflow `quality`, ran on `bae5314`). This file's hash and CI line
+  arrive in the commit right after it.
 
 - **Current task:** M1 plan session (`/decompose` scoped to T-049, T-052
   and the owner's row of 2026-11-25) `done (2026-11-25)`: T-061, T-052,
   T-049 sized to `todo` with task files, in that order after T-060 in
   `docs/tasks/PLAN.md` (dated note above "Not sized"). Commits `bcf8138`,
-  `6a8cfdc` and this one. T-046's two open doubts closed by the owner
+  `6a8cfdc`, `bae5314`. T-046's two open doubts closed by the owner
   (`docs/tasks/T-046-tool-catalogue.md`, "Open doubts").
 
 - **Next action:** `/pickup` takes T-061 (README `npx` commands with
