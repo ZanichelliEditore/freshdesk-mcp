@@ -516,17 +516,25 @@ describe("requestWithRetry: one call ends within TOTAL_DEADLINE_MS", () => {
     expect(http.reachedDeadline(failure(result))).toBe(false);
   });
 
-  it("does not mark a write's network failure: it may have been applied", async () => {
-    // A GET failing at 9 s with the deadline at 9.2 s would be marked.
-    on("POST")
-      .replyWithError(Object.assign(new Error("reset"), { code: "ECONNRESET" }))
-      .delay(9000);
+  it("does not mark a write aborted in flight at a caller's deadline: it may have been applied", async () => {
+    slow("POST");
 
     const { result } = await settle(
-      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() + 9200),
+      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() + 5000),
     );
 
-    expect(failure(result)).toMatchObject({ code: "network", retryable: false });
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(sent()).toHaveLength(1);
+    expect(http.reachedDeadline(failure(result))).toBe(false);
+  });
+
+  it("does not mark a write refused because its deadline had already passed", async () => {
+    const { result } = await settle(
+      http.requestWithRetry({ method: "POST", path: "/tickets", body: {} }, Date.now() - 1),
+    );
+
+    expect(failure(result)).toEqual({ ...EXPIRED, retryable: false });
+    expect(sent()).toHaveLength(0);
     expect(http.reachedDeadline(failure(result))).toBe(false);
   });
 
