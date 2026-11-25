@@ -5,8 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T09:07:09+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `fe81a3c`
+  (`fe81a3c040e6d87764d44872ddfb55a4e7729a6a`), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45573642764
+  (workflow `quality`, ran on `fe81a3c`; observed through the public API).
+  This file's hash and CI line arrive in the commit right after it.
 
 - **Current task:** T-039 `done (2026-11-25)`, smoke over the `core`
   tools, M1 acceptance, `docs/tasks/T-039-m1-smoke.md` ("Done"). Commits
