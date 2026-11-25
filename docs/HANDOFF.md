@@ -4,61 +4,51 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T12:41:39+01:00`
-- **Describes commit:** `c31bdb8`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45606896974
-  (workflow `quality`, ran on `c31bdb8`; observed through the public API,
-  `gh run list` returned no run). This file's hash and CI line arrive in
-  the commit right after it.
+- **Written:** `2026-11-25T13:03:28+01:00`
+- **Describes commit:** filled in the stamp commit right after this one.
 
-- **Current task:** T-060 `done (2026-11-25)`, `--export-dir` flag,
-  `docs/tasks/T-060-export-dir-flag.md` ("Done" lists commits and tests).
-  Build `1d4463b`, review fixes `16c6ff4`. Version 0.2.0 (unreleased) in
-  `package.json`, `src/version.ts`, CHANGELOG; not tagged, not published.
+- **Current task:** T-060 `done (2026-11-25)`, and **0.2.0 released**
+  (2026-11-25, owner's go): `f3c53e0` dates CHANGELOG 0.2.0, `quality`
+  green on it
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45607931030);
+  tag `v0.2.0` on `f3c53e0`; `release` green, publish job success
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45608954525);
+  npm `latest` = `0.2.0`, `npx -y --prefer-online
+  @zanichelli/freshdesk-mcp@0.2.0 --version` printed `0.2.0`. See
+  `docs/tasks/T-060-export-dir-flag.md` ("Done", last bullet).
 
-- **Next action:** the owner decides the 0.2.0 release (tag `v0.2.0` on
-  the stamp commit's parent or later; `release.yml` publishes). Otherwise
-  `/pickup` takes the next row: T-046 (first `todo` with dependencies
-  done), or one of T-040 / T-014 (M2 gates).
+- **Next action:** `/pickup` takes T-046 (tool catalogue, `plan`, first
+  `todo` with dependencies done); the owner may pick T-040 or T-014 (M2
+  gates) instead.
 
-- **Read before anything else:** `docs/tasks/T-060-export-dir-flag.md`
-  ("Open doubts"); `CHANGELOG.md` 0.2.0.
+- **Read before anything else:** `docs/tasks/T-046-tool-catalogue.md`;
+  `docs/tasks/PLAN.md` M2 section (gates T-040, T-014).
 
-- **Reviews:**
-  - Full round, R1 = `1d4463b`, range `fcbce1d..1d4463b`:
-    - `code-reviewer`: 1 Medium (the "names `--export-dir`" tests passed
-      for any refusal, since every refusal's fixed ending named it), 2 Low
-      (ending omitted `--version`; overview.md line 49 overstated), Info.
-      All fixed in `16c6ff4`. A first `code-reviewer` dispatch without the
-      diff file ran with `git diff`; its findings are the same set, and the
-      dispatch with the diff file (quotes checked) reported the Lows only:
-      both recorded.
-    - `security-reviewer`: first dispatch without a diff file = red gate
-      (no shell, nothing reviewed); re-dispatched with the diff file,
-      quotes checked: no findings.
-    - `compliance-reviewer`: wireframes `none`, complete.
-  - Scoped round, range `1d4463b..16c6ff4` (no mechanism changed), quotes
-    checked for all three: `code-reviewer` no finding, one item parked
-    (`docs/improvements.md`, `16c6ff4` entry: `test/config.test.ts:411`);
-    `security-reviewer` no finding (one doc-accuracy note dismissed: the
-    full round's code-reviewer checked `place()`); `compliance-reviewer`
-    wireframes `none`, complete.
+- **Reviews:** full round, R1 = `f3c53e0`, range `af6fe77..f3c53e0` (one
+  line, `CHANGELOG.md`), diff file with quotes checked for all three:
+  - `code-reviewer`: 1 Low, HANDOFF stale on the release: resolved by this
+    handoff. Its caveat (a test asserting `(unreleased)`) dismissed:
+    `make quality` and the `release` run's quality jobs passed on
+    `f3c53e0`.
+  - `security-reviewer`: no findings.
+  - `compliance-reviewer`: wireframes `none`, complete.
+  - No scoped round: no fix changed a mechanism.
 
 - **Proposed plan changes:** none.
 
-- **Open doubts (owner):** README snippets unpinned (`@<v>` in the task's
-  scope): keep or pin? Step 6 of the release RFC on npm ("Require
+- **Open doubts (owner):** README snippets unpinned
+  (`npx -y @zanichelli/freshdesk-mcp`): npx's local cache can serve an
+  older version (seen with 0.2.0, `docs/journal.md` 2026-11-25); pin or
+  add `--prefer-online`? Step 6 of the release RFC on npm ("Require
   two-factor authentication and disallow tokens") still open; see the
   T-057, T-058, T-059 task files.
 
-- **Dead ends:** `util.parseArgs` strict mode (messages quote the token;
-  one error code for two causes): see the task file and `docs/journal.md`
-  2026-11-25.
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `16c6ff4`:
+- **Checkpoint:** `make quality` exit 0 on `f3c53e0` plus this session's
+  doc edits:
   - vitest "Test Files 39 passed (39)", "Tests 2645 passed (2645)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.

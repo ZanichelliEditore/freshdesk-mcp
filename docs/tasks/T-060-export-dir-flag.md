@@ -131,6 +131,13 @@ or env"; SPEC §10 says "flag or env"; `package.json`,
   fail: missing-value reason mutated to "an unknown option" → 5 failing.
 - `make quality` on `16c6ff4`: vitest 39 files / 2645 tests passed,
   `tools/checks` 87 tests OK, exit 0.
+- Release 0.2.0 (2026-11-25, owner's go in the session after the handoff
+  `af6fe77`): `f3c53e0` dates CHANGELOG 0.2.0; `quality` green
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45607931030);
+  tag `v0.2.0` on `f3c53e0`; `release` green, publish job success
+  (https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45608954525);
+  npm `latest` = `0.2.0`; `npx -y --prefer-online
+  @zanichelli/freshdesk-mcp@0.2.0 --version` printed `0.2.0`.
 
 ## Dead ends
 - `util.parseArgs` in strict mode: its messages quote the token
@@ -150,5 +157,4 @@ or env"; SPEC §10 says "flag or env"; `package.json`,
 ok
 
 ## Next action
-none: done. The 0.2.0 release (tag `v0.2.0`, `release.yml`) waits for the
-owner's explicit go.
+none: done, and 0.2.0 released (2026-11-25).
