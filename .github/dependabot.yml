@@ -16,13 +16,16 @@ updates:
         patterns: ["*"]
     # An ignore rule also mutes Dependabot security updates for the ignored
     # versions (GitHub docs, "Controlling which dependencies are updated by
-    # Dependabot"). Both packages are dev-only and each range is bounded.
+    # Dependabot", "Ignoring specific dependencies").
     ignore:
       # Lifted by an RFC moving the Node types off ^22: RFC 2026-11-23
       # (adopt runtime stack) pins @types/node to the minimum supported Node.
+      # Mutes security updates for 23 and later too; dev-only, and 22.x
+      # updates still arrive.
       - dependency-name: "@types/node"
         versions: [">=23"]
       # Lifted by a typescript-eslint release whose peer range accepts
-      # TypeScript 7.
+      # TypeScript 7. Mutes security updates for 7 and later too; dev-only,
+      # and updates below 7 still arrive.
       - dependency-name: "typescript"
         versions: [">=7"]

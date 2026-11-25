@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-25
 
@@ -55,13 +55,33 @@ review, 2026-11-23).
 *Filled at `/handoff`:*
 
 ## Done
+- `88a2a6a` (R1): `.github/dependabot.yml` npm entry ignores `@types/node`
+  `versions: [">=23"]` (comment names the RFC) and `typescript`
+  `versions: [">=7"]` (comment names `typescript-eslint`); github-actions
+  entry unchanged. Test `tools/checks/test_dependabot_config.py`
+  (`DependabotConfig::test_config_holds_the_rules`, `Fixtures::*`, 10
+  tests); the pre-task file (`dc97e47:.github/dependabot.yml`) gives
+  "npm ignore has no rule for @types/node", "... for typescript".
+- Review fixes (handoff commit): each rule's comment says it mutes security
+  updates too; "each range is bounded" reworded (the ranges are open
+  above).
+- Session-start check: `typescript-eslint` 8.74.0 peer
+  `typescript: '>=4.8.4 <6.1.0'`, refuses TypeScript 7.
+- Docs check: GitHub's "Controlling which dependencies are updated by
+  Dependabot", section "Ignoring specific dependencies": ignored
+  dependencies are skipped "for version updates and security updates"
+  (`update-types` alone is documented as version-updates-only). The
+  reference page's `ignore` section was not read verbatim.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Whether Dependabot actually stops proposing `@types/node` >=23 and
+  `typescript` >=7: the owner observes the next weekly run.
 
 ## Context pressure
+low
 
 ## Next action
+none (done). Owner: close PR #3.
