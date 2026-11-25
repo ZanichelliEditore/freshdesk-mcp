@@ -34,6 +34,9 @@
 // `runDateProbes` (`make smoke-date-probes`, T-055) is the third: search's
 // day operators against local counts, under the same rules; it prints the
 // probed dates and exact counts (counts, not values), never the zone's name.
+//
+// `runCore` (`make smoke-core`, T-039, ./core.ts) is the fourth: every `core`
+// tool through the server in process, over this client.
 
 import type { Dispatcher } from "undici";
 import {
@@ -49,8 +52,11 @@ import { listAgents } from "../../src/client/resources/agents.js";
 import { listGroups } from "../../src/client/resources/groups.js";
 import type { ListResult } from "../../src/client/resources/list-all.js";
 import { listTicketFields } from "../../src/client/resources/ticket-fields.js";
-import { ConfigError, loadConfig } from "../../src/config.js";
+import { type Config, ConfigError, loadConfig } from "../../src/config.js";
 import type { FreshdeskError } from "../../src/client/errors.js";
+import { type CoreOptions, parseDays, runCore } from "./core.js";
+
+export type { CoreOptions };
 
 type Out = (line: string) => void;
 
@@ -950,11 +956,12 @@ export async function runDateProbes(
   return 0;
 }
 
-export type Mode = "report" | "probes" | "dates";
+export type Mode = "report" | "probes" | "dates" | "core";
 
 /**
  * Loads the configuration from `env` as the server does and runs the report
- * (or, in `probes` mode, T-022's probes; in `dates` mode, T-055's).
+ * (or, in `probes` mode, T-022's probes; in `dates` mode, T-055's; in `core`
+ * mode, T-039's run of every `core` tool, with `options`).
  * A configuration that cannot be loaded prints one fixed line: its message
  * may quote the team file's path. Any other error is thrown.
  */
@@ -963,6 +970,7 @@ export async function smoke(
   dispatcher: Dispatcher,
   out: Out,
   mode: Mode = "report",
+  options: CoreOptions = {},
 ): Promise<number> {
   if (env.FRESHDESK_HOST_OVERRIDE) {
     out(
@@ -970,13 +978,28 @@ export async function smoke(
     );
     return 1;
   }
+  const days = parseDays(options.days);
+  if (mode === "core" && days === undefined) {
+    out(`config: fail (--days takes a whole number of days, 1 to 366)`);
+    return 1;
+  }
+  // In core mode every request is counted at the dispatcher, retries included.
+  let requests = 0;
+  const sending =
+    mode === "core"
+      ? dispatcher.compose((dispatch) => (opts, handler) => {
+          requests += 1;
+          return dispatch(opts, handler);
+        })
+      : dispatcher;
+  let config: Config;
   let http: SmokeClient;
   try {
-    const config = loadConfig(env);
+    config = loadConfig(env);
     http = new SmokeClient({
       domain: config.domain,
       apiKey: config.apiKey,
-      dispatcher,
+      dispatcher: sending,
       limiter: new RateLimiter(config.team.limits),
     });
   } catch (error) {
@@ -984,6 +1007,7 @@ export async function smoke(
     out("config: fail (check FRESHDESK_DOMAIN, FRESHDESK_API_KEY, FRESHDESK_MCP_CONFIG)");
     return 1;
   }
+  if (mode === "core") return runCore(config, http, () => requests, out, days!, options);
   if (mode === "dates") return runDateProbes(http, out);
   return mode === "probes" ? runProbes(http, out) : runSmoke(http, out);
 }
@@ -994,9 +1018,10 @@ export async function main(
   dispatcher: Dispatcher,
   out: Out,
   mode: Mode = "report",
+  options: CoreOptions = {},
 ): Promise<number> {
   try {
-    return await smoke(env, dispatcher, out, mode);
+    return await smoke(env, dispatcher, out, mode, options);
   } catch {
     out("smoke: fail (unexpected error)");
     return 1;

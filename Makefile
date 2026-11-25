@@ -1,4 +1,4 @@
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -51,6 +51,13 @@ smoke-date-probes: ## T-055's GET-only probes of search's date boundary and time
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --dates
+
+# DAYS reaches the shell unexpanded, as a variable: nothing in it runs.
+smoke-core: export override DAYS := $(value DAYS)
+smoke-core: ## T-039's GET-only run of every core tool (owner runs it; same env as the server; DAYS=N narrows the 7-day period): counts and calls, no names or ids
+	npx tsc -p tsconfig.smoke.json
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --core --days "$${DAYS:-7}"
 
 rfc-sync: ## move RFCs into the folder matching their Status
 	python3 tools/checks/sync_rfc_status.py

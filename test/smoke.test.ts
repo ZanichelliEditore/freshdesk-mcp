@@ -1,10 +1,20 @@
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { types } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient, type HttpRequest, type PageRequest } from "../src/client/http.js";
 import { RateLimiter } from "../src/client/rate-limit.js";
 import { listTicketFields } from "../src/client/resources/ticket-fields.js";
+import { loadConfig } from "../src/config.js";
+import { createServer } from "../src/server.js";
+import { createContext } from "../src/tools/context.js";
+import { OPEN } from "../src/tools/format.js";
+import { CORE_TOOLS } from "../src/tools/toolsets/core/index.js";
+import { DATA_NOT_INSTRUCTIONS } from "../src/tools/toolsets/index.js";
 import {
   choicesShape,
+  type CoreOptions,
   DATE_SCAN_PAGES,
   type DateReading,
   elapsedBand,
@@ -21,7 +31,19 @@ import {
   zoneDay,
 } from "../scripts/smoke/smoke.js";
 import { agentPages, groupPages } from "./fixtures/agents-groups.js";
+import { cannedFolderPages, cannedFolderView, cannedResponseView } from "./fixtures/canned.js";
+import { schemaFieldsPayload } from "./fixtures/schema.js";
+import {
+  articlePages,
+  articleView,
+  categoryPages,
+  folderPages,
+  folderView,
+  searchHits,
+} from "./fixtures/solutions.js";
+import { conversationPages, ticketPage, ticketView } from "./fixtures/tickets.js";
 import { ticketFieldsPayload, ticketFieldsWithEntityChoices } from "./fixtures/ticket-fields.js";
+import { type CallResult, listTools, open } from "./support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "./support/mock-dispatcher.js";
 
 // Invented: neither may appear in any output.
@@ -1207,3 +1229,397 @@ function searchUnderTickets(list: typeof dated, path: string): Route {
   }).length;
   return { status: 200, body: { total, results: [] } };
 }
+
+// ---------------------------------------------------------------------------
+// T-039: every `core` tool through the server in process (`make smoke-core`).
+
+/** 2026-03-10, 12:00 UTC: the default period is 2026-03-04 to 2026-03-10. */
+const CORE_NOW = Date.parse("2026-03-10T12:00:00Z");
+const IN_PERIOD = "2026-03-09T10:00:00Z";
+const RATE_HEADERS = {
+  ...JSON_TYPE,
+  "x-ratelimit-total": "5000",
+  "x-ratelimit-remaining": "4990",
+  "x-ratelimit-used-currentrequest": "1",
+};
+
+const coreTickets = ticketPage.map((ticket) => ({
+  ...ticket,
+  created_at: IN_PERIOD,
+  updated_at: IN_PERIOD,
+}));
+const coreView = { ...ticketView, created_at: IN_PERIOD, updated_at: IN_PERIOD };
+const coreContact = { id: 8801, name: "Pip Marlowe", email: "pip@example.com", company_id: 9001 };
+const coreCompany = { id: 9001, name: "Marlowe Kites" };
+
+interface CoreAccount {
+  tickets: unknown[];
+  categories: unknown[];
+  cannedFolders: unknown[];
+  /** Search's `total` for the period query of count_tickets and export_tickets. */
+  periodTotal?: number;
+  /** A status for a request, or undefined to serve it. */
+  fail?: (url: URL, seen: number) => number | undefined;
+}
+
+const HEALTHY: CoreAccount = {
+  tickets: coreTickets,
+  categories: categoryPages[0]!,
+  cannedFolders: cannedFolderPages[0]!,
+};
+
+function periodQuery(from: string, to: string): string {
+  return `"created_at:>'${from}' AND created_at:<'${to}'"`;
+}
+
+/** Every GET of the core tools, served by path; `seen` counts the requests so far. */
+function serveCore(account: CoreAccount, onPeriodSearch?: () => void) {
+  let seen = 0;
+  mock
+    .get(ORIGIN)
+    .intercept({ path: () => true, method: "GET" })
+    .reply((opts) => {
+      seen += 1;
+      const url = new URL(opts.path, ORIGIN);
+      const path = url.pathname.replace(/^\/api\/v2/, "");
+      const answer = (body: unknown, statusCode = 200) => ({
+        statusCode,
+        data: JSON.stringify(body),
+        responseOptions: { headers: RATE_HEADERS },
+      });
+      const failed = account.fail?.(url, seen);
+      if (failed !== undefined) {
+        return answer({ description: CANARY, errors: [{ message: CANARY }] }, failed);
+      }
+      if (path === "/ticket_fields") return answer(schemaFieldsPayload);
+      if (path === "/agents") return answer(agents);
+      if (path === "/groups") return answer(groups);
+      if (path === "/tickets") return answer(account.tickets);
+      if (/^\/tickets\/\d+$/.test(path)) return answer(coreView);
+      if (/^\/tickets\/\d+\/conversations$/.test(path)) return answer(conversationPages[0]);
+      if (/^\/contacts\/\d+$/.test(path)) return answer(coreContact);
+      if (/^\/companies\/\d+$/.test(path)) return answer(coreCompany);
+      if (path === "/search/tickets") {
+        const query = url.searchParams.get("query") ?? "";
+        if (query.includes("created_at:<")) {
+          onPeriodSearch?.();
+          return answer({
+            total: account.periodTotal ?? account.tickets.length,
+            results: account.tickets,
+          });
+        }
+        return answer({ total: account.tickets.length, results: account.tickets });
+      }
+      if (path === "/solutions/categories") return answer(account.categories);
+      if (/^\/solutions\/categories\/\d+\/folders$/.test(path)) return answer(folderPages[0]);
+      if (/^\/solutions\/folders\/\d+\/articles$/.test(path)) return answer(articlePages[0]);
+      if (/^\/solutions\/folders\/\d+$/.test(path)) return answer(folderView);
+      if (/^\/solutions\/articles\/\d+$/.test(path)) return answer(articleView);
+      if (path === "/search/solutions") return answer(searchHits);
+      if (path === "/canned_response_folders") return answer(account.cannedFolders);
+      if (/^\/canned_response_folders\/\d+$/.test(path)) return answer(cannedFolderView);
+      if (/^\/canned_responses\/\d+$/.test(path)) return answer(cannedResponseView);
+      return answer({ description: "not served by the test" }, 404);
+    })
+    .persist();
+}
+
+let coreDirs: string[] = [];
+afterEach(() => {
+  for (const dir of coreDirs) rmSync(dir, { recursive: true, force: true });
+  coreDirs = [];
+});
+
+/** A fresh parent for the run's export directory, and a team file with fast pacing. */
+function coreSetup() {
+  const root = mkdtempSync(join(tmpdir(), "freshdesk-mcp-smoke-test-"));
+  coreDirs.push(root);
+  const team = join(root, "team.json");
+  writeFileSync(team, JSON.stringify({ limits: { pacing_rps: 1000 } }));
+  const tmpRoot = join(root, "tmp");
+  mkdirSync(tmpRoot);
+  return { team, tmpRoot };
+}
+
+async function core(
+  account: CoreAccount,
+  options: Partial<CoreOptions> = {},
+  onPeriodSearch?: (tmpRoot: string) => void,
+) {
+  const { team, tmpRoot } = coreSetup();
+  serveCore(account, () => onPeriodSearch?.(tmpRoot));
+  const lines: string[] = [];
+  const results = new Map<string, CallResult[]>();
+  const env = { FRESHDESK_DOMAIN: DOMAIN, FRESHDESK_API_KEY: API_KEY, FRESHDESK_MCP_CONFIG: team };
+  const code = await main(env, mock, (line) => lines.push(line), "core", {
+    now: CORE_NOW,
+    tmpRoot,
+    seen: (tool, result) => results.set(tool, [...(results.get(tool) ?? []), result]),
+    ...options,
+  });
+  return { code, lines, out: lines.join("\n"), results, tmpRoot };
+}
+
+function toolLine(lines: string[], label: string): string {
+  const line = lines.find((each) => each.startsWith(`tool ${label}: `));
+  expect(line, `no line for ${label}`).toBeDefined();
+  return line!;
+}
+
+function caseLine(lines: string[], name: string): string {
+  const line = lines.find((each) => each.startsWith(`use case ${name} `));
+  expect(line, `no line for ${name}`).toBeDefined();
+  return line!;
+}
+
+function requestUrls(): URL[] {
+  return sent().map((call) => new URL(call.fullUrl));
+}
+
+/** String values and numbers of 100 or more in the fixtures: ticket text, names, ids. */
+function fixtureValues(value: unknown, into = new Set<string>()): Set<string> {
+  if (typeof value === "string") {
+    if (value.length > 3 && !/^\d{4}-\d\d-\d\d/.test(value)) into.add(value);
+  } else if (typeof value === "number" && value >= 100) into.add(String(value));
+  else if (Array.isArray(value)) for (const item of value) fixtureValues(item, into);
+  else if (typeof value === "object" && value !== null) {
+    for (const item of Object.values(value)) fixtureValues(item, into);
+  }
+  return into;
+}
+
+describe("smoke core: every registered core tool", () => {
+  it("calls each tool of the registry through the server; all pass on a healthy account", async () => {
+    const { code, lines, results } = await core(HEALTHY);
+    expect(code).toBe(0);
+    for (const tool of CORE_TOOLS) {
+      expect(results.has(tool.name), `${tool.name} was not called`).toBe(true);
+      expect(toolLine(lines, tool.name)).toMatch(/: pass(, | \(empty\), )/);
+    }
+    expect(toolLine(lines, "list_tickets uncategorized")).toMatch(/: pass/);
+    expect(lines.filter((line) => line.startsWith("tool "))).toHaveLength(CORE_TOOLS.length + 1);
+    for (const name of ["C1 listing", "C2", "C3 read", "C7", "C9", "C10"]) {
+      expect(caseLine(lines, name)).toMatch(/: pass/);
+    }
+    expect(lines.at(-1)).toBe("smoke core: ok");
+  });
+
+  it("a registered tool the run has no call for is a fail, exit non-zero", async () => {
+    const extra = { ...CORE_TOOLS[0]!, name: "brand_new_tool" };
+    const { code, lines } = await core(HEALTHY, { toolsets: { core: [...CORE_TOOLS, extra] } });
+    expect(code).toBe(1);
+    expect(toolLine(lines, "brand_new_tool")).toBe(
+      "tool brand_new_tool: fail no_smoke_call, calls 0",
+    );
+    expect(lines.at(-1)).toBe("smoke core: fail");
+  });
+
+  it("sends GET only, and every request counted in the calls", async () => {
+    const { lines } = await core(HEALTHY);
+    const calls = sent();
+    expect(calls.length).toBeGreaterThan(20);
+    expect(new Set(calls.map((call) => call.method))).toEqual(new Set(["GET"]));
+    const total = lines.find((line) => /^smoke core: \d+ tool lines, /.test(line));
+    expect(total).toMatch(new RegExp(`; ${calls.length} calls$`));
+  });
+
+  it("prints the calls each tool used", async () => {
+    const { lines } = await core(HEALTHY);
+    // Warm schema: get_ticket_schema loads it (fields, agents, groups).
+    expect(toolLine(lines, "get_ticket_schema")).toMatch(/, calls 3$/);
+    expect(toolLine(lines, "list_agents")).toMatch(/, calls 1$/);
+  });
+});
+
+describe("smoke core: the period of count_tickets and export_tickets", () => {
+  it("is the last 7 days by default, asserted in the requests", async () => {
+    const { lines } = await core(HEALTHY);
+    const queries = requestUrls()
+      .filter((url) => url.pathname === "/api/v2/search/tickets")
+      .map((url) => url.searchParams.get("query"));
+    expect(
+      queries.filter((query) => query === periodQuery("2026-03-04", "2026-03-10")),
+    ).toHaveLength(2);
+    expect(lines[0]).toContain("2026-03-04 to 2026-03-10");
+    expect(toolLine(lines, "count_tickets")).toMatch(/: pass, total 2, groups 1, calls \d+$/);
+    expect(toolLine(lines, "export_tickets")).toMatch(/: pass, rows 2, calls \d+$/);
+  });
+
+  it("takes a narrower period from --days", async () => {
+    await core(HEALTHY, { days: "2" });
+    const queries = requestUrls().map((url) => url.searchParams.get("query"));
+    expect(
+      queries.filter((query) => query === periodQuery("2026-03-09", "2026-03-10")),
+    ).toHaveLength(2);
+  });
+
+  it.each(["0", "-1", "1.5", "abc", "367", ""])("refuses --days %j, nothing sent", async (days) => {
+    const { code, lines } = await core(HEALTHY, { days });
+    expect(code).toBe(1);
+    expect(lines).toEqual(["config: fail (--days takes a whole number of days, 1 to 366)"]);
+    expect(sent()).toEqual([]);
+  });
+
+  it("reports a budget refusal as refused (budget) with the estimate, not as fail", async () => {
+    const { code, lines } = await core({ ...HEALTHY, periodTotal: 30_000 });
+    expect(code).toBe(0);
+    expect(toolLine(lines, "count_tickets")).toMatch(
+      /^tool count_tickets: refused \(budget\), estimate 301 calls over the budget of 250, calls \d+$/,
+    );
+    expect(toolLine(lines, "export_tickets")).toMatch(/: refused \(budget\), estimate 301 calls/);
+    expect(caseLine(lines, "C7")).toMatch(/: refused \(budget\)/);
+    expect(lines.join("\n")).not.toMatch(/: fail/);
+  });
+});
+
+describe("smoke core: outcomes", () => {
+  it("an empty list is pass (empty); a tool with no id to use is not exercised", async () => {
+    const { lines } = await core({ tickets: [], categories: [], cannedFolders: [] });
+    expect(toolLine(lines, "list_tickets")).toMatch(
+      /^tool list_tickets: pass \(empty\), items 0, /,
+    );
+    expect(toolLine(lines, "get_ticket")).toBe(
+      "tool get_ticket: not exercised (no ticket), calls 0",
+    );
+    expect(toolLine(lines, "find_similar_tickets")).toBe(
+      "tool find_similar_tickets: not exercised (no ticket), calls 0",
+    );
+    expect(toolLine(lines, "list_solution_tree")).toMatch(/: pass \(empty\), categories 0, /);
+    expect(toolLine(lines, "get_solution_article")).toBe(
+      "tool get_solution_article: not exercised (no article), calls 0",
+    );
+    expect(toolLine(lines, "search_solutions")).toBe(
+      "tool search_solutions: not exercised (no article title to search for), calls 0",
+    );
+    expect(toolLine(lines, "list_canned_responses")).toMatch(/: pass \(empty\), folders 0, /);
+    expect(toolLine(lines, "get_canned_response")).toBe(
+      "tool get_canned_response: not exercised (no canned response), calls 0",
+    );
+    expect(caseLine(lines, "C3 read")).toMatch(
+      /: pass; owner to accept: list_tickets pass \(empty\), get_ticket not exercised/,
+    );
+  });
+
+  it("a failing tool prints its error code only, and the run exits non-zero", async () => {
+    const fail = (url: URL) => (/^\/api\/v2\/tickets\/\d+$/.test(url.pathname) ? 404 : undefined);
+    const { code, lines, out } = await core({ ...HEALTHY, fail });
+    expect(code).toBe(1);
+    expect(toolLine(lines, "get_ticket")).toBe("tool get_ticket: fail not_found, calls 1");
+    expect(caseLine(lines, "C3 read")).toMatch(/: fail$/);
+    expect(out).not.toContain(CANARY);
+    expect(stderr.join("")).not.toContain(CANARY);
+    expect(lines.at(-1)).toBe("smoke core: fail");
+  });
+
+  it("C9 and C10 each include the search_tickets call, sent for recent tickets", async () => {
+    const { lines } = await core(HEALTHY);
+    expect(caseLine(lines, "C9")).toMatch(/\(.*search_tickets.*\): pass/);
+    expect(caseLine(lines, "C10")).toMatch(/\(.*search_tickets.*\): pass/);
+    expect(caseLine(lines, "C9")).toContain("list_solution_tree");
+    expect(caseLine(lines, "C10")).toContain("list_canned_responses");
+    const queries = requestUrls().map((url) => url.searchParams.get("query"));
+    expect(queries).toContain(`"created_at:>'2026-03-04'"`);
+  });
+
+  it("prints no fixture text, id, domain or key", async () => {
+    const { lines } = await core(HEALTHY);
+    const out = [...lines, ...stderr].join("\n");
+    const values = [
+      ...fixtureValues([
+        coreTickets,
+        coreView,
+        coreContact,
+        coreCompany,
+        conversationPages,
+        agents,
+        groups,
+        schemaFieldsPayload,
+        categoryPages,
+        folderPages,
+        articlePages,
+        articleView,
+        searchHits,
+        folderView,
+        cannedFolderPages,
+        cannedFolderView,
+        cannedResponseView,
+      ]),
+    ];
+    expect(values).toContain("Sprocket squeaks at dawn");
+    expect(values).toContain("4101");
+    const leaked = values.filter((value) =>
+      new RegExp(`(?<![A-Za-z0-9_])${escape(value)}(?![A-Za-z0-9_])`).test(out),
+    );
+    expect(leaked).toEqual([]);
+    for (const secret of [DOMAIN, "quillmoor", API_KEY, ORIGIN]) expect(out).not.toContain(secret);
+  });
+});
+
+describe("smoke core: the export directory", () => {
+  function watch() {
+    const modes: number[] = [];
+    const record = (tmpRoot: string) => {
+      const entries = readdirSync(tmpRoot);
+      expect(entries).toHaveLength(1);
+      modes.push(statSync(join(tmpRoot, entries[0]!)).mode & 0o777);
+    };
+    return { modes, record };
+  }
+
+  it("is a temporary 0700 directory, gone after a run that passes", async () => {
+    const { modes, record } = watch();
+    const { code, tmpRoot } = await core(HEALTHY, {}, record);
+    expect(code).toBe(0);
+    expect(modes.length).toBeGreaterThan(0);
+    expect(new Set(modes)).toEqual(new Set([0o700]));
+    expect(readdirSync(tmpRoot)).toEqual([]);
+  });
+
+  it("is gone after a run whose export fails", async () => {
+    const { modes, record } = watch();
+    let periodSearches = 0;
+    const fail = (url: URL) => {
+      if (!(url.searchParams.get("query") ?? "").includes("created_at:<")) return undefined;
+      periodSearches += 1;
+      // count_tickets' search is served; export_tickets' fails.
+      return periodSearches === 2 ? 400 : undefined;
+    };
+    const { code, lines, tmpRoot } = await core({ ...HEALTHY, fail }, {}, record);
+    expect(code).toBe(1);
+    expect(toolLine(lines, "export_tickets")).toMatch(/^tool export_tickets: fail validation, /);
+    expect(modes).toEqual([0o700]);
+    expect(readdirSync(tmpRoot)).toEqual([]);
+  });
+});
+
+describe("smoke core: the real registry's descriptions", () => {
+  it("state each tool's cost; a tool whose fixture result has customer text says so", async () => {
+    const { results } = await core(HEALTHY);
+    const { team } = coreSetup();
+    const config = loadConfig({
+      FRESHDESK_DOMAIN: DOMAIN,
+      FRESHDESK_API_KEY: API_KEY,
+      FRESHDESK_MCP_CONFIG: team,
+    });
+    const server = createServer(createContext(config, mock));
+    const listed = await listTools(await open(server));
+    expect(listed.map((tool) => tool.name).sort()).toEqual(
+      CORE_TOOLS.map((tool) => tool.name).sort(),
+    );
+    const withText: string[] = [];
+    for (const tool of CORE_TOOLS) {
+      const description = listed.find((each) => each.name === tool.name)!.description;
+      expect(description).toContain(`Cost: ${tool.cost}.`);
+      const texts = (results.get(tool.name) ?? []).flatMap((result) =>
+        result.content.map((part) => part.text),
+      );
+      if (texts.some((text) => text.includes(OPEN))) {
+        withText.push(tool.name);
+        expect(tool.customerText, tool.name).toBe(true);
+        expect(description, tool.name).toContain(DATA_NOT_INSTRUCTIONS);
+      }
+    }
+    expect(withText).toEqual(expect.arrayContaining(["get_ticket", "get_canned_response"]));
+    await server.close();
+  });
+});
