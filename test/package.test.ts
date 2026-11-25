@@ -58,7 +58,7 @@ const SPEC_CORE = [
  * `"-y"` must go on with `--prefer-online`; returns the offenders.
  */
 function readmeNpxWithoutPreferOnline(text: string): string[] {
-  const shell = [...text.matchAll(/npx -y(?! --prefer-online)\S*.*/g)].map((m) => m[0]);
+  const shell = [...text.matchAll(/npx -y(?! --prefer-online).*/g)].map((m) => m[0]);
   const args = [...text.matchAll(/"args":\s*\[\s*"-y"(?!\s*,\s*"--prefer-online")[^\]]*\]/g)].map(
     (m) => m[0],
   );
@@ -211,8 +211,15 @@ describe("README.md", () => {
     expect(readmeNpxWithoutPreferOnline(readme)).toEqual([]);
   });
 
-  it("the --prefer-online check flags a shell npx and an args array without it", () => {
-    expect(readmeNpxWithoutPreferOnline('npx -y pkg\n"args": ["-y", "pkg"]')).toHaveLength(2);
+  it("the --prefer-online check flags each rule's offender and passes the right form", () => {
+    expect(readmeNpxWithoutPreferOnline("run npx -y pkg --x")).toEqual(["npx -y pkg --x"]);
+    expect(readmeNpxWithoutPreferOnline("npx -y")).toEqual(["npx -y"]);
+    expect(readmeNpxWithoutPreferOnline('"args": ["-y", "pkg"]')).toEqual([
+      '"args": ["-y", "pkg"]',
+    ]);
+    expect(readmeNpxWithoutPreferOnline('"args": ["-y", "pkg", "--prefer-online"]')).toEqual([
+      '"args": ["-y", "pkg", "--prefer-online"]',
+    ]);
     expect(readmeNpxWithoutPreferOnline("npx -y --prefer-online pkg@1.0.0")).toEqual([]);
     expect(readmeNpxWithoutPreferOnline('"args": [\n  "-y",\n  "--prefer-online", "pkg"]')).toEqual(
       [],

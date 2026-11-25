@@ -4,71 +4,58 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T13:32:19+01:00`
-- **Describes commit:** `bae5314`, pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45614884589
-  (workflow `quality`, ran on `bae5314`). This file's hash and CI line
-  arrive in the commit right after it.
+- **Written:** `2026-11-25T13:39:35+01:00`
+- **Describes commit:** `<hash>`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `<pending>`. This file's
+  hash and CI line arrive in the commit right after it.
 
-- **Current task:** M1 plan session (`/decompose` scoped to T-049, T-052
-  and the owner's row of 2026-11-25) `done (2026-11-25)`: T-061, T-052,
-  T-049 sized to `todo` with task files, in that order after T-060 in
-  `docs/tasks/PLAN.md` (dated note above "Not sized"). Commits `bcf8138`,
-  `6a8cfdc`, `bae5314`. T-046's two open doubts closed by the owner
-  (`docs/tasks/T-046-tool-catalogue.md`, "Open doubts").
+- **Current task:** T-061 (README `npx` commands run with
+  `--prefer-online`) `done (2026-11-25)`. Commits `bad813a` (change, R1)
+  and the handoff commit (review fixes). Scope addition (orchestrator,
+  under the owner's delegation, 2026-11-25): the README's "Not yet
+  published" block removed; recorded in
+  `docs/tasks/T-061-readme-prefer-online.md`, "In scope".
 
-- **Next action:** `/pickup` takes T-061 (README `npx` commands with
-  `--prefer-online`; first `todo` in PLAN order, T-060 done). The
-  orchestrator has T-040 and T-014 (M2 gates) in scope next by the owner's
-  word; their rows are untouched by this session.
+- **Next action:** `/pickup` takes T-052 (Dependabot ignore rules; next
+  `todo` in PLAN order after T-061).
 
-- **Read before anything else:** `docs/tasks/T-061-readme-prefer-online.md`.
+- **Read before anything else:** `docs/tasks/T-052-dependabot-ignore.md`.
 
 - **Reviews:**
-  - Full round, R1 = `bcf8138`, range `bd61729..bcf8138`, diff file with
-    quotes checked for all three:
-    - `code-reviewer`: 2 Medium (T-061 "an `npx` command" undefined;
-      T-049 one-commit-at-a-time clause untestable), 3 Low (T-049 malformed
-      `RANGE`; T-052 comment check loose, Dependabot behaviour untestable;
-      T-061 edits the stale block). All fixed in `6a8cfdc`; the last as a
-      note in T-061's scope.
-    - `security-reviewer`: 1 High (T-049 run from the PR's checkout), 3
-      Medium (T-012's partial-read exit and shallow clones; reversed range,
-      silent pass; messages and paths not scanned), 1 Low (`RANGE`
-      quoting), 2 Info (T-052 may mute security updates: the builder
-      confirms; pin advice overstated: parked, `docs/improvements.md`).
-      Fixed in `6a8cfdc` except the parked Info.
+  - Full round, R1 = `bad813a`, range `079e504..bad813a`, diff file in the
+    handoff format, quotes (base, HEAD, stat line, trailer) checked for all
+    three. A first dispatch on a bare `git diff` was refused by
+    `compliance-reviewer` and `security-reviewer` (no header, no trailer:
+    red gate) and redone.
+    - `code-reviewer`: 1 Medium (the "shown failing" acceptance had no
+      evidence: run, 6 offenders on `079e504:README.md`, recorded in the
+      task file), Lows: self-test checked only a count and not "right
+      after" (fixed, per-rule cases); redundant `\S*` (removed); task
+      file's in-scope list still named the removed block's sentence
+      (fixed); guard covers `npx -y` only and T-060's `section()` slice
+      overlap (both parked, `docs/improvements.md`). PLAN row text left
+      as is: acceptance unchanged, the scope addition lives in the task
+      file.
+    - `security-reviewer`: none (Low on unpinned snippets in the bare-diff
+      run: the pin advice stays, owner's choice).
     - `compliance-reviewer`: wireframes `none`, complete.
-  - Scoped round, range `bcf8138..6a8cfdc`, quotes checked for all three:
-    `code-reviewer` and `security-reviewer` each 2 fail-open findings on
-    T-049 (empty range no longer refused; checkout guard missed a local
-    merge or dirty `Makefile`/`tools/`), fixed in this commit; the rest
-    parked (`docs/improvements.md`, "M1 plan scoped review");
-    `compliance-reviewer`: wireframes `none`, complete.
-  - The scoped fix changed T-049's guard mechanism a second time and was
-    **not reviewed again** (rule 9): owner, see "Open doubts".
+  - No scoped round: the fixes changed no mechanism (same regex
+    semantics, added test cases, task-file text).
 
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
-  - T-049's checkout guard (acceptance in PLAN and task file) was changed
-    by the scoped round's fix and not reviewed a third time; confirm it, or
-    have T-049's own review settle it.
-  - README's "Not yet published" block is stale (0.1.0 and 0.2.0 are on
-    npm); T-061 only updates its snippet. Remove it in T-061, a new row,
-    or keep?
-  - Closed: pin vs `--prefer-online` (owner, 2026-11-25: `--prefer-online`,
-    T-061; pin advice kept). Step 6 of RFC 2026-11-25 (release on npm: 2FA,
-    disallow tokens) is the owner's own action, not a row (PLAN, "Not
-    sized").
+  - Carried: T-049's checkout guard (acceptance in PLAN and task file) was
+    changed by the M1 plan's scoped round and not reviewed a third time;
+    confirm it, or have T-049's own review settle it.
+  - Closed: the stale "Not yet published" block (removed in T-061, scope
+    addition above).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `6a8cfdc` plus this commit's
-  doc edits:
-  - vitest "Test Files 39 passed (39)", "Tests 2645 passed (2645)";
+- **Checkpoint:** `make quality` exit 0 on `bad813a` plus the review fixes:
+  - vitest "Test Files 39 passed (39)", "Tests 2648 passed (2648)";
   - `tools/checks` "Ran 87 tests", OK;
   - lint, format, typecheck, build and both gitleaks scans passed.

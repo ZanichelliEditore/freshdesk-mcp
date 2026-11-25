@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M1
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-060
 - **Created:** 2026-11-25
 
@@ -17,8 +17,8 @@ gets the version npm serves now and not npm's cached metadata (owner,
   `npx -y --prefer-online @zanichelli/freshdesk-mcp` everywhere: the
   install snippet, the pinned form in the pin advice
   (`npx -y --prefer-online @zanichelli/freshdesk-mcp@<version>`), the
-  "replace … with" sentence of the "Not yet published" block, the
-  `claude mcp add` line; the JSON `"args"` arrays (`.mcp.json`, Claude
+  `claude mcp add` line (the "replace … with" sentence of the "Not yet
+  published" block left with the block: scope addition below); the JSON `"args"` arrays (`.mcp.json`, Claude
   Desktop) become `["-y", "--prefer-online", "@zanichelli/freshdesk-mcp", …]`.
 - The pin advice stays: pinning answers trust, `--prefer-online` answers
   the stale cache; the `notarget` in `docs/journal.md` (T-060, 0.2.0
@@ -58,6 +58,17 @@ gets the version npm serves now and not npm's cached metadata (owner,
 *Filled at `/handoff`:*
 
 ## Done
+- `bad813a`: README `npx -y` lines and both `"args"` arrays carry
+  `--prefer-online`, the pinned form too; the "Not yet published" block is
+  gone. Review fixes in the handoff commit.
+- Tests in `test/package.test.ts`, `describe("README.md")`: "runs the
+  package with npx, latest and pinned, with --prefer-online (T-061)", "puts
+  --prefer-online right after -y in every npx command and args array
+  (T-061)", "the --prefer-online check flags each rule's offender and
+  passes the right form", "no longer says the package is not published
+  (T-061)", and the two T-060 snippet cases updated.
+- The check, run on `079e504:README.md`, lists 6 offenders (install line,
+  pinned form, "replace … with" sentence, `claude mcp add`, two `"args"`).
 
 ## Dead ends
 none
@@ -66,5 +77,7 @@ none
 none
 
 ## Context pressure
+low
 
 ## Next action
+none: done.
