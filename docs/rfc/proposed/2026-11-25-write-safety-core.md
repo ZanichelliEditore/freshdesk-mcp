@@ -162,8 +162,9 @@ sets follow SPEC §8.2:
 No set holds requester, email, phone, name, company, source, subject,
 description, product, due dates or any other default field. A default
 field Freshdesk adds later is in no set until a reviewed change puts it
-there: the sets fail closed. `categorize_tickets` cannot change status,
-priority, group or agent directly, so a bulk change recategorises but does
+there: the default-field sets fail closed (custom fields: question 4).
+`categorize_tickets` cannot change status, priority, group or agent
+directly, so a bulk change recategorises but does
 not itself reroute or close tickets; those go one ticket at a time through
 `update_ticket`. It can still set any custom field, and an automation
 whose condition is a custom field can then reroute: SPEC §8.2's

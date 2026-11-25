@@ -4,66 +4,76 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T15:53:26+01:00`
-- **Describes commit:** `52e275b`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the T-063 handoff commit). **CI:**
-  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45639319386
-  (workflow `quality`, ran on `52e275b`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-25T16:15:35+01:00`
+- **Describes commit:** `<hash>` (filled by the stamp commit). **CI:**
+  `<run>`.
 
-- **Current task:** T-063 (a search cursor resumes on `(created_at, id)`)
-  `done (2026-11-25)`. Work `a9fb027`, review fixes `9db6435`, then the
-  handoff commit. Split point not taken: the fix and the smoke probe both
-  shipped. See `docs/tasks/T-063-search-cursor-pair.md` "Done".
+- **Release since the last handoff:** 0.3.0, by the orchestrator: commit
+  `823d4eb` "Release 0.3.0: version bumped, CHANGELOG dated" (one commit
+  past T-063's stamp `fe4c136`); quality CI green
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45640079785;
+  tag `v0.3.0` on `823d4eb`; release run green incl. publish
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45640385998;
+  npm `latest` = 0.3.0 (`npx -y --prefer-online
+  @zanichelli/freshdesk-mcp@0.3.0 --version` printed 0.3.0). CHANGELOG's
+  "Unreleased" doubt of T-063 is closed by it.
 
-- **Next action:** `/pickup` takes T-040 (RFC: does the first write tool
-  need a safety core; first `todo` in PLAN order).
+- **Current task:** T-040 (RFC: write safety core; per-tool writable
+  fields) `doing (2026-11-25)`, waiting on the owner's word. RFC
+  `docs/rfc/proposed/2026-11-25-write-safety-core.md`, Status Proposed.
+  Work `a9b7aa9`, review fixes `c928102`, then the handoff commit. See
+  `docs/tasks/T-040-rfc-write-safety.md` "Done".
 
-- **Read before anything else:** `docs/tasks/T-040-rfc-write-safety.md`.
+- **Next action:** the owner reads the RFC and answers its "Questions for
+  the owner". On acceptance a session sets Status Active (owner, date),
+  runs `make rfc-sync`, applies AGENTS.md rule 1 and SPEC §9, sets T-040
+  `done (date)`; after the time-trigger check (2026-11-26) it writes the
+  M2 wording into SPEC §13 in the form the check allows. Then
+  `/decompose M2`. No `todo` row is takeable before that.
 
-- **Reviews:** full round R1 = `a9fb027`, range `691ab1f..a9fb027`; scoped
-  round range `a9fb027..9db6435`. All six dispatches quoted base, HEAD,
-  stat line and trailer correctly; none used Bash.
-  - R1 `code-reviewer`: no blocking finding; four Low, all fixed in
-    `9db6435` (an untagged new-form search cursor test; a largest-id
-    resume test; the out-of-search throw asserts the internal-error text;
-    "tie-break measured" wording corrected in count-tickets.ts,
-    export-tickets.ts and overview.md). Note "task file not in range":
-    filled at this handoff.
-  - R1 `security-reviewer`: Low, `make smoke-order-probe DAY=--core` ran
-    `runCore` (fixed in `9db6435`: the mode is read from flags only; hand
-    demo in the task file); info, the day's exact count is printed
-    (dismissed: a count, the acceptance asks for it).
+- **Read before anything else:** the RFC, then the task file.
+
+- **Reviews:**
+  - `rfc-reviewer` on the draft: full round (8 findings) and scoped round
+    (2), all resolved in the RFC ("Review" section); no third round.
+  - Handoff full round R1 = `a9b7aa9`, range `823d4eb..a9b7aa9`; scoped
+    range `a9b7aa9..c928102`. All six dispatches quoted base, HEAD, stat
+    line and trailer correctly.
+  - R1 `code-reviewer`: acceptance not met (dismissed: waits on the
+    owner's word, by design); agent names dropped (ids only), "Not
+    covered" widened, citations fixed, parked entry re-tagged, all in
+    `c928102`.
+  - R1 `security-reviewer`: Resolved/Closed requester notifications and
+    custom fields fail-open put to the owner (questions 6, 4); closed note
+    payload (invariant 6); failed recipient lookup refuses the whole
+    write; all in `c928102`.
   - R1 `compliance-reviewer`: wireframes `none`.
-  - Scoped: `code-reviewer` and `security-reviewer` no finding that
-    falsifies an acceptance line or opens a fail-open path; three items
-    parked in `docs/improvements.md` (`9db6435` entry);
-    `compliance-reviewer` wireframes `none`. No third round.
+  - Scoped: `code-reviewer` one wording contradiction ("the sets fail
+    closed"), fixed in the handoff commit; it also ran one read-only
+    `git grep` through Bash against the rule (it said so). Its re-tag
+    remark dismissed: R1 asked for the tag of the commit holding the text.
+    `security-reviewer` none. Both parked items in `docs/improvements.md`
+    (`c928102` entry). `compliance-reviewer` wireframes `none`.
 
-- **Proposed plan changes:** none.
+- **Proposed plan changes:** T-064 (the write path) and T-065 (per-tool
+  allow sets), `proposed (2026-11-25)`, valid only if the owner accepts
+  the RFC; sized by `/decompose M2`.
 
 - **Open doubts (owner):**
-  - Owner action: run `make smoke-order-probe` (yesterday UTC) or
-    `make smoke-order-probe DAY=YYYY-MM-DD` on a busy weekday. The answer
-    is the line `probe search_order <day>: ... within a shared created_at
-    second, ids fall: yes|no` and the last
-    `... search's order is created_at, then id, both descending: yes|no`.
-    `no` means resumed reads on such days are refused (fail closed) and a
-    follow-up row is needed; keep the output in
-    `docs/private/account-facts.md`.
-  - `CHANGELOG.md` has an "Unreleased" section (old cursors refused once):
-    the owner decides when to release.
+  - The RFC's six questions (accept OD-2/OD-3; `add_note private:false`
+    in `write`; "C8 (new tickets)"; `product` and custom fields
+    fail-open; the time-trigger outcome; Resolved/Closed notifications).
   - Time triggers on `mcp-test` tickets: the owner checks the activity log
-    on 2026-11-26 (T-040 task file, "Owner's evidence (2026-11-25)").
-  - T-040's RFC takes up the proposed reading of M2's "automations
-    confirmed to skip the tag first"; SPEC §13 unchanged until then.
+    on 2026-11-26.
+  - Owner action, still open from T-063: run `make smoke-order-probe`
+    (see T-063's task file) and keep the output in
+    `docs/private/account-facts.md`.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `9db6435`:
-  - vitest "Tests 2691 passed (2691)";
-  - `tools/checks` "Ran 138 tests", OK;
-  - eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
-    scans passed.
+- **Checkpoint:** `make quality` exit 0 on the handoff commit's tree:
+  vitest "Tests 2691 passed (2691)"; `tools/checks` "Ran 138 tests", OK;
+  eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
+  scans passed.

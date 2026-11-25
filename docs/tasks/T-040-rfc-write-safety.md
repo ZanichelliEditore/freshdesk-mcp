@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M2
-- **Status:** todo (2026-11-23)
+- **Status:** doing (2026-11-25)
 - **Depends on:** none
 - **Created:** 2026-11-23
 
@@ -73,13 +73,35 @@ any write resource; `make quality` green.
 *Filled at `/handoff`:*
 
 ## Done
+- RFC drafted: `docs/rfc/proposed/2026-11-25-write-safety-core.md`,
+  Status Proposed (commits `a9b7aa9`, `c928102` and this handoff). OD-3:
+  a small safety core, the write path (invariants 1 to 6). OD-2: a per-tool
+  allow set table, default fields fail closed. Proposed wording for M2's
+  "automations confirmed to skip the tag first", conditional on the
+  time-trigger check (2026-11-26). Spam marking: binds M2's test
+  procedure, not code (no M2 tool creates tickets).
+- `rfc-reviewer`: full and scoped rounds, resolved in the RFC ("Review").
+  Handoff R1 (`code-reviewer`, `security-reviewer`) fixes in `c928102`.
+- PLAN: `proposed` rows T-064 (the write path) and T-065 (allow sets),
+  valid only if the owner accepts the RFC.
+- Not met yet: the RFC in `docs/rfc/active/`, Status Active by the
+  owner's word. Waiting on the owner.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The RFC's six "Questions for the owner": accept OD-2/OD-3; `add_note`
+  `private: false` in `write`; M2's "C8 (new tickets)" read as
+  categorising arrivals; `product` and custom fields fail-open;
+  time-trigger outcome; Resolved/Closed requester notifications via
+  `update_ticket`'s status.
 
 ## Context pressure
+ok
 
 ## Next action
+The owner reads the RFC and answers its questions. On acceptance: set
+Status Active (owner, date), `make rfc-sync`, apply AGENTS.md rule 1 and
+SPEC §9, set T-040 `done`; after the 2026-11-26 check, write the M2
+wording into SPEC §13 in the form the check allows. Then `/decompose M2`.
