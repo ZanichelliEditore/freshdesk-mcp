@@ -5,7 +5,12 @@
 "none".*
 
 - **Written:** `2026-11-25T13:03:28+01:00`
-- **Describes commit:** filled in the stamp commit right after this one.
+- **Describes commit:** `74f6eb0`, pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45610210624
+  (workflow `quality`, ran on `74f6eb0`; observed with `gh api`, the public
+  API's `head_sha` filter returned no run). This file's hash and CI line
+  arrive in the commit right after it.
 
 - **Current task:** T-060 `done (2026-11-25)`, and **0.2.0 released**
   (2026-11-25, owner's go): `f3c53e0` dates CHANGELOG 0.2.0, `quality`
