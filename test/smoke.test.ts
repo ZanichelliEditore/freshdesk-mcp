@@ -1256,6 +1256,9 @@ interface CoreAccount {
   tickets: unknown[];
   categories: unknown[];
   cannedFolders: unknown[];
+  /** Each category's folders and each folder's articles; the fixtures' first pages by default. */
+  folders?: unknown[];
+  articles?: unknown[];
   /** Search's `total` for the period query of count_tickets and export_tickets. */
   periodTotal?: number;
   /** A status for a request, or undefined to serve it. */
@@ -1311,8 +1314,10 @@ function serveCore(account: CoreAccount, onPeriodSearch?: () => void) {
         return answer({ total: account.tickets.length, results: account.tickets });
       }
       if (path === "/solutions/categories") return answer(account.categories);
-      if (/^\/solutions\/categories\/\d+\/folders$/.test(path)) return answer(folderPages[0]);
-      if (/^\/solutions\/folders\/\d+\/articles$/.test(path)) return answer(articlePages[0]);
+      if (/^\/solutions\/categories\/\d+\/folders$/.test(path))
+        return answer(account.folders ?? folderPages[0]);
+      if (/^\/solutions\/folders\/\d+\/articles$/.test(path))
+        return answer(account.articles ?? articlePages[0]);
       if (/^\/solutions\/folders\/\d+$/.test(path)) return answer(folderView);
       if (/^\/solutions\/articles\/\d+$/.test(path)) return answer(articleView);
       if (path === "/search/solutions") return answer(searchHits);
@@ -1489,7 +1494,7 @@ describe("smoke core: outcomes", () => {
       "tool get_solution_article: not exercised (no article), calls 0",
     );
     expect(toolLine(lines, "search_solutions")).toBe(
-      "tool search_solutions: not exercised (no article title to search for), calls 0",
+      "tool search_solutions: not exercised (no article title or folder name to search for), calls 0",
     );
     expect(toolLine(lines, "list_canned_responses")).toMatch(/: pass \(empty\), folders 0, /);
     expect(toolLine(lines, "get_canned_response")).toBe(
@@ -1552,6 +1557,51 @@ describe("smoke core: outcomes", () => {
     );
     expect(leaked).toEqual([]);
     for (const secret of [DOMAIN, "quillmoor", API_KEY, ORIGIN]) expect(out).not.toContain(secret);
+  });
+});
+
+describe("smoke core: where the solutions term and article come from", () => {
+  function solutionRequests() {
+    const urls = requestUrls();
+    return {
+      terms: urls
+        .filter((url) => url.pathname === "/api/v2/search/solutions")
+        .map((url) => url.searchParams.get("term")),
+      articles: urls
+        .map((url) => /^\/api\/v2\/solutions\/articles\/(\d+)$/.exec(url.pathname)?.[1])
+        .filter((id) => id !== undefined),
+    };
+  }
+
+  it("a tree with articles: the first article's title word and its id", async () => {
+    const { lines } = await core(HEALTHY);
+    // "Fitting a new sprocket", id 3301: the tree's first article.
+    expect(solutionRequests()).toEqual({ terms: ["Fitting"], articles: ["3301"] });
+    expect(toolLine(lines, "search_solutions")).toMatch(/: pass, items 2, /);
+    expect(toolLine(lines, "get_solution_article")).toMatch(/: pass, text yes, /);
+  });
+
+  it("a tree with folders but no article: the first folder's name word, the first hit's id", async () => {
+    const { lines } = await core({ ...HEALTHY, articles: [] });
+    // "Getting Started": the first folder; 3302: the first search hit.
+    expect(solutionRequests()).toEqual({ terms: ["Getting"], articles: ["3302"] });
+    expect(toolLine(lines, "list_solution_tree")).toMatch(
+      /: pass, categories 2, folders 4, articles 0, /,
+    );
+    expect(toolLine(lines, "search_solutions")).toMatch(/: pass, items 2, /);
+    expect(toolLine(lines, "get_solution_article")).toMatch(/: pass, text yes, /);
+    expect(caseLine(lines, "C9")).toMatch(/: pass$/);
+  });
+
+  it("no folder either: both not exercised, nothing searched", async () => {
+    const { lines } = await core({ ...HEALTHY, folders: [] });
+    expect(solutionRequests()).toEqual({ terms: [], articles: [] });
+    expect(toolLine(lines, "search_solutions")).toBe(
+      "tool search_solutions: not exercised (no article title or folder name to search for), calls 0",
+    );
+    expect(toolLine(lines, "get_solution_article")).toBe(
+      "tool get_solution_article: not exercised (no article), calls 0",
+    );
   });
 });
 

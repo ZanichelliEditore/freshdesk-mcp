@@ -18,9 +18,11 @@
 //     dispatcher, retries and the schema's load included.
 //   - Never printed: ticket text, a label, a name, an id, the domain or the
 //     key. Ids and the search term are taken from the run (the first ticket
-//     of `list_tickets`, the first article of `list_solution_tree` and its
-//     title's first word, the first canned response of
-//     `list_canned_responses`) and only sent, never printed.
+//     of `list_tickets`; the first article of `list_solution_tree` and its
+//     title's first word, or, when the tree has no article, the first word
+//     of its first folder's name and the first article `search_solutions`
+//     finds with it; the first canned response of `list_canned_responses`)
+//     and only sent, never printed.
 //   - The period of `count_tickets` and `export_tickets` is the last `days`
 //     UTC days, today included (7 by default; `--days` narrows it).
 //   - `export_tickets` writes into a fresh temporary directory of mode 0700,
@@ -122,6 +124,7 @@ const treeShape = z.object({
       folders: z
         .array(
           z.object({
+            name: z.string(),
             articles: z.array(z.object({ id, title: z.string() })).nullable(),
           }),
         )
@@ -134,7 +137,13 @@ const treeShape = z.object({
 const cannedShape = envelope.extend({
   items: z.array(z.object({ responses: z.array(z.object({ id })) })),
 });
-const ticketRows = envelope.extend({ items: z.array(z.object({ id })) });
+/** A list envelope whose items carry an id: tickets, search hits. */
+const idRows = envelope.extend({ items: z.array(z.object({ id })) });
+
+/** The first word of 3 or more letters: a search term taken from the run, never printed. */
+function firstWord(text: string | undefined): string | undefined {
+  return text === undefined ? undefined : /\p{L}{3,}/u.exec(text)?.[0];
+}
 
 /** Each core tool's output shape (SPEC §8.4), what counts as empty, and the counts printed. */
 const CHECKS: Record<string, Check> = {
@@ -147,11 +156,11 @@ const CHECKS: Record<string, Check> = {
   },
   list_agents: { shape: envelope, read: items },
   list_groups: { shape: envelope, read: items },
-  list_tickets: { shape: ticketRows, read: items },
+  list_tickets: { shape: idRows, read: items },
   search_tickets: { shape: envelope, read: items },
   triage_queue: { shape: envelope, read: items },
   find_similar_tickets: { shape: envelope, read: items },
-  search_solutions: { shape: envelope, read: items },
+  search_solutions: { shape: idRows, read: items },
   get_ticket: {
     shape: envelope,
     read: (value: { items: unknown[] }) => ({
@@ -386,7 +395,7 @@ export async function runCore(
     await run("list_agents", "list_agents", {});
     await run("list_groups", "list_groups", {});
     const tickets = (await run("list_tickets", "list_tickets", {})) as
-      z.output<typeof ticketRows> | undefined;
+      z.output<typeof idRows> | undefined;
     await run("list_tickets uncategorized", "list_tickets", { uncategorized: true });
     const ticketId = tickets?.items[0]?.id;
     const ticket = ticketId === undefined ? skip("no ticket") : { ticket_id: ticketId };
@@ -396,19 +405,22 @@ export async function runCore(
     await run("search_tickets", "search_tickets", { query: `created_at:>'${from}'` });
     const tree = (await run("list_solution_tree", "list_solution_tree", {})) as
       z.output<typeof treeShape> | undefined;
-    const article = tree?.categories
-      .flatMap((category) => category.folders ?? [])
-      .flatMap((folder) => folder.articles ?? [])[0];
+    // The tree's first article when it has one; else (a large knowledge base
+    // can exhaust the tree's list cap on folders) the first folder's name
+    // for the term and the first search hit for the article.
+    const folders = tree?.categories.flatMap((category) => category.folders ?? []) ?? [];
+    const article = folders.flatMap((folder) => folder.articles ?? [])[0];
+    const term = firstWord(article?.title) ?? firstWord(folders[0]?.name);
+    const hits = (await run(
+      "search_solutions",
+      "search_solutions",
+      term === undefined ? skip("no article title or folder name to search for") : { term },
+    )) as z.output<typeof idRows> | undefined;
+    const articleId = article?.id ?? hits?.items[0]?.id;
     await run(
       "get_solution_article",
       "get_solution_article",
-      article === undefined ? skip("no article") : { article_id: article.id },
-    );
-    const term = article === undefined ? undefined : /\p{L}{3,}/u.exec(article.title)?.[0];
-    await run(
-      "search_solutions",
-      "search_solutions",
-      term === undefined ? skip("no article title to search for") : { term },
+      articleId === undefined ? skip("no article") : { article_id: articleId },
     );
     const canned = (await run("list_canned_responses", "list_canned_responses", {})) as
       z.output<typeof cannedShape> | undefined;
