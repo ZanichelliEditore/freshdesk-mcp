@@ -53,7 +53,7 @@ const SPEC_CORE = [
   "export_tickets",
 ];
 
-/** What the tarball may hold besides dist/ (LICENSE only once there is one). */
+/** What the tarball may hold besides dist/. */
 const TOP_LEVEL = new Set(["README.md", "LICENSE", "package.json"]);
 const EXAMPLE = "examples/team-config.example.json";
 const PLANTED = "docs/private/planted.txt";
@@ -112,7 +112,7 @@ describe("the package", () => {
     );
     expect(outside).toEqual([]);
     expect(packed).toEqual(
-      expect.arrayContaining(["dist/cli.js", "README.md", "package.json", EXAMPLE]),
+      expect.arrayContaining(["dist/cli.js", "README.md", "LICENSE", "package.json", EXAMPLE]),
     );
   });
 

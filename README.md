@@ -18,6 +18,8 @@ The process holds your API key: pin a version you have chosen
 (`npx -y @zanichelli/freshdesk-mcp@<version>`) rather than run whatever is
 latest.
 
+**Version policy:** 0.x until milestone M4, then 1.0.0.
+
 > **Not yet published.** `@zanichelli/freshdesk-mcp` is not on npm yet. Until it is, run the
 > server from a clone:
 >

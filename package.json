@@ -1,7 +1,11 @@
 {
   "name": "@zanichelli/freshdesk-mcp",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZanichelliEditore/freshdesk-mcp"
+  },
   "type": "module",
   "bin": {
     "freshdesk-mcp": "dist/cli.js"
