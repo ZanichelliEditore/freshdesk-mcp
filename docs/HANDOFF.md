@@ -4,63 +4,53 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T14:20:51+01:00`
-- **Describes commit:** `54079fa`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the handoff commit). **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45622899764
-  (workflow `quality`, ran on `54079fa`: `quality (22.19)`, `quality (24)`,
-  `checks` all success). This file's hash and CI line arrive in the commit
-  right after it.
+- **Written:** `2026-11-25T14:29:13+01:00`
+- **Describes commit:** filled by the stamp commit right after the handoff
+  commit. **CI:** filled there too.
 
-- **Current task:** T-014 (a write is not started without time to finish)
-  `done (2026-11-25)`. Commits `6e7674f` (R1) and `5a5274d` (review
-  fixes), then the handoff commit. See
-  `docs/tasks/T-014-write-min-time.md`, "Done".
+- **Current task:** plan session (`/decompose` scoped to one owner row, by
+  the owner's delegation to the orchestrator) `done (2026-11-25)`. Commit
+  `d70d868` (plan), then the handoff commit (review fixes). See the dated
+  note above "### Not sized" in `docs/tasks/PLAN.md`.
 
-- **Next action:** `/pickup` takes T-040 (RFC: does the first write tool
-  need a safety core; first `todo` in PLAN order). It waits on the owner's
-  input about Freshdesk automations.
+- **Next action:** `/pickup` takes T-062 (the Makefile asks for GNU Make 4
+  and says how to get it; first `todo` in PLAN order, before T-040).
 
-- **Read before anything else:** `docs/tasks/T-040-rfc-write-safety.md`.
+- **Read before anything else:** `docs/tasks/T-062-gnu-make-guard.md`.
 
 - **Reviews:**
-  - Full round, R1 = `6e7674f`, range `b7d7e59..6e7674f`, diff file in the
+  - Full round, R1 = `d70d868`, range `733b02a..d70d868`, diff file in the
     handoff format. All three quoted base, HEAD, the stat line and the
     trailer correctly.
-    - `code-reviewer`: every acceptance line met, no correctness or
-      fail-open issue. Three lows, all fixed in `5a5274d`: a bait
-      interceptor no test reaches (kept one, commented), a test name not
-      true for writes (renamed), "10 s" hardcoded in the message (now
-      built from `REQUEST_TIMEOUT_MS`, same text).
-    - `security-reviewer`: no findings. No write can be sent twice or
-      applied while reported as not sent; NaN/Infinity deadlines fail
-      closed. Two infos parked in `docs/improvements.md` (`6e7674f`):
-      `request` is public and keeps `retryable: true` on a write's own
-      timeout (pre-existing; write resources must call
-      `requestWithRetry`), and the refusal shares its shape with a
-      limiter refusal.
+    - `code-reviewer`: no blocker. Medium: T-062's task file would close
+      all of `5005334` (fixed: the GNU Make part only). Lows fixed:
+      `gnubin` and the asserting test named in the docs clause; the guard
+      placed by line numbers; M2 intro says T-062 is tooling, not a gate.
+      Info fixed: T-062 in the sizing calibration.
+    - `security-reviewer`: no finding. Info: an empty `MAKE_VERSION`
+      passes a `filter 0 1 2 3` guard (harmless; left to the builder in the
+      task file's notes); `MCP Test` is a group name on the account, in
+      prose as the brief allows (the `account-patterns` hook passed).
     - `compliance-reviewer`: wireframes `none`, complete.
-  - No scoped round: the fixes change no mechanism (test names, a comment,
-    a message with the same text).
+  - No scoped round: the fixes change rows' wording only, no mechanism.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts (owner):**
-  - A write's limiter bound (`deadline - REQUEST_TIMEOUT_MS + 1`) goes
-    beyond the task's "checked before and after `acquire`": a hold that
-    would leave under 10 s is refused at once with `retry_after_s`, not
-    slept through with a token spent. Owner may judge it (T-014 task file,
-    "Open doubts").
-  - The repo assumes GNU Make 4.x: macOS `/usr/bin/make` 3.81 fails to
-    parse the Makefile (pre-existing; parked).
+  - Time triggers on `mcp-test` tickets: the owner checks the activity log
+    on 2026-11-26 (T-040 task file, "Owner's evidence (2026-11-25)").
+  - T-040's RFC takes up the proposed reading of M2's "automations
+    confirmed to skip the tag first"; SPEC §13 unchanged until then.
+  - Closed (2026-11-25): T-014's limiter-bound doubt (accepted under the
+    owner's delegation); direct pushes to `main` by the ruleset's bypass
+    list (owner confirmed intended).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `5a5274d`'s tree (docs only
-  since):
-  - vitest "Tests 2661 passed (2661)" (2648 before);
+- **Checkpoint:** `make quality` exit 0 on the handoff tree (docs only):
+  - vitest "Tests 2661 passed (2661)";
   - `tools/checks` "Ran 134 tests", OK;
   - eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
     scans passed.

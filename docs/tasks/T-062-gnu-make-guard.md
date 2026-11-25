@@ -37,7 +37,8 @@ review).
 - `Makefile`
 - `tools/checks/test_make_version.py` (new)
 - `README.md`, `CONTRIBUTING.md`
-- `docs/improvements.md` (entry `5005334` marked done)
+- `docs/improvements.md` (entry `5005334`: note the GNU Make part done;
+  its other items stay open)
 
 ## Wireframes
 `none`
@@ -50,16 +51,21 @@ for `3.81`, `3.82` and `3.82.90` exits non-zero, prints nothing on stdout,
 and stderr names `brew install make`, `gnubin` and `gmake`; for `4.0` and
 `4.4.1` it exits 0 and lists `quality` and `smoke-core`, and the guard is
 not listed by `help`; the guard sits above the first `export override`
-line. Demonstrated by hand in "Done": `/usr/bin/make help` (3.81, macOS)
+line (the first `$(error` line number is below the first `export override`
+line number, now `Makefile:56`). Demonstrated by hand in "Done": `/usr/bin/make help` (3.81, macOS)
 prints the guard's message, not "multiple target patterns". `README.md`
-and `CONTRIBUTING.md` each name GNU Make 4, `brew install make` and
-`gmake`; `make quality` green.
+and `CONTRIBUTING.md` each name GNU Make 4, `brew install make`, `gnubin`
+and `gmake` (asserted in the same test file); `make quality` green.
 
 Notes for the builder (planner, 2026-11-25): reject a major of 3 or lower
 (`filter 0 1 2 3` on the first field of `$(MAKE_VERSION)`), not just
 `3`; keep `: ... ## ` out of the guard's lines so `help` never shows it;
 if the test's own `make` is 3.81 (a mac without `gnubin` first in `PATH`),
 the 4.x cases fail with a message naming the requirement, not a skip.
+Optional (security-reviewer, 2026-11-25): an empty `MAKE_VERSION` passes a
+`filter 0 1 2 3` guard; harmless (GNU make always sets it, and 3.81 still
+stops at the parse error), so accepting only a major of 4 or more is the
+builder's call.
 
 ---
 *Filled at `/handoff`:*
