@@ -4,78 +4,74 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T17:44:58+01:00`
-- **Describes commit:** `35c5522` (the M2 plan handoff commit), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45657572435
-  (workflow `quality`, ran on `35c5522`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-25T22:43:03+01:00`
+- **Describes commit:** `<hash>` (T-064 handoff commit). **CI:** filled
+  in by the stamp commit.
 
-- **Current task:** `/decompose M2` (a plan session, owner's go and
-  approval of the plan as is, 2026-11-25) `done (2026-11-25)`. Plan
-  `b3d1971`; review fixes in the handoff commit. PLAN M2: T-064, T-065,
-  T-041, T-067 to T-076, all `todo (2026-11-25)`, one task file each.
-  OD-4 answered (owner's smoke run, 2026-11-24); OD-13 to OD-16 answered
-  by the owner (2026-11-25, builder's proposals). SPEC C4, §8.2
-  (`update_ticket`, `categorize_tickets`, `add_note`, public note in
-  `send`) and §9 (bulk and notes rows) reworded. T-066's RFC records the
-  owner's confirmation that the prompt-injection path stays accepted.
+- **Current task:** T-064 (the write path holds the one client;
+  `context.http` is a GET-only view) `done (2026-11-25)`. Commits
+  `4b2a159` (implementation), `087d6ba` (review fixes), then this handoff
+  commit. Tests: `test/core/get-view.test.ts`, and
+  `test/lint-rules.test.ts` ("lists no src/core path for any place",
+  "refuses in %s an import of %s, value or type"). No split was needed.
 
-- **Next action:** `/pickup` T-064 (the write path holds the one client;
-  `context.http` is a GET-only view).
+- **Next action:** `/pickup` T-065 (per-tool allow sets: `ticketInput`
+  with a required allow set). It is the first `todo` row whose
+  dependency, T-064, is now `done`.
 
 - **Owner actions:**
-  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26,
-    then SPEC §13's M2 wording (as written, (a) or (b), RFC
-    `2026-11-25-write-safety-core`). T-076 waits on it; no real-account
-    write before then (PLAN M2, owner actions).
+  - The time-trigger check on `mcp-test` tickets' activity log,
+    2026-11-26, then SPEC §13's M2 wording (as written, (a) or (b), RFC
+    `2026-11-25-write-safety-core`). T-076 waits on it. No write to the
+    real account before then (PLAN M2, owner actions).
 
-- **Read before anything else:** PLAN.md M2 section (intro, owner
-  actions, OD-13 to OD-16), then `docs/tasks/T-064-get-only-view.md` and
-  the RFC's "Decision", invariant 1.
+- **Read before anything else:** `docs/tasks/T-065-allow-sets.md`, the
+  RFC's OD-2 section, and `src/core/write-path.ts`'s header.
 
 - **Reviews:**
-  - Full round R1 = `b3d1971`, range `1c458e9..b3d1971`; all three
-    quoted base, HEAD, stat line and trailer correctly. No scoped round:
-    the fixes tighten acceptance lines and SPEC wording to what the plan
-    and the owner's answers already decided; no code mechanism exists yet
-    to change.
-  - `code-reviewer`: High: T-070/T-073 refused a removed ticket and
-    accepted a subset (fixed: subset checks, added ticket or changed
-    field refused); SPEC §9 promised a "not attempted only" check a
-    stateless id cannot make (fixed: any subset, repeat within TTL
-    stated). Medium: T-064 type side untested (`@ts-expect-error` case;
-    split-off row a dependency of T-068); OD-14 missing-flag case, T-069
-    boundaries (10, 11 → 10, empty); T-065 schema → core import (plain
-    set); invariant 2 untested (T-071 wiring clause); preview under the
-    deadline (T-073 clause). Low: lint clauses that could not fail
-    (reworded), SPEC §8.2 categorize row, undated `todo` (dated), vague
-    "every proposal" (listed), Closed untested (added). Dismissed: the
-    T-066 RFC note belongs elsewhere (the orchestrator asked for it in
-    this session); OD-16 has no mechanical check (releases are the
-    owner's go).
-  - `security-reviewer`: Medium: T-075 could write around the core
-    (fixed: imports from `src/core` only the entry builder, entries from
-    `loadConfig`'s team, lint keeps `src/core/resources` to `src/core/**`
-    incl. `scripts/**`); subset contradiction (as above); no real-account
-    write before the check (owner-action line); invariant 2 (as above).
-    Low: missing active flag (T-067, T-069), HMAC details (T-070), view a
-    wrapper not a subclass (T-064), tag-check failures (T-075), all
-    fixed. Dismissed: the owner's confirmation recorded as relayed by the
-    orchestrator (that is the only record this session has).
-  - `compliance-reviewer`: wireframes `none`.
+  - Full round, R1 = `4b2a159`, range `1cd756b..4b2a159`. Scoped round,
+    range `4b2a159..087d6ba`. In both rounds, all three reviewers quoted
+    base, HEAD, the stat line and the trailer correctly.
+  - `code-reviewer`, R1:
+    - Medium: the lint test's regex caught only `write-path` and
+      `../core/`. Fixed: each entry is resolved from its place's directory.
+    - Low: "one client" is enforced only in `src/tools/`. The overview
+      wording is fixed, and the src-wide rule is parked
+      (`docs/improvements.md`, `4b2a159` entry, for T-068).
+    - Low: `GetRequest` allowed `body`. Fixed: the type omits it and the
+      view's copy drops it, with a new test.
+    - Low, informational: `paginate` passes the caller's object through.
+      No action: the client rebuilds the request with GET.
+  - `security-reviewer`, R1:
+    - No high or medium findings.
+    - Low: no lint rule stops `HttpClient` imports outside `src/tools/`.
+      Parked, the same entry as above.
+    - Low: a GET can carry a body. Fixed, as above.
+    - Note: `SmokeClient` in `scripts/`. Recorded in the parked entry.
+  - `compliance-reviewer`: wireframes `none`, in both rounds.
+  - Scoped round:
+    - No finding falsifies an acceptance line or opens a fail-open path.
+    - Four low items on the lint test parked (`087d6ba` entry): a `**`
+      glob, relative specifiers in `bare`, `node:` joins, and the
+      self-check's scope.
+    - No mechanism changed after the scoped round.
 
 - **Proposed plan changes:** none.
 
-- **Open doubts:** from T-040, unchecked: whether `agent-native-setup
-  update` would revert the safety-core value in
-  `.claude/commands/decompose.md` step 4; `.claude/worktrees/` is not
-  gitignored (parked).
+- **Open doubts:**
+  - Only `src/tools/**` is fenced off from `HttpClient` and
+    `src/core/**` by lint. Elsewhere it holds by inspection: today only
+    `src/core/write-path.ts` constructs a client. Proposed for T-068
+    (parked).
+  - From T-040, unchecked: whether `agent-native-setup update` would
+    revert the safety-core value in `.claude/commands/decompose.md`
+    step 4.
+  - `.claude/worktrees/` is not gitignored (parked).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on the handoff tree: vitest
-  "Tests 2746 passed (2746)"; `tools/checks` "Ran 138 tests", OK; lint,
+- **Checkpoint:** `make quality` exit 0 on the handoff tree. Vitest
+  "Tests 2778 passed (2778)"; `tools/checks` "Ran 138 tests", OK; lint,
   format, typecheck, build and both gitleaks scans passed.

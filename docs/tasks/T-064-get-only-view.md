@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-25)
 - **Depends on:** T-040 (done)
 - **Created:** 2026-11-25
 
@@ -48,18 +48,20 @@ Split point: after the runtime view, its test and the context/schema wiring; the
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `4b2a159`: `src/core/write-path.ts` (`createWritePath`, `GetView`), `GetHttp` and `GetRequest` in `src/client/http.ts`, the context and the schema service on the view, the resource signatures on `GetHttp`, `docs/architecture/overview.md`.
+- `087d6ba`: review fixes. `GetRequest` omits `body` and the view's copy drops it; the lint test resolves each entry from its place.
+- Tests: `test/core/get-view.test.ts` (27 cases: the non-GET refusals through `request`, `requestWithRetry`, `paginate`, by a cast and by the GET-then-PUT getter; GET passes; no body on a GET; the wrapper not `instanceof HttpClient`; context and schema service on the view; the `@ts-expect-error` PUT through `context.http`); `test/lint-rules.test.ts` ("lists no src/core path for any place", "refuses in %s an import of %s, value or type").
+- The tests can fail: a single read of the method fails 3 cases, no `paginate` check fails 7, and a `GetRequest` that allows PUT fails `tsc` (TS2578, unused `@ts-expect-error`). All three were checked by mutation and reverted.
+- No split was needed: the `GetHttp` re-typing landed in this task.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Lint fences only `src/tools/**` off the core and `HttpClient`. Elsewhere in `src/**` (and `scripts/**`), "one client" holds by inspection: today only `src/core/write-path.ts` constructs one. A rule for T-068 is proposed in `docs/improvements.md` (`4b2a159` entry).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
