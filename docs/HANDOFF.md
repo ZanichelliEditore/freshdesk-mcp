@@ -4,79 +4,62 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-25T16:15:35+01:00`
-- **Describes commit:** `6c8d615`, pushed to
-  `ZanichelliEditore/freshdesk-mcp` (the T-040 handoff commit). **CI:**
-  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45643437587
-  (workflow `quality`, ran on `6c8d615`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
-
-- **Release since the last handoff:** 0.3.0, by the orchestrator: commit
-  `823d4eb` "Release 0.3.0: version bumped, CHANGELOG dated" (one commit
-  past T-063's stamp `fe4c136`); quality CI green
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45640079785;
-  tag `v0.3.0` on `823d4eb`; release run green incl. publish
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45640385998;
-  npm `latest` = 0.3.0 (`npx -y --prefer-online
-  @zanichelli/freshdesk-mcp@0.3.0 --version` printed 0.3.0). CHANGELOG's
-  "Unreleased" doubt of T-063 is closed by it.
+- **Written:** `2026-11-25T16:30:48+01:00`
+- **Describes commit:** `<hash>` (filled by the stamp commit). **CI:**
+  `<run>`.
 
 - **Current task:** T-040 (RFC: write safety core; per-tool writable
-  fields) `doing (2026-11-25)`, waiting on the owner's word. RFC
-  `docs/rfc/proposed/2026-11-25-write-safety-core.md`, Status Proposed.
-  Work `a9b7aa9`, review fixes `c928102`, then the handoff commit. See
-  `docs/tasks/T-040-rfc-write-safety.md` "Done".
+  fields) `done (2026-11-25)`. RFC
+  `docs/rfc/active/2026-11-25-write-safety-core.md`, Status Active
+  (owner, 2026-11-25), section "The owner's decisions (2026-11-25)".
+  Acceptance commit `84dd7aa`; review wording fixes in the handoff commit.
+  Safety core is now **the write path**: AGENTS.md rule 1, SPEC §9,
+  `.claude/commands/decompose.md` step 4.
 
-- **Next action:** the owner reads the RFC and answers its "Questions for
-  the owner". On acceptance a session sets Status Active (owner, date),
-  runs `make rfc-sync`, applies AGENTS.md rule 1 and SPEC §9, sets T-040
-  `done (date)`; after the time-trigger check (2026-11-26) it writes the
-  M2 wording into SPEC §13 in the form the check allows. Then
-  `/decompose M2`. No `todo` row is takeable before that.
+- **Next action:** `/decompose M2`, which awaits the owner's go (not run
+  in this session). It must reword SPEC §8.2/§9/C4's `add_note` rows and
+  §8.2's `update_ticket` purpose (see `docs/improvements.md` entries
+  `84dd7aa`), and size T-064 and T-065.
 
-- **Read before anything else:** the RFC, then the task file.
+- **Owner actions:**
+  - Time-trigger check on `mcp-test` tickets' activity log, 2026-11-26:
+    settles SPEC §13's M2 wording (as proposed, or (a) or (b) in the RFC)
+    before M2's first real test.
+  - T-063's order probe: `make smoke-order-probe DAY=2026-11-23`; keep the
+    output in `docs/private/account-facts.md`.
+
+- **Read before anything else:** the RFC's "Decision" and "The owner's
+  decisions", then `docs/tasks/PLAN.md` M2 section.
 
 - **Reviews:**
-  - `rfc-reviewer` on the draft: full round (8 findings) and scoped round
-    (2), all resolved in the RFC ("Review" section); no third round.
-  - Handoff full round R1 = `a9b7aa9`, range `823d4eb..a9b7aa9`; scoped
-    range `a9b7aa9..c928102`. All six dispatches quoted base, HEAD, stat
-    line and trailer correctly.
-  - R1 `code-reviewer`: acceptance not met (dismissed: waits on the
-    owner's word, by design); agent names dropped (ids only), "Not
-    covered" widened, citations fixed, parked entry re-tagged, all in
-    `c928102`.
-  - R1 `security-reviewer`: Resolved/Closed requester notifications and
-    custom fields fail-open put to the owner (questions 6, 4); closed note
-    payload (invariant 6); failed recipient lookup refuses the whole
-    write; all in `c928102`.
-  - R1 `compliance-reviewer`: wireframes `none`.
-  - Scoped: `code-reviewer` one wording contradiction ("the sets fail
-    closed"), fixed in the handoff commit; it also ran one read-only
-    `git grep` through Bash against the rule (it said so). Its re-tag
-    remark dismissed: R1 asked for the tag of the commit holding the text.
-    `security-reviewer` none. Both parked items in `docs/improvements.md`
-    (`c928102` entry). `compliance-reviewer` wireframes `none`.
+  - No third `rfc-reviewer` round (rule 9): this session's edits record
+    the owner's decisions, not review fixes.
+  - Handoff full round R1 = `84dd7aa`, range `dd33b08..84dd7aa`; all
+    three quoted base, HEAD, stat line and trailer correctly. No scoped
+    round: the fixes are wording only, no mechanism changed.
+  - `code-reviewer`: Medium HANDOFF stale (fixed by this file); Low SPEC
+    §9 row vs paragraph (parked, see below); Low task-file C8 evidence
+    line (dated annotation added); Low RFC §13 wording sentence (fixed).
+  - `security-reviewer`: no blocking finding. Medium SPEC §8.2/§9/C4
+    `add_note` rows lag the RFC: dismissed for now by the orchestrator's
+    instruction (SPEC changes go to `/decompose M2`), parked in
+    `docs/improvements.md`; guarded by T-064's acceptance. Low: `write`
+    can still mail the requester via Resolved/Closed, sentence added to
+    the RFC's "Not covered". Low: time-trigger gate unenforced, parked.
+  - `compliance-reviewer`: wireframes `none`.
 
-- **Proposed plan changes:** T-064 (the write path) and T-065 (per-tool
-  allow sets), `proposed (2026-11-25)`, valid only if the owner accepts
-  the RFC; sized by `/decompose M2`.
+- **Proposed plan changes:** T-064 (the write path, acceptance line
+  amended by the RFC) and T-065 (allow sets) stay `proposed
+  (2026-11-25)`, sized by `/decompose M2`.
 
-- **Open doubts (owner):**
-  - The RFC's six questions (accept OD-2/OD-3; `add_note private:false`
-    in `write`; "C8 (new tickets)"; `product` and custom fields
-    fail-open; the time-trigger outcome; Resolved/Closed notifications).
-  - Time triggers on `mcp-test` tickets: the owner checks the activity log
-    on 2026-11-26.
-  - Owner action, still open from T-063: run `make smoke-order-probe`
-    (see T-063's task file) and keep the output in
-    `docs/private/account-facts.md`.
+- **Open doubts:** whether `agent-native-setup update` would revert the
+  instantiated safety-core value in `.claude/commands/decompose.md`
+  step 4 (not checked). `.claude/worktrees/` is not gitignored (parked).
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on the handoff commit's tree:
-  vitest "Tests 2691 passed (2691)"; `tools/checks` "Ran 138 tests", OK;
-  eslint, ruff, prettier, ruff format, typecheck, build and both gitleaks
-  scans passed.
+- **Checkpoint:** `make quality` exit 0 on `84dd7aa`'s tree: vitest
+  "Tests 2691 passed (2691)", 39 files; `tools/checks` "Ran 138 tests",
+  OK; lint, format, typecheck, build and both gitleaks scans passed.

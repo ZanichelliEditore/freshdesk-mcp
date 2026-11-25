@@ -180,8 +180,9 @@ Hidden fields on input stay out of scope: not handled for now (owner,
 
 ### M2's "automations confirmed to skip the tag first"
 
-Proposed wording for SPEC §13, M2, replacing that clause (the owner
-accepts or rejects it with this RFC; SPEC §13 is changed only then):
+Proposed wording for SPEC §13, M2, replacing that clause (left open at
+the RFC's acceptance, owner, 2026-11-25; SPEC §13 is changed only once the
+owner settles it, below):
 
 > no automation rule acted on `mcp-test` tickets, confirmed by the
 > activity log after each kind of write M2 performs, and no time trigger
@@ -301,7 +302,9 @@ Answered by the owner on 2026-11-25; the answers follow the questions.
   that reroutes or notifies on a custom field any write tool set; the
   requester notified by Freshdesk when `update_ticket` sets Resolved or
   Closed (allowed by the owner, question 6; the tool's description says
-  so); hidden fields on input (OD-1).
+  so): `write` alone can still cause Freshdesk to email a customer, so
+  "non-customer-facing" means no tool of it writes to the customer, not
+  that none of its writes reaches one; hidden fields on input (OD-1).
 
 ## Alternatives considered
 

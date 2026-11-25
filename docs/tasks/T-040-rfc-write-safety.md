@@ -30,6 +30,8 @@ From the owner's manual test on a test ticket tagged `mcp-test` in group
 - Freshdesk's own spam filter marked the ticket as spam at creation (no
   automation rule involved); the owner restored it by hand. Relevant to C8
   (tickets created by the server): a created ticket can land in spam.
+  (C8 read as categorising newly arrived tickets, no create tool in M2:
+  owner, 2026-11-25.)
 - Creation, a private note, adding the tag, and status changes
   Open→Pending→Open: the activity log shows no automation rule fired.
 - The Default SLA Policy applied (group-based SLA policies do not filter
@@ -75,7 +77,8 @@ any write resource; `make quality` green.
 ## Done
 - RFC `docs/rfc/active/2026-11-25-write-safety-core.md`, Status Active
   (owner, 2026-11-25), moved by `make rfc-sync`. Drafted in `a9b7aa9`,
-  `c928102` and `6c8d615`; accepted in this handoff's commit.
+  `c928102` and `6c8d615`; accepted in `84dd7aa`, handoff review
+  wording fixes in the handoff commit.
 - OD-3: a small safety core, the write path (invariants 1 to 6). OD-2: a
   fixed per-tool table of writable fields in the core. Each with the
   alternatives rejected ("Alternatives considered").
