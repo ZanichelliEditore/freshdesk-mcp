@@ -1,7 +1,7 @@
 // Ticket filters (SPEC §8.2, §10; docs/architecture/ticket-queries.md): the
 // nine `list_tickets` filters turned into the request that note names,
-// names resolved to ids on the read side. Not `ticketInput`, which refuses
-// agent and group.
+// names resolved to ids on the read side. Not `ticketInput`, which builds a
+// ticket body for the write side.
 //
 //   - `resolveFilter`: status, priority, type, group or agent, by name or by
 //     id. A name is compared trimmed, NFC-normalised and lower-cased; it

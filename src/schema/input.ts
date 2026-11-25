@@ -29,10 +29,12 @@
 //                               stays an id)
 //     A name two ids share is refused, listing the ids; so is a name that
 //     folds like two, none exact. An agent or group name is also looked up,
-//     folded, in the schema's agents or groups list: JSON keeps one of two
-//     equal keys, so the choices alone cannot show two agents of one name (a
-//     truncated list can still miss one). An agent or group with no choices
-//     cannot be set, only cleared. A status key that is not a whole number
+//     folded, in the schema's agents or groups list, even when it matched a
+//     choice exactly: JSON keeps one of two equal keys, so the choices alone
+//     cannot show two agents of one name. Any other id the list has for the
+//     folded name makes it ambiguous, and when the list is truncated a name
+//     is refused as `incomplete_list`: only an id is taken. An agent or group
+//     with no choices takes no id. A status key that is not a whole number
 //     is not offered.
 //   - Every call takes an allow set (`FieldSet`), required, with no default:
 //     the write entry point's set from the core's table (RFC
@@ -198,13 +200,19 @@ function idValue(field: TicketField, value: unknown, list: NameMap | null): numb
       for (const [id, label] of list.names) if (fold(label) === fold(value)) ids.add(id);
     }
   }
-  if (ids.size === 1) return [...ids][0]!;
   if (ids.size > 1) {
     return new Refusal(
       "ambiguous_choice",
       `${quote(value)} names several ids for ${where} (${[...ids].join(", ")}): give the id.`,
     );
   }
+  if (ids.size === 1 && list?.truncated) {
+    return new Refusal(
+      "incomplete_list",
+      `The list for ${where} is incomplete, so another may share the name ${quote(value)}: give the id.`,
+    );
+  }
+  if (ids.size === 1) return [...ids][0]!;
   return new Refusal(
     "invalid_choice",
     `${quote(value)} is not a valid choice for ${where}. Valid choices: ${listed(pairs.map(([label]) => label))}.`,

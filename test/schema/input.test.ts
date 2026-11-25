@@ -252,10 +252,11 @@ function withNames(
   field: "agent" | "group",
   choices: Record<string, number>,
   names: [number, string][] = [],
+  truncated = false,
 ): Schema {
   const s = schema();
   s.fields.find((f) => f.name === field)!.choices = choices;
-  const list = { names: new Map(names), truncated: false };
+  const list = { names: new Map(names), truncated };
   return field === "agent" ? { ...s, agents: list } : { ...s, groups: list };
 }
 
@@ -307,10 +308,37 @@ describe("ticketInput: agent and group", () => {
     expect(error).toMatchObject({ field: "Agent", code: "ambiguous_choice" });
     expect(error!.message).toContain("511");
     expect(error!.message).toContain("512");
-    // An exact name still picks one, and so does each id.
+    // With no list, an exact name picks one; each id always does.
     expect(body({ Agent: "ann lee" }, s)).toEqual({ responder_id: 512 });
     expect(body({ Agent: 511 }, s)).toEqual({ responder_id: 511 });
   });
+
+  it("refuses even an exact name when the list holds another id that folds alike", () => {
+    const s = withNames("agent", { "Ann Lee": 511, "ann lee": 512 }, [
+      [511, "Ann Lee"],
+      [512, "ann lee"],
+    ]);
+    const [error] = errors({ Agent: "ann lee" }, s);
+    expect(error).toMatchObject({ code: "ambiguous_choice" });
+    expect(error!.message).toContain("(512, 511): give the id");
+    expect(body({ Agent: 512 }, s)).toEqual({ responder_id: 512 });
+  });
+
+  it.each(["agent", "group"] as const)(
+    "refuses a %s name when its list is truncated, taking only an id",
+    (field) => {
+      const s = withNames(field, { "Sam Roe": 522 }, [[522, "Sam Roe"]], true);
+      const key = field === "agent" ? "Agent" : "Group";
+      const [error] = errors({ [key]: "Sam Roe" }, s);
+      expect(error).toMatchObject({ field: key, code: "incomplete_list" });
+      expect(error!.message).toContain("give the id");
+      expect(body({ [key]: 522 }, s)).toEqual({
+        [field === "agent" ? "responder_id" : "group_id"]: 522,
+      });
+      // An unknown name is still invalid, listing the names.
+      expect(errors({ [key]: "Nobody" }, s)[0]).toMatchObject({ code: "invalid_choice" });
+    },
+  );
 
   it.each(["agent", "group"] as const)(
     "refuses a %s name two ids share in its list, though the choices keep one",
@@ -341,14 +369,12 @@ describe("ticketInput: agent and group", () => {
     expect(error!.message).toMatch(/… and \d+ more\.$/);
   });
 
-  it("refuses every agent when the choices are absent: an id is not passed through", () => {
+  it("refuses every agent id when the choices are absent: none is passed through", () => {
     const s = schema();
     s.fields.find((f) => f.name === "agent")!.choices = null;
     const [error] = errors({ Agent: 502 }, s);
     expect(error).toMatchObject({ code: "invalid_choice" });
     expect(error!.message).toContain("(none)");
-    // null still clears it.
-    expect(body({ Agent: null }, s)).toEqual({ responder_id: null });
   });
 
   it("still refuses product: with a name → id record its choices are not checked", () => {
@@ -532,7 +558,9 @@ describe("ticketInput: fail-closed edges", () => {
       "2": ["Open", "a"],
       "3": ["OPEN", "b"],
     };
-    expect(errors({ Status: "open" }, s)[0]).toMatchObject({ code: "ambiguous_choice" });
+    const [error] = errors({ Status: "open" }, s);
+    expect(error).toMatchObject({ code: "ambiguous_choice" });
+    expect(error!.message).toContain("(2, 3): give the id");
   });
 
   it("refuses an ambiguous choice on a nested level", () => {
