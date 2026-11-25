@@ -11,8 +11,11 @@ A line here is a name and a purpose, not an input design.
 - **Resource:** the Freshdesk API v2 section and object the tool wraps, as
   named on <https://developers.freshdesk.com/api/> (read 2026-11-25). The
   exact endpoints are checked again when the toolset is built.
-- **Access:** `read` changes nothing in Freshdesk; `write` creates, changes
-  or deletes something. A tool that starts an export job is `read`.
+- **Access:** `read` changes nothing, in Freshdesk or on disk, and is the
+  only value a tool's `readOnlyHint: true` may follow; `write` creates,
+  changes or deletes something in Freshdesk, writes a file, or starts a
+  Freshdesk job (an export job included, since it hands out a bulk file of
+  personal data).
 - Names are English `snake_case`, unique across the whole catalogue: the
   §8.3 toolsets reuse no §8.2 name (agents and groups are listed by
   `core`'s `list_agents` and `list_groups`; `admin_read` adds only their
@@ -36,7 +39,7 @@ A line here is a name and a purpose, not an input design.
 | `list_canned_responses` | `core` | active | read | Canned Responses (folders, responses) | canned folders and titles |
 | `get_canned_response` | `core` | active | read | Canned Responses | one canned response's text |
 | `count_tickets` | `core` | active | read | Tickets (filter, search) | counts grouped by up to two closed-type fields over a period |
-| `export_tickets` | `core` | active | read | Tickets, Conversations | JSONL or CSV file of a period's tickets in the export directory |
+| `export_tickets` | `core` | active | write | Tickets, Conversations | JSONL or CSV file of a period's tickets in the export directory |
 | `update_ticket` | `write` | active | write | Tickets | status, priority, type, group, agent, tags and custom fields by label |
 | `categorize_tickets` | `write` | active | write | Tickets | bulk set of category fields, preview then confirm |
 | `add_note` | `write` | active | write | Conversations (notes) | private note by default, optional agent notification |
@@ -54,7 +57,7 @@ A line here is a name and a purpose, not an input design.
 | `merge_tickets` | `tickets_admin` | catalogue | write | Tickets (merge) | merge secondary tickets into a primary one |
 | `bulk_update_tickets` | `tickets_admin` | catalogue | write | Tickets (bulk update job) | start a bulk update job |
 | `bulk_delete_tickets` | `tickets_admin` | catalogue | write | Tickets (bulk delete job) | start a bulk delete job |
-| `get_job_status` | `tickets_admin` | catalogue | read | Jobs | status of a bulk or export job |
+| `get_job_status` | `tickets_admin` | catalogue | read | Jobs | status of a bulk update or bulk delete job |
 | `get_archived_ticket` | `tickets_admin` | catalogue | read | Archive Tickets | an archived ticket with its conversations |
 | `list_ticket_watchers` | `tickets_admin` | catalogue | read | Tickets (watchers) | agents watching a ticket |
 | `watch_ticket` | `tickets_admin` | catalogue | write | Tickets (watchers) | add a watcher to a ticket |
@@ -80,7 +83,7 @@ A line here is a name and a purpose, not an input design.
 | `restore_contact` | `contacts` | catalogue | write | Contacts (restore) | restore a soft-deleted contact |
 | `merge_contacts` | `contacts` | catalogue | write | Contacts (merge) | merge secondary contacts into a primary one |
 | `make_contact_agent` | `contacts` | catalogue | write | Contacts (make agent) | convert a contact into an agent |
-| `export_contacts` | `contacts` | catalogue | read | Contacts (export job) | start a contact export job, or read its status |
+| `export_contacts` | `contacts` | catalogue | write | Contacts (export job) | start a contact export job, or read its status |
 | `list_contact_fields` | `contacts` | catalogue | read | Contact Fields | contact fields with labels and choices |
 | `get_contact_field` | `contacts` | catalogue | read | Contact Fields | one contact field |
 | `create_contact_field` | `contacts` | catalogue | write | Contact Fields | create a contact field |
@@ -92,7 +95,7 @@ A line here is a name and a purpose, not an input design.
 | `create_company` | `companies` | catalogue | write | Companies | create a company |
 | `update_company` | `companies` | catalogue | write | Companies | change a company |
 | `delete_company` | `companies` | catalogue | write | Companies | delete a company |
-| `export_companies` | `companies` | catalogue | read | Companies (export job) | start a company export job, or read its status |
+| `export_companies` | `companies` | catalogue | write | Companies (export job) | start a company export job, or read its status |
 | `list_company_fields` | `companies` | catalogue | read | Company Fields | company fields with labels and choices |
 | `get_company_field` | `companies` | catalogue | read | Company Fields | one company field |
 | `create_company_field` | `companies` | catalogue | write | Company Fields | create a company field |
@@ -109,7 +112,7 @@ A line here is a name and a purpose, not an input design.
 | `translate_solution_article` | `kb_write` | catalogue | write | Solutions (articles, translations) | add or change an article's translation |
 | `create_canned_response_folder` | `canned_write` | catalogue | write | Canned Responses (folders) | create a canned folder |
 | `update_canned_response_folder` | `canned_write` | catalogue | write | Canned Responses (folders) | rename a canned folder |
-| `create_canned_response` | `canned_write` | catalogue | write | Canned Responses | create a canned response as a draft (C10) |
+| `create_canned_response` | `canned_write` | catalogue | write | Canned Responses | create a canned response from C10's suggestion |
 | `update_canned_response` | `canned_write` | catalogue | write | Canned Responses | change a canned response |
 | `get_agent` | `admin_read` | catalogue | read | Agents | one agent's detail: role, groups, skills, availability |
 | `get_group` | `admin_read` | catalogue | read | Groups | one group's detail and members |
@@ -145,6 +148,20 @@ A line here is a name and a purpose, not an input design.
 | `create_automation_rule` | `admin_write` | catalogue | write | Automations | create an automation rule |
 | `update_automation_rule` | `admin_write` | catalogue | write | Automations | change an automation rule |
 | `delete_automation_rule` | `admin_write` | catalogue | write | Automations | delete an automation rule |
+
+SPEC §9 applies to every row above when its toolset is planned: anything
+that may reach people outside Freshdesk follows `send`'s rules, and a bulk
+change takes a preview, then `confirm`. Rows that need that judgement
+first:
+
+- delete for good or in bulk: `hard_delete_contact`, `bulk_delete_tickets`,
+  `delete_agent`;
+- change in bulk: `bulk_update_tickets`;
+- grant helpdesk access: `make_contact_agent`, `create_agent`,
+  `update_agent`;
+- may send email outside Freshdesk through its notifications (not checked
+  against the API reference): `create_ticket`, `create_agent`,
+  `create_automation_rule`.
 
 `admin_write` has no tool for roles, business hours, products and email
 configs: the API reference lists no write endpoint for them (read
