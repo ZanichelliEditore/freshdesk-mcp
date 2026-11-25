@@ -91,12 +91,13 @@ none
   configs, which SPEC §8.3 covers by "the above, write": the API reference
   lists no write endpoint for them. Read as meeting the acceptance through
   their `admin_read` lines and the catalogue's note; the owner may judge
-  otherwise.
+  otherwise. **Closed (owner, 2026-11-25):** accepted as read.
 - Freshdesk facts in the catalogue come from one read of the API
   reference (2026-11-25; the fetched text was cut after about 100,000 of
   243,000 characters, so the Solutions, Discussions, Watchers, Summary and
   Archive sections were read by title only) and from memory: re-checked
-  when each toolset is planned, as the catalogue says.
+  when each toolset is planned, as the catalogue says. **Closed (owner,
+  2026-11-25):** accepted; re-check when each toolset is planned.
 
 ## Context pressure
 ok
