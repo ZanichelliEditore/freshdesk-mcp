@@ -33,7 +33,7 @@ def run_make(*args: str) -> subprocess.CompletedProcess[str]:
         cwd=ROOT,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=60,
     )
 
@@ -87,7 +87,7 @@ class GuardPlacement(unittest.TestCase):
         # Comments left out: the guard's own comment names `export override`.
         lines = [
             "" if line.lstrip().startswith("#") else line
-            for line in MAKEFILE.read_text().splitlines()
+            for line in MAKEFILE.read_text(encoding="utf-8").splitlines()
         ]
         error_at = next((i for i, line in enumerate(lines) if "$(error" in line), None)
         export_at = next(i for i, line in enumerate(lines) if "export override" in line)
@@ -98,7 +98,7 @@ class GuardPlacement(unittest.TestCase):
 class DocsNameTheRequirement(unittest.TestCase):
     def test_readme_and_contributing(self) -> None:
         for name in ("README.md", "CONTRIBUTING.md"):
-            text = (ROOT / name).read_text()
+            text = (ROOT / name).read_text(encoding="utf-8")
             for word in DOC_WORDS:
                 with self.subTest(doc=name, word=word):
                     self.assertIn(word, text)

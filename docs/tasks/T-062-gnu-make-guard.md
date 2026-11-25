@@ -91,6 +91,13 @@ builder's call.
   at the guard anyway, shown above).
 - The placement test skips comment lines: the guard's own comment names
   `export override`.
+- CI fix (the commit after `2ef129d`): run
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45627169277
+  failed `quality (22.19)` with `UnicodeDecodeError: 'ascii' codec` (the
+  runner's locale is ASCII; `README.md` and the `Makefile` hold non-ASCII
+  bytes). The test now reads files and `make`'s output as UTF-8;
+  reproduced and fixed with `LC_ALL=C LANG=C PYTHONUTF8=0 python3 -m
+  unittest tools/checks/test_make_version.py`.
 
 ## Dead ends
 none

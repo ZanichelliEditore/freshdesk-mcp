@@ -9,7 +9,9 @@
   **CI:** filled in the stamp commit.
 
 - **Current task:** T-062 (the Makefile asks for GNU Make 4 and says how
-  to get it) `done (2026-11-25)`. Work `37aa821`, then the handoff commit.
+  to get it) `done (2026-11-25)`. Work `37aa821`, handoff `2ef129d` (CI
+  red: the test read files as ASCII under the runner's locale), then the
+  CI fix commit this file describes.
   See `docs/tasks/T-062-gnu-make-guard.md` "Done" (the hand demo with
   `/usr/bin/make` 3.81 is quoted there).
 
@@ -30,6 +32,8 @@
     `37aa821`).
   - `security-reviewer`: no finding.
   - `compliance-reviewer`: wireframes `none`.
+  - The CI fix after R1 (three `encoding="utf-8"` arguments in the
+    test file) was not reviewed: no mechanism changed.
 
 - **Proposed plan changes:** none.
 
