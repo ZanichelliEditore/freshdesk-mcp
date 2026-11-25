@@ -11,8 +11,8 @@ A line here is a name and a purpose, not an input design.
 - **Resource:** the Freshdesk API v2 section and object the tool wraps, as
   named on <https://developers.freshdesk.com/api/> (read 2026-11-25). The
   exact endpoints are checked again when the toolset is built.
-- **Access:** `read` changes nothing, in Freshdesk or on disk, and is the
-  only value a tool's `readOnlyHint: true` may follow; `write` creates,
+- **Access:** `read` changes nothing, in Freshdesk or on disk, as MCP's
+  `readOnlyHint: true` means; `write` creates,
   changes or deletes something in Freshdesk, writes a file, or starts a
   Freshdesk job (an export job included, since it hands out a bulk file of
   personal data).
@@ -67,9 +67,9 @@ A line here is a name and a purpose, not an input design.
 | `update_time_entry` | `tickets_admin` | catalogue | write | Time Entries | change a time entry |
 | `toggle_time_entry_timer` | `tickets_admin` | catalogue | write | Time Entries | start or stop a time entry's timer |
 | `delete_time_entry` | `tickets_admin` | catalogue | write | Time Entries | delete a time entry |
-| `list_satisfaction_ratings` | `tickets_admin` | catalogue | read | Surveys (satisfaction ratings) | satisfaction ratings over a period |
-| `list_ticket_satisfaction_ratings` | `tickets_admin` | catalogue | read | Tickets (satisfaction ratings) | one ticket's satisfaction ratings |
-| `create_satisfaction_rating` | `tickets_admin` | catalogue | write | Tickets (satisfaction ratings) | record a rating on a ticket |
+| `list_satisfaction_ratings` | `tickets_admin` | catalogue | read | Satisfaction Ratings | satisfaction ratings over a period |
+| `list_ticket_satisfaction_ratings` | `tickets_admin` | catalogue | read | Satisfaction Ratings (of a ticket) | one ticket's satisfaction ratings |
+| `create_satisfaction_rating` | `tickets_admin` | catalogue | write | Satisfaction Ratings (of a ticket) | record a rating on a ticket |
 | `get_ticket_summary` | `tickets_admin` | catalogue | read | Tickets (summary) | a ticket's summary |
 | `update_ticket_summary` | `tickets_admin` | catalogue | write | Tickets (summary) | write or change a ticket's summary |
 | `delete_ticket_summary` | `tickets_admin` | catalogue | write | Tickets (summary) | remove a ticket's summary |
@@ -83,7 +83,8 @@ A line here is a name and a purpose, not an input design.
 | `restore_contact` | `contacts` | catalogue | write | Contacts (restore) | restore a soft-deleted contact |
 | `merge_contacts` | `contacts` | catalogue | write | Contacts (merge) | merge secondary contacts into a primary one |
 | `make_contact_agent` | `contacts` | catalogue | write | Contacts (make agent) | convert a contact into an agent |
-| `export_contacts` | `contacts` | catalogue | write | Contacts (export job) | start a contact export job, or read its status |
+| `export_contacts` | `contacts` | catalogue | write | Contacts (export job) | start a contact export job |
+| `get_contact_export` | `contacts` | catalogue | read | Contacts (export job) | a contact export job's status and file link |
 | `list_contact_fields` | `contacts` | catalogue | read | Contact Fields | contact fields with labels and choices |
 | `get_contact_field` | `contacts` | catalogue | read | Contact Fields | one contact field |
 | `create_contact_field` | `contacts` | catalogue | write | Contact Fields | create a contact field |
@@ -95,7 +96,8 @@ A line here is a name and a purpose, not an input design.
 | `create_company` | `companies` | catalogue | write | Companies | create a company |
 | `update_company` | `companies` | catalogue | write | Companies | change a company |
 | `delete_company` | `companies` | catalogue | write | Companies | delete a company |
-| `export_companies` | `companies` | catalogue | write | Companies (export job) | start a company export job, or read its status |
+| `export_companies` | `companies` | catalogue | write | Companies (export job) | start a company export job |
+| `get_company_export` | `companies` | catalogue | read | Companies (export job) | a company export job's status and file link |
 | `list_company_fields` | `companies` | catalogue | read | Company Fields | company fields with labels and choices |
 | `get_company_field` | `companies` | catalogue | read | Company Fields | one company field |
 | `create_company_field` | `companies` | catalogue | write | Company Fields | create a company field |
@@ -151,17 +153,25 @@ A line here is a name and a purpose, not an input design.
 
 SPEC §9 applies to every row above when its toolset is planned: anything
 that may reach people outside Freshdesk follows `send`'s rules, and a bulk
-change takes a preview, then `confirm`. Rows that need that judgement
-first:
+change takes a preview, then `confirm`. The rows below need that judgement
+first. The lists are a minimum, not complete, and not checked against the
+API reference: every `delete_*` with no `restore_*` counts as permanent
+until checked.
 
 - delete for good or in bulk: `hard_delete_contact`, `bulk_delete_tickets`,
-  `delete_agent`;
+  `delete_agent`, `delete_company`, `delete_contact_field`,
+  `delete_company_field`;
 - change in bulk: `bulk_update_tickets`;
 - grant helpdesk access: `make_contact_agent`, `create_agent`,
   `update_agent`;
-- may send email outside Freshdesk through its notifications (not checked
-  against the API reference): `create_ticket`, `create_agent`,
-  `create_automation_rule`.
+- may send email outside Freshdesk, or change where customer mail goes:
+  `create_ticket`, `merge_tickets`, `bulk_update_tickets`,
+  `make_contact_agent`, `create_agent`, `create_automation_rule`,
+  `update_automation_rule`, `create_mailbox`, `update_mailbox`.
+
+`export_tickets` is a `write` tool in `core`, which SPEC §8.1 calls read:
+PLAN's OD-5 (owner, 2026-11-23) settles that one local-file write and is
+no precedent for another tool, the contact and company exports included.
 
 `admin_write` has no tool for roles, business hours, products and email
 configs: the API reference lists no write endpoint for them (read
