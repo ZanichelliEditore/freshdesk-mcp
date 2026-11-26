@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T18:19:27+01:00`
-- **Describes commit:** `<filled at stamp>`. **CI:** `<filled at stamp>`.
+- **Describes commit:** `d63b213` (T-087: done; review fixes, proposed
+  T-100, handoff), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:**
+  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45866988722
+  (workflow `quality`, ran on `d63b213`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-087 `done (2026-11-26)`: M3 acceptance on the real
   account. See `docs/tasks/T-087-m3-real-account-run.md` "Done" (one dated
