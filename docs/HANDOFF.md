@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T09:47:04+01:00`
-- **Describes commit:** `PENDING` (the T-077 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** `PENDING`.
+- **Describes commit:** `ed45c7a` (the T-077 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45786238906
+  (workflow `quality`, ran on `ed45c7a`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-077 (lint fence: the client, the limiter and
   `ticketInput` stay in the core) `done (2026-11-26)`. Commits `c54585d`
