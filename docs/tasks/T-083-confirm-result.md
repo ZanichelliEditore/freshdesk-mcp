@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-079
 - **Created:** 2026-11-26
 
@@ -46,18 +46,19 @@ No split point: one small core module on `preview.ts`'s mechanism and one text b
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `3aed115`: `src/core/send-id.ts` (`mintSendId`, `checkSendId`, `SEND_ID_TTL_MS`), `src/tools/confirm.ts` (`notSent`), the `sendId` lint fence in `eslint.config.mjs`; tests first: `test/core/send-id.test.ts` (fake clock; every acceptance case, among them `checkSendId: each send_id sends at most once (OD-33)` and "keys the spent set on the nonce"), `test/tools/confirm.test.ts`, `test/lint-rules.test.ts::send-id (T-083)` (fence on every file outside `src/core/**`, and "reads no environment or config" on source).
+- `5a9173f`: review fixes: `confirm.ts` never hides a given `to` behind the requester (`test/tools/confirm.test.ts` "never hides a to it is given"); `test/core/send-id.test.ts::binds the mint time` (fails with `time` dropped from the tag, checked by mutation).
+- Beyond the acceptance, for T-082: a passing check returns `release`, which frees only its own reservation (OD-33's release rule; T-082 decides when to call it).
+- `make quality` exit 0: Vitest 53 files, 4411 tests; `tools/checks` 138 tests OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The "already used; nothing was sent" wording (OD-33) can read as "no mail went out" after a first send: parked for the owner (`docs/improvements.md`, `3aed115`), a change goes through `/rfc`.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)

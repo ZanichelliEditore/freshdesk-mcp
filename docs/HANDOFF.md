@@ -4,26 +4,32 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T13:32:42+01:00`
-- **Describes commit:** `fd9b209` (T-081: done; handoff to T-083),
-  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45820957190
-  (workflow `quality`, ran on `fd9b209`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T13:49:48+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-081 `done (2026-11-26)`: `src/core/recipients.ts`
-  (`onAllowList`, `checkRecipients`, `RECIPIENT_CAP`), commits `644cb6c`
-  (matcher and table test) and `4902607` (review fixes). See
-  `docs/tasks/T-081-recipient-allow-list.md` "Done".
+- **Current task:** T-083 `done (2026-11-26)`: `src/core/send-id.ts`
+  (`mintSendId`, `checkSendId`, `SEND_ID_TTL_MS`), `src/tools/confirm.ts`
+  (`notSent`), the `sendId` lint fence; commits `3aed115` (build, tests
+  first) and `5a9173f` (review fixes). See
+  `docs/tasks/T-083-confirm-result.md` "Done".
 
-- **Next action:** `/pickup` T-083 (`send_id` in the core and the "Not
-  sent" result; depends on T-079 only). T-082 waits on T-083.
+- **Next action:** `/pickup` T-082 (send entry points; depends on T-080,
+  T-081, T-083, all `done`).
 
-- **Read before anything else:** `docs/tasks/T-083-confirm-result.md`; the RFC
-  `docs/rfc/active/2026-11-26-send-safety-core.md` (OD-20, OD-32, OD-33);
-  for T-082 later: `checkRecipients` returns frozen copies as
-  `recipients`, and the entry must send and bind those, never the caller's
-  lists (`docs/improvements.md`, `4902607`).
+- **Read before anything else:** `docs/tasks/T-082-send-entries.md`; the RFC
+  `docs/rfc/active/2026-11-26-send-safety-core.md`; the "for T-082"
+  entries in `docs/improvements.md` (`4902607`, `3aed115`, `5a9173f`):
+  mint and check only on `checkRecipients`' frozen `recipients`; call the
+  check's `release` only when 0 attempts were dispatched, never on
+  `http_status: null`; pass `notSent` an empty `to` for a reply and a
+  public note.
+
+- **Owner decisions recorded (2026-11-26, via the orchestrator):** `%` and
+  `!` before the `@` stay allowed, the risk accepted (T-081's entry in
+  `docs/improvements.md` marked DECIDED); an apostrophe in the local part
+  stays allowed, confirming T-081's reading of OD-23's "quotes" as `"`
+  only.
 
 - **T-076 (owner, open):** `todo (2026-11-25)` in PLAN. Left: the
   overnight check that no time trigger acted on the `mcp-test` tickets,
@@ -31,27 +37,29 @@
   rule acted" in T-076's "Done". T-087 waits on T-076 `done`.
 
 - **Reviews:**
-  - Full round, R1 = `644cb6c`, range `66536f3..644cb6c`: code-reviewer
-    no high or medium; low "never throws" overclaimed (fixed), low list
-    read twice / no copy returned (fixed), info two address grammars in
-    the core (parked). security-reviewer 3 low and 1 info: can throw
-    (fixed); list read twice, cap bypassable by a Proxy (fixed); `%` and
-    `!` in the local part (parked, owner/`/rfc`); domain label syntax
-    (info, parked). compliance-reviewer: Wireframes `none`.
-  - Scoped round, range `644cb6c..4902607`: code-reviewer no blocking,
-    3 parkable (revoked Proxy throws, a weakened cap test, T-082 must send
-    `result.recipients`); security-reviewer no blocking, 2 parkable
-    (revoked Proxy throws, copy before cap); compliance-reviewer: `none`.
+  - Full round, R1 = `3aed115`, range `9453774..3aed115`: code-reviewer
+    medium: no test bound the mint time in the tag (fixed, mutation-
+    checked); low: recipients' shape throws in mint/check (parked for
+    T-082); low: SPEC §7 layout line and task In-scope drift (fixed); low:
+    confirm body test is a passthrough guard (dismissed, T-082 proves the
+    unescaped body). security-reviewer: no high or medium; low: confirm.ts
+    hid a non-empty `to` behind the requester (fixed); low: throw on bad
+    recipients (parked, same as code); low: "already used; nothing was
+    sent" may mislead after a first send (parked for the owner, `/rfc`).
+    compliance-reviewer: Wireframes `none`.
+  - Scoped round, range `3aed115..5a9173f`: code-reviewer no blocking, 1
+    parkable (a comment on `NotSentInput.to`); security-reviewer no
+    blocking, 2 parkable (label mixed with addresses in `to`, fails
+    closed; T-082 must pass an empty `to`); compliance-reviewer `none`.
     All parked in `docs/improvements.md`. All quotes of base, HEAD, stat
     and trailer matched.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - Owner: refuse `%` and `!` in an allow-listed local part (percent hack,
-    bang paths)? OD-23 is silent; a change goes through `/rfc`.
-  - An apostrophe is allowed in a local part: OD-23's "quotes" read as
-    `"` only.
+  - Owner: OD-33's "this send_id was already used; nothing was sent" can
+    read as "no mail went out" after a send; proposed wording in
+    `docs/improvements.md` (`3aed115`), a change goes through `/rfc`.
   - Reply and forward answer shapes are documented, not measured (A1,
     A2; T-087 checks).
   - OD-34's "no release accepting `send` before T-087" has no acceptance
@@ -70,5 +78,5 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 51 passed
-  (51)", "Tests 4246 passed (4246)"; `tools/checks` "Ran 138 tests", OK.
+- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 53 passed
+  (53)", "Tests 4411 passed (4411)"; `tools/checks` "Ran 138 tests", OK.
