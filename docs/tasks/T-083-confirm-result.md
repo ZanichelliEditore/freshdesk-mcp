@@ -14,7 +14,7 @@ Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answ
 ## In scope
 - `src/core/send-id.ts`: `src/tools/preview.ts`'s mechanism (HMAC, TTL 15 minutes, `Date.now()`) with its own per-process key made in the module, read from no environment or config; recipients canonicalised so order does not matter; the spent-id rule of OD-33 (reserved at the check, before any dispatch).
 - Lint: `src/core/send-id` importable only inside `src/core/**`.
-- `src/tools/confirm.ts`: the "Not sent" text, SPEC §9's sentence, the body, the body as sent (the entry returns it, escaped per OD-24), the caller's recipients, the requester as "the ticket's requester" (OD-27), and the `send_id` it is given; no import from `src/core/`.
+- `src/tools/confirm.ts`: the "Not sent" text, SPEC §9's sentence, the body, the body before escaping (as the entry returns it, OD-24), the caller's recipients, the requester as "the ticket's requester" (OD-27), and the `send_id` it is given; no import from `src/core/`.
 - No request made.
 
 ## Out of scope

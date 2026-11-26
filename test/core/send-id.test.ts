@@ -173,6 +173,16 @@ describe("checkSendId: the id itself", () => {
     refusedWithoutQuoting(check(edited), edited);
   });
 
+  it("binds the mint time: a later time with the nonce and tag kept is refused as not matching", () => {
+    const id = mint();
+    vi.setSystemTime(T0 + SEND_ID_TTL_MS + 1);
+    const [, nonce, tag] = id.split(".");
+    // Within 15 minutes of the clock and not ahead of it: only the tag can refuse it.
+    const moved = `${T0 + 60_000}.${nonce}.${tag}`;
+    const error = refusedWithoutQuoting(check(moved), moved);
+    expect(error.message).toContain("does not match");
+  });
+
   it("refuses an id minted under another process's key", async () => {
     vi.resetModules();
     const other = await import("../../src/core/send-id.js");

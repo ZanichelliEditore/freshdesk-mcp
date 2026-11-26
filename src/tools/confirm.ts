@@ -9,7 +9,8 @@
 //   - The body is the text before escaping, as the entry returns it (OD-24):
 //     the user reads what the customer will read.
 //   - The recipients are the caller's; the requester is named as "the
-//     ticket's requester", never by address (OD-27). A reply and a public note
+//     ticket's requester", never by address (OD-27), and never in place of a
+//     `to` it is given: every address handed in is shown. A reply and a public note
 //     carry OD-21's sentence on the ticket's existing CC addresses.
 
 /** The SPEC §9 sentence, word for word. */
@@ -40,7 +41,8 @@ export interface NotSentResult {
   sent: false;
   note: string;
   body: string;
-  recipients: { to: readonly string[] | typeof REQUESTER; cc: readonly string[] };
+  /** A reply's and a public note's `to` starts with "the ticket's requester". */
+  recipients: { to: readonly string[]; cc: readonly string[] };
   send_id: string;
   expires_at: string;
 }
@@ -58,7 +60,7 @@ export function notSent(input: NotSentInput): NotSentResult {
     sent: false,
     note: sentences.join(" "),
     body: input.body,
-    recipients: { to: toRequester ? REQUESTER : [...input.to], cc: [...input.cc] },
+    recipients: { to: toRequester ? [REQUESTER, ...input.to] : [...input.to], cc: [...input.cc] },
     send_id: input.send_id,
     expires_at: input.expires_at,
   };

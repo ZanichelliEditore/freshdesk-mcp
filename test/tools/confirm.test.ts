@@ -76,7 +76,7 @@ describe("notSent", () => {
 
   it("reply: the ticket's requester, never an address, and the caller's cc", () => {
     const result = notSent(reply);
-    expect(result.recipients).toEqual({ to: REQUESTER, cc: ["ops@example.com"] });
+    expect(result.recipients).toEqual({ to: [REQUESTER], cc: ["ops@example.com"] });
   });
 
   it("forward: the caller's to and cc, and no requester", () => {
@@ -89,7 +89,12 @@ describe("notSent", () => {
   });
 
   it("public note: the ticket's requester, no cc", () => {
-    expect(notSent(note).recipients).toEqual({ to: REQUESTER, cc: [] });
+    expect(notSent(note).recipients).toEqual({ to: [REQUESTER], cc: [] });
+  });
+
+  it.each([reply, note])("$tool: never hides a `to` it is given behind the requester", (input) => {
+    const result = notSent({ ...input, to: ["x@example.com"] });
+    expect(result.recipients.to).toEqual([REQUESTER, "x@example.com"]);
   });
 
   it.each([reply, note])("$tool: carries OD-21's CC sentence", (input) => {

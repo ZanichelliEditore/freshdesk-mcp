@@ -156,7 +156,7 @@ src/
   tools/           MCP layer
     toolsets/      one module per toolset; each tool = zod input + handler
     format.ts      output shaping, truncation, untrusted-content wrapping
-    confirm.ts     confirm-by-argument (§9)
+    confirm.ts     the "Not sent" text (§9); the check is in the write path
   config.ts        env + optional team config file (§10)
   server.ts        builds the server from enabled toolsets; stdio
   cli.ts           entry: `serve` (default); maybe `export` later
