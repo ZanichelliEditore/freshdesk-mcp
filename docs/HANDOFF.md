@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T14:27:27+01:00`
-- **Describes commit:** `<hash>` (filled at the stamp). **CI:** `<url>`.
+- **Describes commit:** `4efcc70` (T-082: done; handoff to T-084),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45829585087
+  (workflow `quality`, ran on `4efcc70`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-082 `done (2026-11-26)`: the send entries in
   `src/core/write-path.ts` (`sends`: `reply_to_ticket`, `forward_ticket`,
