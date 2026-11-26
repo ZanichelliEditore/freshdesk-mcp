@@ -4,32 +4,36 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T12:41:44+01:00`
-- **Describes commit:** `6461738` (the M3 plan handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45813178960
-  (workflow `quality`, ran on `6461738`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T12:53:40+01:00`
+- **Describes commit:** `<hash>` (T-079 first half: RFC draft at
+  Proposed). **CI:** `<run>`.
 
-- **Current task:** `/decompose M3` (plan session, owner's go 2026-11-26,
-  run by a session under the orchestrator) `done (2026-11-26)`. Commits
-  `95d2c58` (M3 planned), `eff63e8` (full-round fixes), then this handoff
-  commit (scoped-round fixes). PLAN `## M3 — send toolset`: T-079 to
-  T-088, all `todo (2026-11-26)`; OD-17 to OD-34. Owner's answers
-  (2026-11-26, via the orchestrator): OD-20 an HMAC `send_id`, OD-21 the
-  ticket's existing CCs ignored, OD-26 the public note built (T-088); the
-  other ODs' proposals are the RFC's starting point. Step 4: `send` goes
-  through the write path, extended; T-079's RFC before any send code. No
-  `src/` change.
+- **Current task:** T-079 `doing (2026-11-26)`, first half done (plan
+  session under the orchestrator, owner's go 2026-11-26). RFC
+  `docs/rfc/proposed/2026-11-26-send-safety-core.md`, Status Proposed:
+  answers OD-17 to OD-34, OD-20/21/26 recorded as decided, A1 to A6
+  unchecked, threat model (injection, "always allow", OD-21's CCs). Full
+  `rfc-reviewer` round done and resolved in the RFC's "Review". No SPEC,
+  no `src/` change; not Active.
 
-- **Next action:** `/pickup` T-079 (the RFC; split point: stop at Proposed
-  after the full `rfc-reviewer` round). T-076 stays open with the owner
-  (runbook below); T-087 waits on it.
+- **Next action:** `/pickup` T-079, second half, in this order:
+  1. the owner's answers: confirm or change every **proposed** OD in the
+     RFC (OD-17 to 19, 22 to 25, 27 to 34), say yes/no to the optional A4
+     test (OD-21's question) and to OD-31's SPEC §13 wording; record them
+     in the RFC as "The owner's decisions (<date>)";
+  2. scoped `rfc-reviewer` round on the three mechanism changes of the
+     full round only (OD-33 release rule, OD-33 no pruning, OD-24 body
+     rule), AGENTS.md rule 9;
+  3. the acceptance commit: Status Active, `make rfc-sync`, one dated
+     "Extended by" line in `docs/rfc/active/2026-11-25-write-safety-core.md`
+     naming the RFC's three points; SPEC §8.2, §9, §11 per the RFC's "SPEC
+     wording at acceptance", §13 only by the owner's word on OD-31; T-080
+     to T-088 acceptance amended per the RFC's "Rows this RFC governs"
+     (PLAN and task files); T-079 `done (<date>)`.
+  T-076 stays open with the owner (runbook below); T-087 waits on it.
 
-- **Read before anything else:** `docs/tasks/PLAN.md` section M3 (step-4
-  note, API assumptions A1 to A6, OD-17 to OD-34);
-  `docs/tasks/T-079-rfc-send-core.md`; RFC
-  `docs/rfc/active/2026-11-25-write-safety-core.md`.
+- **Read before anything else:** the RFC (whole);
+  `docs/tasks/T-079-rfc-send-core.md`; PLAN section M3.
 
 - **Owner runbook for T-076** (each run prints yes/no and counts only;
   keep its output and every id in `docs/private/account-facts.md`, never
@@ -72,46 +76,23 @@
      acted" in T-076's "Done".
 
 - **Reviews:**
-  - Full round, R1 = `95d2c58`, range `12afa5f..95d2c58`. Scoped round,
-    range `95d2c58..eff63e8`. All four quotes of every reviewer checked
-    against the diff files: correct (`code-reviewer`'s full-round trailer
-    quote was missing at first; re-asked, it quoted it correctly).
-  - `code-reviewer`, full: high, the `send_id` key in `src/tools` while the
-    core must check it (fixed: OD-32, `src/core/send-id.ts`, the entry
-    mints); high, a replayed `send_id` sends twice (fixed: OD-33 for the
-    RFC, test lines in T-082/T-083); medium, "no address" vs "Not sent"
-    naming recipients (fixed: "sent result"); medium, A4 uncheckable on
-    CC-free tickets (fixed: unchecked by design); medium, T-086's requester
-    email needs an API assumption (fixed: A6); low, T-079 scope vs
-    acceptance, stale goal (fixed).
-  - `security-reviewer`, full: high, smoke-send could mail a ticket CC or
-    an off-list requester (fixed in T-086); high, `send_id` checked outside
-    the core (fixed, OD-32); medium, replay (OD-33); medium, `send` enabled
-    by a team file before T-087 (OD-34); low items: two T-081 cases added,
-    two parked (improvements `95d2c58`).
-  - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round, both `code-reviewer` and `security-reviewer`: two
-    fail-open items, fixed in this handoff commit: T-086 and A6 now name
-    the four CC fields (`cc_emails`, `fwd_emails`, `reply_cc_emails`,
-    `ticket_cc_emails`, names unverified); OD-33(b) reserves the id at the
-    check, before dispatch, and T-082 tests two concurrent confirms (one
-    POST). Also fixed: T-085 refuses `confirm` with no `send_id`; OD-32's
-    reason toned to "needed, not sufficient"; stale context lines. The
-    rest parked (improvements `eff63e8`). **Rule 9:** the OD-33 fix refines
-    a mechanism the RFC has yet to decide; no third round opened; said to
-    the owner.
+  - `rfc-reviewer`, full round, 2026-11-26, on the first draft: 0 high,
+    5 medium, 3 low, all resolved; list in the RFC's "Review". Findings 1
+    (4xx frees a `send_id`, checked: `src/client/errors.ts` maps 4xx to
+    `validation`) and 3 (core already refuses `\p{Cc}`/`\p{Cf}`,
+    `src/core/write-path.ts` `EMAIL`) checked against the code: correct.
+  - code/security/compliance reviewers: not run (docs-only first half;
+    they run at T-079's acceptance commit if the owner's answers change
+    rows).
 
-- **Proposed plan changes:** none (T-088 sized `todo` in this plan).
+- **Proposed plan changes:** none (row amendments listed in the RFC, to
+  apply at acceptance).
 
 - **Open doubts:**
-  - The four CC field names and A1 to A6 come from the planner's and
-    reviewers' knowledge of the Freshdesk v2 API, not from this repo or a
-    probe; T-079's RFC states them as unchecked, T-087 checks them.
-  - OD-32 puts a second per-process HMAC key in `src/core/send-id.ts`
-    rather than reusing `preview.ts`'s key: same mechanism as OD-20's
-    answer, a different module; the owner confirms at T-079.
-  - OD-33(b) is per-process server state, a departure from OD-15's
-    no-server-state choice for previews; for the RFC.
+  - A1 to A6 and the four CC field names are unverified (T-087 checks
+    them; A4 not at all unless the owner takes OD-21's optional test).
+  - OD-33's spent set is the first per-process server state besides the
+    limiter; never pruned by design (finding 2).
   - Carried: `categorize_tickets` checks values only at the confirm;
     T-072/T-073/T-074 strict-input errors are the MCP SDK's text; the
     `getAgent` active rule is from documentation (T-067); `context.ts`
@@ -125,6 +106,4 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 50 passed
-  (50)", "Tests 4044 passed (4044)"; `tools/checks` "Ran 138 tests", OK;
-  lint, format, typecheck, build and both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 (see commit).

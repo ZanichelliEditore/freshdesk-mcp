@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** doing (2026-11-26)
 - **Depends on:** none (may run while T-076 is open)
 - **Created:** 2026-11-26
 
@@ -44,7 +44,7 @@ Split point: the draft and the full `rfc-reviewer` round first, stopping at Prop
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- 2026-11-26, first half: RFC `docs/rfc/proposed/2026-11-26-send-safety-core.md` (Proposed), full `rfc-reviewer` round resolved in its "Review"; `make quality` green.
 
 ## Dead ends
 none
@@ -53,9 +53,7 @@ none
 none
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+Second half: the owner's answers on the RFC's proposed ODs (and OD-21's optional A4 test, OD-31's wording); then the scoped `rfc-reviewer` round on OD-33 (release, no pruning) and OD-24 (body rule) only; then the acceptance commit (docs/HANDOFF.md, "Next action").
