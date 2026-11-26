@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** doing (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-080, T-081, T-083
 - **Created:** 2026-11-26
 
@@ -47,18 +47,21 @@ Split point: the reply entry first, the forward and public-note entries second.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `a6ee82e`: owner-accepted text amendment (2026-11-26) of OD-33's "already used" message, RFC "Amendments"; `test/core/send-id.test.ts::checkSendId: each send_id sends at most once (OD-33) > passes one of two checks of one id made with no await between`.
+- `d8b6828` (build, tests first) and `464bec0` (review fixes): `src/core/write-path.ts` `sends` (`reply_to_ticket`, `forward_ticket`, `add_public_note`), `forwardAllowList` option, `src/tools/context.ts` passes `forward_allow_list`.
+- Acceptance: `test/core/send-entries.test.ts` (141 cases, MockAgent), every clause one `describe` (entries per toolset; mint; recipients the mint returns; payloads and closed keys; source assertion; confirm and `send_id`; single use; recipients; body; never rejects). `make quality` exit 0: Vitest 54 files, 4552 tests; `tools/checks` 138 tests OK.
+- Parked T-082 items applied: recipients checked before mint and check; `release` only on 0 attempts; `result.recipients` sent; empty `to` for a reply and a public note (`the recipients a mint returns`); unescaped body into `confirm.ts` (`returns the body before escaping, and confirm.ts shows that text`); wrong-shape recipients refused, not thrown.
+- Mutation check on `d8b6828`: 9 mutants (always/never release, no escape, no body rule, caller lists, truthy confirm, open keys, empty `to`, LF-only `<br>`), each killed.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Line breaks: CRLF, a lone CR and LF each give one `<br>` (the RFC did not say; `docs/improvements.md`, `49736b7`). U+2028/U+2029 are neither refused nor turned into `<br>`: parked for the owner, `/rfc`.
+- Unknown input keys are refused, not dropped (a reply's `to`, a cast's `bcc_emails`): stricter than `add_note`, which drops them.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
