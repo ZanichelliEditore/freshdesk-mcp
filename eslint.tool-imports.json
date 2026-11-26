@@ -14,6 +14,7 @@
         "./csv.js",
         "./rows.js",
         "./ticket-query.js",
+        "./preview.js",
         "../client/errors.js",
         "../client/resources/agents.js",
         "../client/resources/groups.js",

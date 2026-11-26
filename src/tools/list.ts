@@ -256,7 +256,7 @@ function idsDigest(call: ListCall, position: number, ids: readonly number[]): st
  * JSON arguments). `undefined` is absent, as in JSON: left out of an object,
  * `null` in an array. `-0` is written `0`, as JSON does.
  */
-function canonical(value: unknown, omit?: string): string {
+export function canonical(value: unknown, omit?: string): string {
   if (value === null || typeof value === "string" || typeof value === "boolean") {
     return JSON.stringify(value);
   }
