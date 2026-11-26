@@ -195,14 +195,19 @@ describe("createServer: enabled toolsets come from the team file only", () => {
 
   it("with send alone, lists the send tools and no core or write tool", async () => {
     const tools = await listTools(await open(serverFor(undefined, { toolsets: ["send"] })));
-    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket", "forward_ticket"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "reply_to_ticket",
+      "forward_ticket",
+      "add_public_note",
+    ]);
   });
 
-  it("without send in the team file, reply_to_ticket and forward_ticket are absent", async () => {
+  it("without send in the team file, the send tools are absent", async () => {
     for (const toolsets of [["core"], ["core", "write"]]) {
       const tools = await listTools(await open(serverFor(undefined, { toolsets })));
       expect(tools.map((tool) => tool.name)).not.toContain("reply_to_ticket");
       expect(tools.map((tool) => tool.name)).not.toContain("forward_ticket");
+      expect(tools.map((tool) => tool.name)).not.toContain("add_public_note");
     }
   });
 
@@ -469,7 +474,7 @@ describe("the send wiring (src/tools/toolsets/send/index.ts)", () => {
 
     const tools = sendTools(entries, spies);
 
-    expect([...received.keys()]).toEqual(["reply_to_ticket", "forward_ticket"]);
+    expect([...received.keys()]).toEqual(["reply_to_ticket", "forward_ticket", "add_public_note"]);
     const reply = received.get("reply_to_ticket")!;
     expect(reply).toHaveLength(1);
     expect(reply[0]).toBe(entries.reply_to_ticket);
@@ -482,14 +487,28 @@ describe("the send wiring (src/tools/toolsets/send/index.ts)", () => {
     expect(forward[0]).not.toBe(entries);
     expect(forward[0]).not.toBe(entries.reply_to_ticket);
     expect(forward[0]).not.toBe(entries.add_public_note);
-    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket", "forward_ticket"]);
+    const note = received.get("add_public_note")!;
+    expect(note).toHaveLength(1);
+    expect(note[0]).toBe(entries.add_public_note);
+    expect(note[0]).not.toBe(entries);
+    expect(note[0]).not.toBe(entries.reply_to_ticket);
+    expect(note[0]).not.toBe(entries.forward_ticket);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "reply_to_ticket",
+      "forward_ticket",
+      "add_public_note",
+    ]);
     expect(Object.isFrozen(tools)).toBe(true);
   });
 
   it("the real wiring gives the send tools, each complete enough to register", async () => {
     const server = serverFor({ send: sendTools(fakeSends()) }, { toolsets: ["send"] });
     const tools = await listTools(await open(server));
-    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket", "forward_ticket"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "reply_to_ticket",
+      "forward_ticket",
+      "add_public_note",
+    ]);
   });
 });
 

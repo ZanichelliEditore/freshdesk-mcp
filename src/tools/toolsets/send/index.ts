@@ -11,11 +11,11 @@
 //     imports src/core/.
 //   - `factories` is a parameter so a test can see what each factory
 //     receives (test/server.test.ts); the context passes none.
-//   - `reply_to_ticket` (T-084) and `forward_ticket` (T-085).
-//     `add_public_note` (T-088) is not built yet: its entry exists in the
-//     core and is handed to no tool.
+//   - `reply_to_ticket` (T-084), `forward_ticket` (T-085) and
+//     `add_public_note` (T-088): one tool per core send entry.
 
 import type { Tool } from "../index.js";
+import { type AddPublicNoteEntry, addPublicNote } from "./add-public-note.js";
 import { type ForwardTicketEntry, forwardTicket } from "./forward-ticket.js";
 import { type ReplyToTicketEntry, replyToTicket } from "./reply-to-ticket.js";
 
@@ -23,12 +23,14 @@ import { type ReplyToTicketEntry, replyToTicket } from "./reply-to-ticket.js";
 export interface SendToolEntries {
   readonly reply_to_ticket: ReplyToTicketEntry;
   readonly forward_ticket: ForwardTicketEntry;
+  readonly add_public_note: AddPublicNoteEntry;
 }
 
 /** One factory per send tool, keyed by its entry point. */
 export const SEND_FACTORIES = Object.freeze({
   reply_to_ticket: replyToTicket,
   forward_ticket: forwardTicket,
+  add_public_note: addPublicNote,
 });
 
 /** The `send` toolset's tools, each built from its own entry. */
@@ -39,5 +41,6 @@ export function sendTools(
   return Object.freeze([
     factories.reply_to_ticket(entries.reply_to_ticket),
     factories.forward_ticket(entries.forward_ticket),
+    factories.add_public_note(entries.add_public_note),
   ]);
 }

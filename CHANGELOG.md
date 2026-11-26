@@ -5,6 +5,10 @@ and stay 0.x until milestone M4, then 1.0.0.
 
 ## Unreleased
 
+- **Added:** `add_public_note` in `send`: a public note (`private: false`) on
+  a ticket, in two calls as `reply_to_ticket`. No recipient, `private`,
+  `notify_emails`, `user_id` or `incoming` input; the requester can see the
+  note and may be emailed, and Freshdesk may copy the ticket's existing CCs.
 - **Added:** `forward_ticket` in `send`: a forward of a ticket to internal
   addresses, in two calls as `reply_to_ticket`. `to` (at least one) and `cc`
   only from `forward_allow_list`, at most 10 in all, no `bcc`, never the

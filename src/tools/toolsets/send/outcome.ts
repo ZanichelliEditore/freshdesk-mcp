@@ -1,7 +1,7 @@
 // What a send tool returns for its entry's answer (SPEC §9; RFC
 // 2026-11-26-send-safety-core, OD-20, OD-27, OD-33, and OD-27's amendment of
 // 2026-11-26, T-089), one rule for every send tool: `reply_to_ticket`
-// (T-084), `forward_ticket` (T-085) and, when built, `add_public_note`.
+// (T-084), `forward_ticket` (T-085) and `add_public_note` (T-088).
 //
 //   - The entry's result is written here by shape, since no module under
 //     src/tools/ may import src/core/ (eslint.tool-imports.json);
@@ -47,7 +47,7 @@ export type SendResult =
   | { ok: false; error: FreshdeskError; attempts: number };
 
 /** What was sent, as a failure's message names it. */
-export type SendKind = "reply" | "forward";
+export type SendKind = "reply" | "forward" | "public note";
 
 /** A send's failure as the caller sees it: no address, and a dispatched POST's unknown outcome said. */
 export function sendFailed(

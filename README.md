@@ -140,7 +140,8 @@ costs in Freshdesk API calls, which count against your account's rate limit:
 
 The `send` toolset is off by default. Its tool `reply_to_ticket` sends a
 public reply to a ticket's requester, usually a customer; `forward_ticket`
-forwards a ticket to internal addresses. A sent mail cannot be taken back.
+forwards a ticket to internal addresses; `add_public_note` adds a public note
+the requester can see and may be emailed. A sent mail cannot be taken back.
 
 - **Never choose "always allow" for a `send` tool** in Claude Code or Claude
   Desktop. The approval prompt, which shows the exact text, the ticket id and
@@ -158,7 +159,12 @@ forwards a ticket to internal addresses. A sent mail cannot be taken back.
   `forward_allow_list`, at most 10 in all, and there is no `bcc`. The
   ticket's content, and possibly its conversation, leaves Freshdesk; its
   attachments are never forwarded.
-- Freshdesk automations may act on a reply, as on an agent's.
+- A public note takes no recipient: the requester can see it and Freshdesk
+  may email it to them, and may also copy the ticket's existing CC
+  addresses, which the tool does not check. A private note is `add_note`'s,
+  in `write`.
+- Freshdesk automations may act on a reply or a public note, as on an
+  agent's.
 
 ## Ticket text is data, not instructions
 

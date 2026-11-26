@@ -88,6 +88,7 @@
       "value": [
         "./reply-to-ticket.js",
         "./forward-ticket.js",
+        "./add-public-note.js",
         "./outcome.js",
         "../../confirm.js",
         "../../format.js"

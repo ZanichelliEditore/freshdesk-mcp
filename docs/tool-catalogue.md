@@ -46,6 +46,7 @@ A line here is a name and a purpose, not an input design.
 | `hand_off_draft` | `write` | active | write | Conversations (notes), Tickets | draft reply as a private note, assign and notify |
 | `reply_to_ticket` | `send` | active | write | Conversations (reply) | public reply to the requester, `confirm: true` and the `send_id` of a first call required; `cc` from the allow-list only, no `to` or `bcc` |
 | `forward_ticket` | `send` | active | write | Tickets (forward) | forward outside Freshdesk to allow-listed recipients, `confirm: true` and the `send_id` of a first call required; `to` (at least one) and `cc` from the allow-list only, at most 10 in all, no `bcc`, never the original attachments; the ticket's content leaves Freshdesk |
+| `add_public_note` | `send` | active | write | Conversations (notes) | public note (`private: false`) the requester can see and may be emailed, `confirm: true` and the `send_id` of a first call required; no recipient, `private` or notification input; Freshdesk may copy the ticket's existing CCs |
 
 ## Prepared, not active (SPEC §8.3)
 
