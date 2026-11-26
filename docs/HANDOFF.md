@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T10:00:31+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `0f5e3f9` (the T-069 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45788164938
+  (workflow `quality`, ran on `0f5e3f9`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-069 (notify recipients by agent id) `done (2026-11-26)`.
   Commits `a57ef9b` (implementation), `762d34a` (full-round fixes), then
