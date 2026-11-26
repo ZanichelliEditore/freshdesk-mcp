@@ -48,8 +48,9 @@
 //     inside the set is checked against that schema's choices only.
 //   - `tags` is read by `update_ticket`'s entry only, as the ticket's whole
 //     tag list (the tool merges add/remove from the current tags), a list
-//     of strings; another entry never reads the key.
-//   - A note entry takes the ticket id and the body, and nothing that names
+//     of strings, copied once and then checked; another entry never reads
+//     the key. A change that sets nothing (no field, no tags) is refused.
+//   - A note entry takes the ticket id and the body (a string), and nothing that names
 //     a note's visibility or author: the payload is built here from a closed
 //     key set, `{ body, private: true }` (`notify_emails` is T-069's,
 //     invariant 4), so `private: false`, `user_id`, `incoming` or attachments
@@ -182,17 +183,21 @@ async function ticketWrite(
     body = built.body;
     if (allow.tags && change.tags !== undefined) {
       const tags: unknown = change.tags;
-      if (!Array.isArray(tags) || !tags.every((tag) => typeof tag === "string")) {
+      // Copied once, then checked: the list sent is the list checked.
+      const list: unknown[] = Array.isArray(tags) ? Array.from(tags) : [0];
+      if (!list.every((tag) => typeof tag === "string")) {
         return fieldRefusal([
           { field: "tags", code: "invalid_value", message: "Tags are a list of strings." },
         ]);
       }
-      body = { ...body, tags: [...tags] };
+      body = { ...body, tags: list };
     }
+    const keys = Object.keys(body);
     const allowed = allowedKeys(allow);
-    if (!Object.keys(body).every((key) => allowed.has(key))) {
+    if (!keys.every((key) => allowed.has(key))) {
       return notSent("Not sent: the body holds a key this tool cannot set.");
     }
+    if (keys.length === 0) return notSent("Not sent: the change sets no field.");
   } catch {
     return notSent(UNREADABLE);
   }
@@ -207,6 +212,11 @@ async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResul
     ({ id, body, deadline } = input);
   } catch {
     return notSent(UNREADABLE);
+  }
+  if (typeof body !== "string") {
+    return fieldRefusal([
+      { field: "body", code: "invalid_value", message: "A note body is a string." },
+    ]);
   }
   // The closed key set: a note from a write entry is private, always.
   return postNote(http, id, { body, private: true }, deadline);

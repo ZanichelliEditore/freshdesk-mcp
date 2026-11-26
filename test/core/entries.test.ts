@@ -202,7 +202,11 @@ describe.each(ticketCases)("$entry's ticket entry", (c) => {
 
     const result = await c.call(entries(), { schema: forged, id: 42, fields: { Forged: "A > B" } });
 
-    expect(failure(result)).toMatchObject({ code: "validation", http_status: null });
+    expect(failure(result)).toMatchObject({
+      code: "validation",
+      http_status: null,
+      message: "Not sent: the body holds a key this tool cannot set.",
+    });
     expect(result.attempts).toBe(0);
     expect(dispatched()).toBe(0);
   });
@@ -217,7 +221,22 @@ describe.each(ticketCases)("$entry's ticket entry", (c) => {
       fields: { cf_hobby: 10n },
     });
 
-    expect(failure(result)).toMatchObject({ code: "validation", http_status: null });
+    expect(failure(result)).toMatchObject({
+      code: "validation",
+      http_status: null,
+      ...(allowSet(c.entry).custom && { message: "Not sent: the body cannot be sent as JSON." }),
+    });
+    expect(dispatched()).toBe(0);
+  });
+
+  it("refuses a change that sets no field, sending nothing", async () => {
+    const result = await c.call(entries(), { schema: schema(), id: 42, fields: {} });
+
+    expect(failure(result)).toMatchObject({
+      code: "validation",
+      http_status: null,
+      message: "Not sent: the change sets no field.",
+    });
     expect(dispatched()).toBe(0);
   });
 
@@ -293,6 +312,36 @@ describe("update_ticket's tags", () => {
     expect(error.errors).toEqual([expect.objectContaining({ field: "tags" })]);
     expect(dispatched()).toBe(0);
   });
+
+  it("sends the list it checked, read once, whatever an element answers later", async () => {
+    onPut().reply(200, ticketView, { headers: JSON_TYPE });
+    let reads = 0;
+    const tags: string[] = [];
+    Object.defineProperty(tags, 0, {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "vip" : 3;
+      },
+    });
+
+    await entries().update_ticket.update({ schema: schema(), id: 42, fields: {}, tags });
+
+    expect(sentBody()).toEqual({ tags: ["vip"] });
+    expect(reads).toBe(1);
+  });
+});
+
+it("a note entry has no private input (make typecheck fails on one)", () => {
+  // Never called: the proof is `make typecheck`, which fails if a `private`
+  // key becomes a valid input of either note entry.
+  const typeOnly = (e: WriteEntries) => [
+    // @ts-expect-error: add_note's note entry takes no `private`.
+    e.add_note.note({ id: 42, body: "x", private: false }),
+    // @ts-expect-error: hand_off_draft's note entry takes no `private`.
+    e.hand_off_draft.note({ id: 42, body: "x", private: false }),
+  ];
+  void typeOnly;
 });
 
 interface NoteCase {
@@ -318,19 +367,6 @@ describe.each(noteCases)("$name's note entry", (c) => {
     expect(sentBody()).toEqual({ body: "<p>Checked the logs.</p>", private: true });
   });
 
-  it("has no private input (make typecheck fails on one)", () => {
-    // Never called: the check is the type's. `make typecheck` fails if a
-    // `private` key becomes a valid input of either note entry.
-    const typeOnly = (e: WriteEntries) => [
-      // @ts-expect-error: add_note's note entry takes no `private`.
-      e.add_note.note({ id: 42, body: "x", private: false }),
-      // @ts-expect-error: hand_off_draft's note entry takes no `private`.
-      e.hand_off_draft.note({ id: 42, body: "x", private: false }),
-    ];
-    expect(typeof typeOnly).toBe("function");
-    expect(c.name).toMatch(/note|draft/);
-  });
-
   it("never sends private: false, user_id, incoming, attachments or notify_emails given by a cast", async () => {
     onNote().reply(201, NOTE, { headers: JSON_TYPE });
     const note = {
@@ -348,16 +384,30 @@ describe.each(noteCases)("$name's note entry", (c) => {
     expect(sentBody()).toEqual({ body: "hello", private: true });
   });
 
-  it("resolves a BigInt body, given by a cast, to validation, sending nothing", async () => {
-    const result = await c.call(entries(), { id: 42, body: 10n as unknown as string });
+  it.each<[string, unknown]>([
+    ["a BigInt", 10n],
+    ["undefined", undefined],
+    ["null", null],
+    ["a number", 3],
+    ["an object", { text: "x" }],
+  ])(
+    "resolves a body that is %s, given by a cast, to validation on body, sending nothing",
+    async (_, body) => {
+      const result = await c.call(entries(), { id: 42, body: body as string });
 
-    expect(result).toEqual({
-      ok: false,
-      error: expect.objectContaining({ code: "validation", http_status: null, retryable: false }),
-      attempts: 0,
-    });
-    expect(dispatched()).toBe(0);
-  });
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({
+          code: "validation",
+          http_status: null,
+          retryable: false,
+          errors: [expect.objectContaining({ field: "body", code: "invalid_value" })],
+        }),
+        attempts: 0,
+      });
+      expect(dispatched()).toBe(0);
+    },
+  );
 
   it.each<[string, unknown]>([
     ["null", null],
