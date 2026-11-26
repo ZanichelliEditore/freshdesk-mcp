@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T15:14:46+01:00`
-- **Describes commit:** `<hash>` (T-085: done; handoff to T-088), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** filled by the stamp commit.
+- **Describes commit:** `62fbcae` (T-085: done; handoff to T-088), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45837320776
+  (workflow `quality`, ran on `62fbcae`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-085 `done (2026-11-26)`: `forward_ticket` in
   `send`. See `docs/tasks/T-085-forward-ticket.md` "Done". Commits
