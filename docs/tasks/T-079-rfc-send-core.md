@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M3
-- **Status:** doing (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** none (may run while T-076 is open)
 - **Created:** 2026-11-26
 
@@ -44,16 +44,18 @@ Split point: the draft and the full `rfc-reviewer` round first, stopping at Prop
 *Filled at `/handoff`:*
 
 ## Done
-- 2026-11-26, first half: RFC `docs/rfc/proposed/2026-11-26-send-safety-core.md` (Proposed), full `rfc-reviewer` round resolved in its "Review"; `make quality` green.
+- 2026-11-26, first half: RFC draft at Proposed (`708a751`), full `rfc-reviewer` round resolved in its "Review"; `make quality` green.
+- 2026-11-26, second half: owner's answers recorded and RFC `docs/rfc/active/2026-11-26-send-safety-core.md` Active (`3ceaea1`): every proposal accepted, OD-34 plus no npm release accepting `send` before T-087, the A4 opt-in run; scoped `rfc-reviewer` round (findings 9 to 12) resolved in the RFC; SPEC §8.2, §9, §11, §13 M3 row; acceptance of T-082 to T-088 amended (PLAN and task files); old RFC's "Extended by" line. Handoff review fixes `607ddc4` and the stamp commit after it. `make quality` green (Vitest 4044 passed, `tools/checks` 138 OK).
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The scoped round's finding 10 (a `send_id` has one tag; the spent set holds the nonce) was judged a pinning of OD-20's id form, not a new mechanism (rule 9); the owner may read it otherwise.
+- OD-24's body rule leaves variation selectors and Hangul fillers through (RFC "Not covered"); widening it is an owner call, through `/rfc`.
 
 ## Context pressure
 ok
 
 ## Next action
-Second half: the owner's answers on the RFC's proposed ODs (and OD-21's optional A4 test, OD-31's wording); then the scoped `rfc-reviewer` round on OD-33 (release, no pruning) and OD-24 (body rule) only; then the acceptance commit (docs/HANDOFF.md, "Next action").
+none (done).

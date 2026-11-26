@@ -425,7 +425,8 @@ smoke-write; one GET per ticket (A6); a reply or public note only when
 the requester's email is on the allow-list and the four CC fields are
 empty, except OD-21's one A4 opt-in; a forward only to allow-listed
 addresses from the private team file, and only on a ticket whose four CC
-fields are empty (a forward may copy them too, A2 and A5 unchecked); each
+fields are empty, refused otherwise, since a forward too may copy them
+(A2 and A5 unchecked); each
 send in two steps (mint, then confirm). Details are T-086's.
 
 Rejected: (a) cases in `smoke-write` (a typo in `CASE=` would mail).

@@ -4,98 +4,60 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T12:53:40+01:00`
-- **Describes commit:** `708a751` (T-079 first half: RFC draft at
-  Proposed), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45814896378
-  (workflow `quality`, ran on `708a751`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T13:08:24+01:00`
+- **Describes commit:** `<hash>` (T-079 handoff). **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-079 `doing (2026-11-26)`, first half done (plan
-  session under the orchestrator, owner's go 2026-11-26). RFC
-  `docs/rfc/proposed/2026-11-26-send-safety-core.md`, Status Proposed:
-  answers OD-17 to OD-34, OD-20/21/26 recorded as decided, A1 to A6
-  unchecked, threat model (injection, "always allow", OD-21's CCs). Full
-  `rfc-reviewer` round done and resolved in the RFC's "Review". No SPEC,
-  no `src/` change; not Active.
+- **Current task:** T-079 `done (2026-11-26)`. RFC
+  `docs/rfc/active/2026-11-26-send-safety-core.md` Active (owner,
+  2026-11-26), acceptance commit `3ceaea1`; review fixes `607ddc4` and
+  this handoff commit. SPEC §8.2, §9, §11, §13 M3 row amended; acceptance
+  of T-082 to T-088 amended in PLAN and task files (rows named in the
+  RFC's "Rows this RFC governs").
 
-- **Next action:** `/pickup` T-079, second half, in this order:
-  1. the owner's answers: confirm or change every **proposed** OD in the
-     RFC (OD-17 to 19, 22 to 25, 27 to 34), say yes/no to the optional A4
-     test (OD-21's question) and to OD-31's SPEC §13 wording; record them
-     in the RFC as "The owner's decisions (<date>)";
-  2. scoped `rfc-reviewer` round on the three mechanism changes of the
-     full round only (OD-33 release rule, OD-33 no pruning, OD-24 body
-     rule), AGENTS.md rule 9;
-  3. the acceptance commit: Status Active, `make rfc-sync`, one dated
-     "Extended by" line in `docs/rfc/active/2026-11-25-write-safety-core.md`
-     naming the RFC's three points; SPEC §8.2, §9, §11 per the RFC's "SPEC
-     wording at acceptance", §13 only by the owner's word on OD-31; T-080
-     to T-088 acceptance amended per the RFC's "Rows this RFC governs"
-     (PLAN and task files); T-079 `done (<date>)`.
-  T-076 stays open with the owner (runbook below); T-087 waits on it.
+- **Next action:** `/pickup` T-080 (send resources: POST reply, POST
+  forward; depends on T-079 only). T-080, T-081 and T-083 may go in any
+  order.
 
-- **Read before anything else:** the RFC (whole);
-  `docs/tasks/T-079-rfc-send-core.md`; PLAN section M3.
+- **Read before anything else:** `docs/tasks/T-080-send-resources.md`;
+  the RFC (OD-24, OD-27, OD-33); PLAN section M3.
 
-- **Owner runbook for T-076** (each run prints yes/no and counts only;
-  keep its output and every id in `docs/private/account-facts.md`, never
-  in a tracked file):
-  1. Environment: the server's `FRESHDESK_DOMAIN` and `FRESHDESK_API_KEY`;
-     `FRESHDESK_MCP_CONFIG` pointing at a team file outside the repo whose
-     `toolsets` include `"write"` (a copy of the usual one is fine; drop
-     `write` again after T-076); `FRESHDESK_HOST_OVERRIDE` unset.
-  2. Create the tickets first, in the Freshdesk UI: one per run below (two
-     for C1, one fresh ticket for C8), each with requester an internal
-     mailbox, group `MCP Test`, tag `mcp-test`. Open each and check it is
-     not marked spam (Freshdesk did mark one at creation on 2026-11-25:
-     restore it with "Not spam"). Note each ticket id, and your own agent
-     id (`list_agents`), in `docs/private/account-facts.md`.
-  3. Runs, one per use case (`<…>` are your values; field labels and
-     values as `get_ticket_schema` shows them):
-     - C1: `make smoke-write CASE=C1 TICKETS=<id1>,<id2> FIELDS='{"<category field>": "<value>"}'`
-     - C8: `make smoke-write CASE=C8 TICKETS=<new id> FIELDS='{"<category field>": "<value>", "<finer field>": "<value>"}'`
-     - C4: `make smoke-write CASE=C4 TICKETS=<id> NOTIFY=<your agent id>`
-     - C5: `make smoke-write CASE=C5 TICKETS=<id> FIELDS='{"Status": "Pending"}'`
-     - C6: `make smoke-write CASE=C6 TICKETS=<id> FIELDS='{"Group": "MCP Test", "Agent": "<your name>"}' NOTIFY=<your agent id>`
-     A good run ends `smoke write <case>: ok, requests N` and exits 0;
-     `refused, nothing written` means the tag check stopped it.
-  4. After each kind of write, open the ticket's activity log and check:
-     - every case: the `mcp-test` tag is still there, and no entry after
-       the write comes from an automation rule (ticket creation, ticket
-       updates, time triggers), a Dispatch'r, Observer or Supervisor rule,
-       or an SLA escalation;
-     - C1, C8 (field PUT): only the category fields changed; status, group
-       and agent unchanged;
-     - C4 (private note): one private note, by your API user; the notified
-       agent got the email; the requester mailbox got nothing; status
-       unchanged;
-     - C5 (status PUT): the status change only; record any email to the
-       requester mailbox;
-     - C6 (note, then assignment): one private note headed `DRAFT REPLY`,
-       then the group/agent change; the requester mailbox got nothing.
-  5. Leave the tickets a night and check again that no time trigger
-     acted. Record one dated yes line per case and "no automation rule
-     acted" in T-076's "Done".
+- **T-076 (owner, open):** status `todo (2026-11-25)` in PLAN as before.
+  The owner's runs (C1, C8, C4, C5, C6) are done and recorded privately
+  in `docs/private/account-facts.md`. Left: the overnight check that no
+  time trigger acted on the `mcp-test` tickets, **due 2026-11-27**; then
+  one dated yes line per case and "no automation rule acted" in T-076's
+  "Done". T-087 waits on T-076 `done`.
 
 - **Reviews:**
-  - `rfc-reviewer`, full round, 2026-11-26, on the first draft: 0 high,
-    5 medium, 3 low, all resolved; list in the RFC's "Review". Findings 1
-    (4xx frees a `send_id`, checked: `src/client/errors.ts` maps 4xx to
-    `validation`) and 3 (core already refuses `\p{Cc}`/`\p{Cf}`,
-    `src/core/write-path.ts` `EMAIL`) checked against the code: correct.
-  - code/security/compliance reviewers: not run (docs-only first half;
-    they run at T-079's acceptance commit if the owner's answers change
-    rows).
+  - `rfc-reviewer` scoped round (2026-11-26, last per rule 9) on OD-33's
+    freeing rule, the never-pruned set, OD-24's body rule and the new A4
+    opt-in: 2 high, 2 low, all resolved in the RFC's "Review" (9 to 12);
+    none judged a new mechanism (see Open doubts).
+  - Handoff full round, R1 = `3ceaea1`, range `49736b7..3ceaea1`:
+    code-reviewer 1 low (OD-34 tag rule only named T-084's commit: fixed)
+    and 2 info (HANDOFF's stale `proposed/` path: rewritten here; old A4
+    wording in the RFC's review log: history, kept); security-reviewer 2
+    low, 1 info (a forward on a ticket with CCs, the requester check under
+    the A4 flag, other flag values: all three added to T-086, fixed in
+    `607ddc4`); compliance-reviewer: Wireframes `none`, nothing to check.
+  - Handoff scoped round, range `3ceaea1..607ddc4`: code-reviewer 1
+    (the forward CC refusal needed one case per field: added); security
+    parked the same item (taken); compliance: Wireframes `none`. Parked
+    notes in `docs/improvements.md` (two T-079 entries).
 
-- **Proposed plan changes:** none (row amendments listed in the RFC, to
-  apply at acceptance).
+- **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - A1 to A6 and the four CC field names are unverified (T-087 checks
-    them; A4 not at all unless the owner takes OD-21's optional test).
-  - OD-33's spent set is the first per-process server state besides the
-    limiter; never pruned by design (finding 2).
+  - The scoped round's finding 10 (a `send_id` has exactly one tag; the
+    spent set holds the nonce) was taken as pinning OD-20's id form, not
+    a mechanism change; the owner may judge otherwise.
+  - OD-24's body rule lets variation selectors and Hangul fillers through
+    (RFC "Not covered"); widening to `\p{Default_Ignorable_Code_Point}` is
+    an owner call through `/rfc`.
+  - OD-34's "no release accepting `send` before T-087" has no acceptance
+    line (parked since the M3 plan review).
+  - A1 to A6 and the four CC field names unverified (T-087).
   - Carried: `categorize_tickets` checks values only at the confirm;
     T-072/T-073/T-074 strict-input errors are the MCP SDK's text; the
     `getAgent` active rule is from documentation (T-067); `context.ts`
