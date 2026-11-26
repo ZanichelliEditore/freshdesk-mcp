@@ -76,6 +76,10 @@ const noGlobalFetchRules = {
 //   call it (also as `ns.createWritePath(`, or its module by a literal dynamic
 //   import()); that it passes the team file's toolsets holds by inspection.
 //   Type imports of the module's other names pass.
+// - sendId (T-083; RFC 2026-11-26-send-safety-core, OD-32): src/core/send-id
+//   mints and checks a send_id under the core's own key, so any import of it,
+//   a type import, `import *`, a re-export and a literal dynamic import()
+//   included, is refused outside src/core/**. No file is exempt.
 //
 // An exempt module passes nothing on through a list: the defining modules,
 // smoke.ts and context.ts have no re-export and no value export list
@@ -83,8 +87,8 @@ const noGlobalFetchRules = {
 // holding the value (`export const c = createWritePath`, `export default`)
 // is not claimed, below.
 //
-// The client, ticketInput and writePath patterns match a module by its last
-// segment (`http`, `rate-limit`, `input`, `write-path`, with or without an
+// The client, ticketInput, writePath and sendId patterns match a module by its last
+// segment (`http`, `rate-limit`, `input`, `write-path`, `send-id`, with or without an
 // extension or trailing `/`, any case), wherever it lives: a namespace import
 // of another module of that name is refused too, which errs closed.
 //
@@ -111,6 +115,8 @@ const noCoreReexport =
   "No re-export in src/core/** (RFC 2026-11-25-write-safety-core): a core module must not pass the client, src/core/resources or ticketInput on past the lint fence.";
 const noExemptExport =
   "No re-export or export list in a module a core fence exempts (RFC 2026-11-25-write-safety-core): it must not pass what it holds on under another name.";
+const noSendId =
+  "Only src/core/** may import src/core/send-id (RFC 2026-11-26-send-safety-core, OD-32): only the core's send entries mint and check a send_id.";
 const coreResources = String.raw`(^|/)core/(.*/)?resources(\.[cm]?[jt]s)?/*$`;
 /** A literal dynamic import() of the module named `name` (its last segment). */
 const importOf = (name, message) => ({
@@ -181,6 +187,10 @@ const coreFences = {
         message: noWritePath,
       },
     ],
+  },
+  sendId: {
+    patterns: [{ regex: lastSegment("send-id"), caseSensitive: false, message: noSendId }],
+    syntax: [importOf("send-id", noSendId)],
   },
 };
 // A module a fence exempts (the one defining what the fence guards, the

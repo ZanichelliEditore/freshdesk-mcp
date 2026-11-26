@@ -3,7 +3,7 @@
 // the core fences (RFC 2026-11-25-write-safety-core) fire:
 // a wrong glob or pattern in eslint.config.mjs would otherwise pass unnoticed,
 // because no committed file breaks them.
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, matchesGlob, posix, relative, sep } from "node:path";
 import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
@@ -652,6 +652,8 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
       "No re-export in src/core/** (RFC 2026-11-25-write-safety-core): a core module must not pass the client, src/core/resources or ticketInput on past the lint fence.",
     EXEMPT_EXPORT:
       "No re-export or export list in a module a core fence exempts (RFC 2026-11-25-write-safety-core): it must not pass what it holds on under another name.",
+    SEND_ID:
+      "Only src/core/** may import src/core/send-id (RFC 2026-11-26-send-safety-core, OD-32): only the core's send entries mint and check a send_id.",
   } as const;
 
   /** Each message as `rule: FENCE`, `rule: list` for a tool's allow-list, else as it is. */
@@ -1080,5 +1082,97 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
         expect(await messages(code, file)).toEqual([]);
       },
     );
+  });
+
+  describe("send-id (T-083)", () => {
+    const SEND_ID = "src/core/send-id.js";
+    const outside = [
+      "src/server.ts",
+      "src/cli.ts",
+      "src/client/x.ts",
+      "src/client/http.ts",
+      "src/schema/x.ts",
+      "src/schema/input.ts",
+      "src/tools/context.ts",
+      "scripts/x.ts",
+      "scripts/smoke/smoke.ts",
+    ];
+    const cases = outside.flatMap((file) =>
+      spellings(specFrom(file, SEND_ID)).map((spec) => [file, spec] as const),
+    );
+
+    it.each(cases)("refuses in %s any import of %s, a type import included", async (file, spec) => {
+      const from = JSON.stringify(spec);
+      for (const code of [
+        `import { mintSendId } from ${from};`,
+        `import { checkSendId as check } from ${from};`,
+        `import type { SendRecipients } from ${from};`,
+        `import * as sendId from ${from};`,
+        `import ${from};`,
+        `export { checkSendId } from ${from};`,
+        `export * from ${from};`,
+      ]) {
+        expect((await messages(code, file)).sort(), code).toEqual(
+          plusExport(file, code, `${IMPORTS}: SEND_ID`),
+        );
+      }
+    });
+
+    it.each(cases)("refuses in %s a literal dynamic import of %s", async (file, spec) => {
+      const code = `void import(${JSON.stringify(spec)});`;
+      expect(await messages(code, file)).toEqual([`${SYNTAX}: SEND_ID`]);
+    });
+
+    it.each(["src/tools/x.ts", "src/tools/confirm.ts", "src/tools/toolsets/write/x.ts"])(
+      "refuses in %s (the allow-list) any import of it",
+      async (file) => {
+        const from = JSON.stringify(specFrom(file, SEND_ID));
+        for (const code of [
+          `import { mintSendId } from ${from};`,
+          `import type { SendRecipients } from ${from};`,
+        ]) {
+          expect(await messages(code, file), code).toEqual([`${IMPORTS}: list`]);
+        }
+      },
+    );
+
+    it("exempts no file outside src/core/**", async () => {
+      for (const file of filesOutsideCore()) {
+        const code = `import { mintSendId } from ${JSON.stringify(specFrom(file, SEND_ID))};`;
+        expect(await messages(code, file), file).toEqual([
+          `${IMPORTS}: ${inTools(file) ? "list" : "SEND_ID"}`,
+        ]);
+      }
+    });
+
+    it.each([
+      "src/core/write-path.ts",
+      "src/core/x.ts",
+      "src/core/sub/x.ts",
+      "test/core/x.test.ts",
+    ])("leaves %s alone", async (file) => {
+      const from = JSON.stringify(specFrom(file, SEND_ID));
+      const code = [
+        `import { mintSendId } from ${from};`,
+        `import * as sendId from ${from};`,
+        `void import(${from});`,
+      ].join("\n");
+      expect(await messages(code, file)).toEqual([]);
+    });
+
+    it("reads no environment or config: its source imports only node:crypto and the error type", () => {
+      const source = readFileSync(
+        join(import.meta.dirname, "..", "src", "core", "send-id.ts"),
+        "utf8",
+      );
+      // Line comments first: a `/**` inside one (`src/core/**`) is not a block comment.
+      const code = source.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      const sources = [...code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
+        (m) => m[1],
+      );
+      expect(sources.sort()).toEqual(["../client/errors.js", "node:crypto"]);
+      expect(code).toMatch(/^import type \{ FreshdeskError \} from "\.\.\/client\/errors\.js";$/m);
+      expect(code).not.toMatch(/\bprocess\b|\benv\b|\bconfig\b|\brequire\b|\bimport\s*\(/i);
+    });
   });
 });
