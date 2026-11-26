@@ -145,9 +145,20 @@ interface Applied {
   results: { ticket_id: number; result: string; error?: SentError }[];
   written: number;
   refused: number;
+  may_have_been_applied: number;
   not_attempted: number;
   api_calls_used: number;
   note?: string;
+}
+
+/** Every confirmed item lands in exactly one count. */
+function countsAddUp(applied: Applied, confirmed: number) {
+  expect(
+    applied.written + applied.refused + applied.may_have_been_applied + applied.not_attempted,
+  ).toBe(confirmed);
+  for (const state of ["written", "refused", "may_have_been_applied", "not_attempted"] as const) {
+    expect(applied.results.filter((row) => row.result === state)).toHaveLength(applied[state]);
+  }
 }
 
 /** A preview of `items`, every ticket answered: its id. */
@@ -387,7 +398,14 @@ describe("categorize_tickets: the confirm", () => {
     expect(applied.results).toEqual(
       IDS.map((ticket) => ({ ticket_id: ticket, result: "written" })),
     );
-    expect(applied).toMatchObject({ written: 3, refused: 0, not_attempted: 0, api_calls_used: 3 });
+    expect(applied).toMatchObject({
+      written: 3,
+      refused: 0,
+      may_have_been_applied: 0,
+      not_attempted: 0,
+      api_calls_used: 3,
+    });
+    countsAddUp(applied, 3);
     expect(applied.note).toBeUndefined();
   });
 
@@ -466,11 +484,17 @@ describe("categorize_tickets: the confirm", () => {
     expect(applied.results.map((row) => row.result)).toEqual(["written", "refused", "written"]);
     expect(applied.results[1]!.error?.code).toBe("not_found");
     expect(applied.results[1]).not.toHaveProperty("may_have_been_applied");
-    expect(applied).toMatchObject({ written: 2, refused: 1, not_attempted: 0 });
+    expect(applied).toMatchObject({
+      written: 2,
+      refused: 1,
+      may_have_been_applied: 0,
+      not_attempted: 0,
+    });
+    countsAddUp(applied, 3);
     expect(applied.note).toBeUndefined();
   });
 
-  it("a PUT sent and answered 5xx, or cut by a network failure, is refused and may_have_been_applied", async () => {
+  it("a PUT sent and answered 5xx, or cut by a network failure, is may_have_been_applied, not refused", async () => {
     const session = await warm();
     const id = await previewed(session);
     reply(ticketPath(4242), { message: "down" }, "PUT", 503);
@@ -485,15 +509,44 @@ describe("categorize_tickets: the confirm", () => {
     // Not retried: one PUT each, as the core sends a write that may have landed once.
     expect(sent()).toEqual(IDS.map((ticket) => `PUT ${ticketPath(ticket)}`));
     expect(applied.results.map((row) => [row.result, row.error?.code])).toEqual([
-      ["refused", "server"],
-      ["refused", "network"],
+      ["may_have_been_applied", "server"],
+      ["may_have_been_applied", "network"],
       ["written", undefined],
     ]);
-    expect(
-      applied.results.map((row) => (row as Record<string, unknown>).may_have_been_applied),
-    ).toEqual([true, true, undefined]);
-    expect(applied).toMatchObject({ written: 1, refused: 2, not_attempted: 0 });
+    expect(applied).toMatchObject({
+      written: 1,
+      refused: 0,
+      may_have_been_applied: 2,
+      not_attempted: 0,
+    });
+    countsAddUp(applied, 3);
     expect(applied.note).toContain("may have been applied");
+    expect(applied.note).toContain("get_ticket");
+  });
+
+  // docs/improvements.md 3b3bec6: the client's `server` for an answer it cannot take.
+  it("a PUT answered 2xx with a body of another shape, or 3xx, is may_have_been_applied", async () => {
+    const session = await warm();
+    const id = await previewed(session);
+    reply(ticketPath(4242), ["not", "a", "ticket"], "PUT", 200);
+    reply(ticketPath(4243), {}, "PUT", 302, { location: "https://elsewhere.example/" });
+    reply(ticketPath(4244), { code: "invalid_value" }, "PUT", 400);
+    const applied = output(
+      await callTool(session, TOOL, { items: ITEMS, confirm: true, preview_id: id }),
+    ) as unknown as Applied;
+    expect(sent()).toEqual(IDS.map((ticket) => `PUT ${ticketPath(ticket)}`));
+    expect(applied.results.map((row) => [row.result, row.error?.http_status])).toEqual([
+      ["may_have_been_applied", 200],
+      ["may_have_been_applied", 302],
+      ["refused", 400],
+    ]);
+    expect(applied).toMatchObject({
+      written: 0,
+      refused: 1,
+      may_have_been_applied: 2,
+      not_attempted: 0,
+    });
+    countsAddUp(applied, 3);
   });
 
   it("a value the core refuses is refused per ticket, its field error kept, nothing sent for it", async () => {
@@ -530,7 +583,13 @@ describe("categorize_tickets: the confirm", () => {
       { ticket_id: 4243, result: "written" },
       { ticket_id: 4244, result: "not_attempted" },
     ]);
-    expect(applied).toMatchObject({ written: 2, refused: 0, not_attempted: 1 });
+    expect(applied).toMatchObject({
+      written: 2,
+      refused: 0,
+      may_have_been_applied: 0,
+      not_attempted: 1,
+    });
+    countsAddUp(applied, 3);
     expect(applied.note).toContain("preview_id");
     mock.clearCallHistory();
 

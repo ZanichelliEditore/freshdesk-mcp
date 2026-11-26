@@ -38,10 +38,11 @@
 //     read once; never the call's items again. Then one PUT per ticket, in
 //     the confirm's order, each through the entry. A result per ticket:
 //     `written`; `refused` with the error (Freshdesk's answer, or the core's
-//     field errors), marked `may_have_been_applied` when the PUT was sent and
-//     came back `network` or `server` (a timeout, a 5xx, an answer of another
-//     shape: the core does not retry those since they may have landed);
-//     `not_attempted`. A write refused `rate_limited` (the
+//     field errors); `may_have_been_applied` with the error when the PUT was
+//     sent and came back `network` or `server` (a timeout, a 5xx, a 3xx, a
+//     2xx of another shape: the core does not retry those since they may
+//     have landed), counted apart from `refused`; `not_attempted`. Every
+//     confirmed item is in exactly one count. A write refused `rate_limited` (the
 //     deadline's 10 s rule, the limiter, or Freshdesk's 429, none of which
 //     applies it) cuts the run: that ticket and every one after it are not
 //     attempted (OD-13, owner 2026-11-25), and a later confirm with the same
@@ -296,8 +297,7 @@ async function apply(
   if (!loaded.ok) return loaded;
   let calls = loaded.attempts;
   const results: Record<string, unknown>[] = [];
-  const counts = { written: 0, refused: 0, not_attempted: 0 };
-  let unknowns = 0;
+  const counts = { written: 0, refused: 0, may_have_been_applied: 0, not_attempted: 0 };
   let cut = false;
   // Only the checked items: never the call's items again.
   for (const one of checked.items) {
@@ -322,16 +322,12 @@ async function apply(
       counts.not_attempted += 1;
     } else {
       // Sent, then a 5xx, a timeout or an answer of another shape: Freshdesk may have applied it.
-      const unknown =
-        result.attempts > 0 && (result.error.code === "network" || result.error.code === "server");
-      results.push({
-        ticket_id: one.ticket_id,
-        result: "refused",
-        ...(unknown ? { may_have_been_applied: true } : {}),
-        error: shown(result.error),
-      });
-      counts.refused += 1;
-      if (unknown) unknowns += 1;
+      const state =
+        result.attempts > 0 && (result.error.code === "network" || result.error.code === "server")
+          ? "may_have_been_applied"
+          : "refused";
+      results.push({ ticket_id: one.ticket_id, result: state, error: shown(result.error) });
+      counts[state] += 1;
     }
   }
   const notes: string[] = [];
@@ -340,9 +336,9 @@ async function apply(
       `${counts.not_attempted} tickets were not attempted (the call's time or the API budget ran out); nothing was written to them. To apply them, call again with confirm: true, the same preview_id and only those tickets, each with the same fields, within 15 minutes of the preview.`,
     );
   }
-  if (unknowns > 0) {
+  if (counts.may_have_been_applied > 0) {
     notes.push(
-      `${unknowns} refused tickets carry may_have_been_applied: the change was sent and Freshdesk did not answer clearly, so it may have been applied. Check those tickets with get_ticket before sending them again.`,
+      `${counts.may_have_been_applied} tickets are may_have_been_applied: the change was sent and Freshdesk did not answer clearly, so it may have been applied. Check those tickets with get_ticket before sending them again.`,
     );
   }
   return {
@@ -363,7 +359,7 @@ export function categorizeTickets(entry: CategorizeTicketsEntry): Tool<typeof in
       `Set category fields on up to ${PREVIEW_CAP} tickets: the ticket type and custom fields (product, sub-product, issue type and the like), given per ticket in items as {ticket_id, fields}, each field by API name or label, each value by its choice name (a nested field as "A > B > C").`,
       "Status, priority, group, agent and every other default field are refused, and nothing is sent: use update_ticket for those.",
       "Two steps. Without confirm it changes nothing: it reads each ticket and returns a preview, the current and new value of each field, and a preview_id. Show that table to the user; only after they approve, call again with confirm: true, the preview_id and the previewed items (any of them, each with exactly its previewed fields), within 15 minutes. A ticket added or a field changed refuses the whole confirm: preview again.",
-      "The confirm writes one ticket at a time and returns a result per ticket: written, refused (with the error; a value that is not a valid choice refuses that ticket only; one marked may_have_been_applied was sent without a clear answer, so check it before sending it again), or not attempted when the call's time (30 s) or the API budget ran out. To apply the tickets not attempted, call again with confirm: true, the same preview_id and only those tickets.",
+      "The confirm writes one ticket at a time and returns a result per ticket: written, refused (with the error; a value that is not a valid choice refuses that ticket only), may_have_been_applied (with the error: sent without a clear answer, so check the ticket with get_ticket before sending it again), or not attempted when the call's time (30 s) or the API budget ran out. To apply the tickets not attempted, call again with confirm: true, the same preview_id and only those tickets.",
       "Freshdesk automations may act on each change, as for an agent's edit.",
     ].join(" "),
     input,
