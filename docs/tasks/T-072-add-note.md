@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-069, T-071
 - **Created:** 2026-11-25
 
@@ -39,18 +39,45 @@ No split point.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `23ebc5d`: `src/tools/toolsets/write/add-note.ts` (`addNote(entry)`: strict
+  input `{ticket_id, body, notify_agent_ids?}`; output allow-listed only:
+  `ticket_id`, `note_id`, `private`, `notified_agent_ids`,
+  `api_calls_used`; addresses replaced in a refusal's text);
+  `src/tools/toolsets/write/index.ts` hands it `entries.add_note` only;
+  `eslint.tool-imports.json` T3 lists `./add-note.js`; the
+  `docs/tool-catalogue.md` line now says "private note only" (improvements
+  `f22c4a3`); overview, CHANGELOG.
+- `e985d67`: full-round fixes: redaction splits on whitespace and replaces
+  each word holding an at sign (plain, fullwidth, HTML entity), linear;
+  tests for each form and for exactly 10 agents.
+- Tests: `test/tools/write/add-note.test.ts` (30 cases). One POST with
+  `private: true` and the resolved emails ("sends one POST with private:
+  true and the resolved emails, after one GET per agent"); `private` (true
+  or false), `notify_emails`, `user_id`, `incoming` refused with 0
+  dispatches; an agent 404 or inactive refuses the note, no POST; "no
+  email ever reaches the output" (answer carrying `notified_to`,
+  `to_emails`, `cc_emails`, `bcc_emails`, `support_email`, `from_email`;
+  a 400 quoting an address; a 404) and "an address in any error text is
+  replaced"; listed only with `write`. `test/server.test.ts` "the write
+  wiring" now expects `update_ticket`, `add_note`.
+- Reading of the acceptance's "`validation`": a `private` or
+  `notify_emails` key is refused by the MCP SDK's input validation (zod
+  strict object), an `isError` text starting "Input validation error", not
+  a `FreshdeskError` JSON with `code: "validation"`; the same mechanism as
+  `update_ticket`'s unnamed key. Nothing is sent either way.
+- `make quality` on `e985d67`: vitest 3880 passed, `tools/checks` 138 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- If Freshdesk ever answered a note with `private: false`, the tool reports
+  `private: false` with `ok: true`; it does not flag it (owner's call; the
+  core always sends `private: true`).
+- A whitespace-only `body` is sent (`min(1)` refuses only `""`).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)
