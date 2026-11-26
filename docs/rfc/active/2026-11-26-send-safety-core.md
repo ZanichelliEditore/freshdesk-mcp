@@ -424,7 +424,9 @@ send is never one flag away from a write run. Same tag and spam checks as
 smoke-write; one GET per ticket (A6); a reply or public note only when
 the requester's email is on the allow-list and the four CC fields are
 empty, except OD-21's one A4 opt-in; a forward only to allow-listed
-addresses from the private team file; each send in two steps (mint, then confirm). Details are T-086's.
+addresses from the private team file, and only on a ticket whose four CC
+fields are empty (a forward may copy them too, A2 and A5 unchecked); each
+send in two steps (mint, then confirm). Details are T-086's.
 
 Rejected: (a) cases in `smoke-write` (a typo in `CASE=` would mail).
 
@@ -533,8 +535,8 @@ more per send, and a race all the same).
 account, and no `make smoke-send` runs, before T-087's dependencies are
 met (T-076 `done`, T-086 `done`). Plus: **no npm release that accepts
 `send` before T-087 is `done`**: T-084 is the row that stops `send`
-being a `ConfigError`, and no release tag is cut from T-084's commit
-until T-087 records its yes lines. The owner holds both.
+being a `ConfigError`, and no release tag is cut from T-084's commit or
+any later one until T-087 records its yes lines. The owner holds both.
 
 Rejected: (b) the server keeps refusing `send` until T-087, with
 `make smoke-send` building the core's entries directly. It means a later
@@ -584,7 +586,9 @@ re-checked and left unchanged. What changed:
   OD-21's CC sentence.
 - T-086: the A4 opt-in of OD-21 (one flag, reply only, one allow-listed
   ticket CC that is not the requester, no `cc` of the reply's own; every
-  other CC case refuses).
+  other CC case refuses; the requester check still holds under the flag;
+  any other flag value refuses); a forward on a ticket with any CC
+  refuses (OD-28, SPEC §11).
 - T-087: the activity-log line after a reply, a forward and a public note
   (SPEC §13, OD-31); the A4 line becomes the result of the opt-in run
   (whether the CC mailbox received the reply), not "not checked". By the
