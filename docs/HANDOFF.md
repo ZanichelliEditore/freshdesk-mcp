@@ -4,82 +4,69 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T09:47:04+01:00`
-- **Describes commit:** `ed45c7a` (the T-077 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45786238906
-  (workflow `quality`, ran on `ed45c7a`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T10:00:31+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-077 (lint fence: the client, the limiter and
-  `ticketInput` stay in the core) `done (2026-11-26)`. Commits `c54585d`
-  (implementation), `da16547` (full-round fixes), `f0edde0` (owner-approved
-  fix), then this handoff commit. Tests: `test/lint-rules.test.ts`, describe
-  "the client, the limiter, ticketInput and createWritePath stay in the
-  core", and "lists no src/core path for any place"; details in the task
-  file's "Done". No split was needed.
+- **Current task:** T-069 (notify recipients by agent id) `done (2026-11-26)`.
+  Commits `a57ef9b` (implementation), `762d34a` (full-round fixes), then
+  this handoff commit. Tests: `test/core/notify.test.ts` (43 cases); details
+  in the task file's "Done". No split was needed.
 
-- **Next action:** `/pickup` T-069 (notify recipients by agent id). It is
-  the first `todo` row; its dependency T-068 is `done`.
+- **Next action:** `/pickup` T-070 (stateless preview and `preview_id`). It
+  is the first `todo` row; its dependency is `none`.
 
-- **Read before anything else:** `docs/tasks/T-069-notify-agents.md`;
-  `docs/improvements.md` entry `85f48fd` (the `getAgent` email item parked
-  for T-069).
+- **Read before anything else:** `docs/tasks/T-070-preview-id.md`;
+  `docs/improvements.md` entries `a57ef9b` and `762d34a` (T-069's parked
+  items, for T-072 and T-074 later).
 
 - **Reviews:**
-  - Full round, R1 = `c54585d`, range `8a579a9..c54585d`. Scoped round,
-    range `c54585d..da16547`. Owner-approved fix, range
-    `da16547..f0edde0`.
-  - All reviewers quoted base, HEAD, stat line and trailer correctly in
-    every round.
-  - `code-reviewer`, full: exempt modules could re-export the other class
-    (fixed, `da16547`); absolute place entries unchecked (fixed); checks
-    that could only pass (negative cases added); no exact sweep for
-    `ticketInput` (added); `ticketInput` message wording and the test header
-    (fixed).
-  - `security-reviewer`, full: literal dynamic `import()` bypassed three
-    fences (Medium, fixed); `SmokeClient` importable (fixed); an exempt
-    module could export an alias (fixed); absolute or `file:` place entries
-    unchecked (fixed); the `toolsets` claim (now said to hold by
-    inspection).
+  - Full round, R1 = `a57ef9b`, range `e9cbe6b..a57ef9b`. Scoped round,
+    range `a57ef9b..762d34a`. All three reviewers quoted base, HEAD, stat
+    line and trailer correctly in both rounds.
+  - `code-reviewer`, full: copy-once test could not fail (fixed: Proxy test,
+    mutation-checked); "locals only" wording overstated (fixed, item
+    parked); `EMAIL` let C1 and format characters through (fixed); record
+    refusals did not assert the cause code (fixed); `[undefined]` fallback
+    (simplified); lookups on the full client (now the GET-only view). It
+    reported one stray no-op Bash call (`true`), which read and wrote
+    nothing.
+  - `security-reviewer`, full: no fail-open path. Note answer may echo the
+    recipients (parked for T-072/T-074); a cast Symbol/BigInt `deadline`
+    made the entry reject (fixed in `noteWrite`, `ticketWrite` parked);
+    lookups spent before the ticket is known (dismissed: bounded by the
+    limiter; open doubt for the owner); `EMAIL` odd characters (fixed);
+    lookups via the view (done).
   - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round: `code-reviewer` and `security-reviewer` both found that
-    `context.ts` could pass `createWritePath` on under a name set at the
-    import, or as a namespace: a fail-open path. Fixing it changed a
-    mechanism again, so the session stopped and reported (rule 9). **Owner's
-    decision (2026-11-26, via the orchestrator):** apply the fix (blanket
-    export-list ban on `context.ts`, tests for both snippets, true header
-    and overview claims) without a third full round; `security-reviewer`
-    only, scoped to the fix. It found no fail-open path and no falsified
-    acceptance line (`f0edde0`).
-  - Parked: `docs/improvements.md` entry `f0edde0` (`export default` /
-    `export =` in an exempt module, template-literal `import()`,
-    percent-encoded `file:` entry, mixed type list comment, double message
-    in tools).
+  - Scoped round: `code-reviewer` and `security-reviewer` found nothing
+    that falsifies an acceptance line or opens a fail-open path; no
+    mechanism changed. Parked (`762d34a`): deadline refusal message,
+    `NaN`/`Infinity` deadline, look-alike letters.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - That `context.ts` passes the team file's `toolsets` to
-    `createWritePath` holds by inspection, not by lint (T-071 wires the
-    entries from it).
+  - The note answer may carry the resolved recipients back to the caller;
+    T-072 and T-074 must not return them (`a57ef9b` in improvements).
+  - Whether a note should check the ticket exists before up to 10 agent
+    lookups: owner's call (`a57ef9b`).
   - From T-068: a ticket change that sets nothing is refused in the core;
     T-071's tool should skip an empty change rather than call the entry.
   - From T-067: the `getAgent` active rule comes from Freshdesk's
     documentation, not measured; real-time tests timed out under machine
     load on 2026-11-26 (not seen this session).
+  - From T-077: that `context.ts` passes the team file's `toolsets` to
+    `createWritePath` holds by inspection, not by lint.
   - From T-041/T-065: default fields keyed by `/ticket_fields` API name, to
     confirm at T-076.
   - From T-040, unchecked: whether `agent-native-setup update` would revert
     the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** name-based selectors for `context.ts`'s exports
-  (`da16547`): a name set at the import passed; replaced by refusing the
-  export list (`f0edde0`).
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `f0edde0`'s tree. Vitest
-  "Tests 3649 passed (3649)"; `tools/checks` "Ran 138 tests", OK; lint,
+- **Checkpoint:** `make quality` exit 0 on `762d34a`'s tree. Vitest
+  "Tests 3692 passed (3692)"; `tools/checks` "Ran 138 tests", OK; lint,
   format, typecheck, build and both gitleaks scans passed.

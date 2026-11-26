@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-068
 - **Created:** 2026-11-25
 
@@ -37,18 +37,19 @@ No split point.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `a57ef9b`: note entries take `notify` (agent ids): copied once, each a positive safe integer, de-duplicated, capped at `NOTIFY_CAP` 10; one `getAgent` GET per distinct id; whole note refused, no POST, on a failed lookup, an agent not clearly active or an email not one plain address (`EMAIL`, the `85f48fd` shape item); lookups counted in `attempts`; an invalid ticket id spends no lookup. `src/core/write-path.ts`, `docs/architecture/overview.md`.
+- `762d34a`: full-round fixes: lookups through the GET-only view; `EMAIL` refuses `\p{Cc}`, `\p{Cf}` and `:[]\`; a non-number `deadline` refused in `noteWrite`; header and overview no longer claim the addresses never reach the caller.
+- Tests: `test/core/notify.test.ts` (43 cases): "notify: resolved recipients" (`[3, 3, 5]`, 10 ids, 11 that de-duplicate to 10, no ids, POST failure counted), "notify: a recipient that cannot be resolved refuses the whole write" (404, 5xx, timeout, `rate_limited`, null/empty/malformed email, deactivated, active flag missing or not a boolean), "notify: ids refused before any request" (11 ids, 0, non-integer, string, NaN, 2^53, not a list, hole, throwing Proxy, invalid ticket id, copy-once Proxy, bad deadline).
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The note answer may echo the resolved recipients to the caller (`docs/improvements.md` `a57ef9b`): T-072 and T-074 must not return them; unchecked against a documented or mocked answer.
+- A note to a ticket that does not exist spends its agent lookups before the POST 404s (bounded by the limiter); whether to probe the ticket first is the owner's call (`a57ef9b`).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
