@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T15:02:56+01:00`
-- **Describes commit:** `<hash>` (T-089: done; handoff to T-085). **CI:** `<pending>`
+- **Describes commit:** `e13a983` (T-089: done; handoff to T-085),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45835237284
+  (workflow `quality`, ran on `e13a983`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-089 `done (2026-11-26)`: a 408 after a send's
   dispatch is `may_have_been_sent`, a 409 is not (owner decision
