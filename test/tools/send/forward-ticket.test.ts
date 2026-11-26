@@ -159,6 +159,7 @@ describe("forward_ticket: two calls", () => {
     expect(note).toContain("is the ticket they mean");
     expect(note).toContain("call again with `confirm: true` and this `send_id`");
     expect(note).not.toContain("requester");
+    expect(note).not.toContain("existing CC addresses");
     expect(value.send_id).toEqual(expect.any(String));
     expect(value.expires_at).toEqual(expect.any(String));
   });
@@ -294,15 +295,33 @@ describe("forward_ticket: inputs it refuses, with nothing sent", () => {
     expect(sent()).toEqual([]);
   });
 
+  const many = (n: number, tag: string) =>
+    Array.from({ length: n }, (_, i) => `${tag}${i}@example.test`);
+
   it("refuses more than 10 recipients, to and cc together, 0 dispatches", async () => {
     const s = await session();
-    const many = (n: number, tag: string) =>
-      Array.from({ length: n }, (_, i) => `${tag}${i}@example.test`);
 
     const result = await callTool(s, TOOL, { ...FIRST, to: many(6, "t"), cc: many(5, "c") });
 
     expect(failure(result)).toMatchObject({ code: "validation", http_status: null });
     expect(sent()).toEqual([]);
+  });
+
+  it("sends to exactly 10 recipients, to and cc together", async () => {
+    const s = await session();
+    forwardPost();
+    const recipients = { to: many(5, "t"), cc: many(5, "c") };
+    const sendId = await mint(s, recipients);
+
+    const result = await callTool(s, TOOL, {
+      ...FIRST,
+      ...recipients,
+      confirm: true,
+      send_id: sendId,
+    });
+
+    expect(output(result)).toMatchObject({ sent: true });
+    expect(postBody()).toMatchObject({ to_emails: recipients.to, cc_emails: recipients.cc });
   });
 
   it.each([
