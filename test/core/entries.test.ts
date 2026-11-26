@@ -36,7 +36,14 @@ afterEach(async () => {
 });
 
 function writePath(toolsets: string[]) {
-  return createWritePath({ domain: DOMAIN, apiKey: "k3y", dispatcher: mock, limits, toolsets });
+  return createWritePath({
+    domain: DOMAIN,
+    apiKey: "k3y",
+    dispatcher: mock,
+    limits,
+    toolsets,
+    forwardAllowList: [],
+  });
 }
 
 function entries(): WriteEntries {
@@ -78,15 +85,20 @@ function onNote(id = 42) {
 }
 
 describe("the entries exist only when write is enabled", () => {
-  it.each([[["core"]], [["core", "send"]], [["send"]]])(
-    "toolsets %j give no entries object",
-    (toolsets) => {
-      const path = writePath(toolsets);
+  it.each([
+    [["core"], ["view"]],
+    [
+      ["core", "send"],
+      ["view", "sends"],
+    ],
+    [["send"], ["view", "sends"]],
+  ])("toolsets %j give no entries object", (toolsets, keys) => {
+    const path = writePath(toolsets);
 
-      expect("entries" in path).toBe(false);
-      expect(Object.keys(path)).toEqual(["view"]);
-    },
-  );
+    expect("entries" in path).toBe(false);
+    // `send` builds its own entries (T-082, test/core/send-entries.test.ts), never write's.
+    expect(Object.keys(path)).toEqual(keys);
+  });
 
   it.each([[["core", "write"]], [["write"]], [["core", "write", "send"]]])(
     "toolsets %j give one frozen entry per write tool",

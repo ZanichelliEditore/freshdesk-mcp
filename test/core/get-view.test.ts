@@ -37,6 +37,7 @@ function view(): GetHttp {
     dispatcher: mock,
     limits,
     toolsets: ["core"],
+    forwardAllowList: [],
   }).view;
 }
 

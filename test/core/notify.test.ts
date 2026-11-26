@@ -37,6 +37,7 @@ function entries(): WriteEntries {
     dispatcher: mock,
     limits,
     toolsets: ["core", "write"],
+    forwardAllowList: [],
   });
   if (entries === undefined) throw new Error("expected entries");
   return entries;

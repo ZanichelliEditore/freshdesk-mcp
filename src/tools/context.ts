@@ -90,6 +90,7 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
     dispatcher,
     limits: team.limits,
     toolsets: team.toolsets,
+    forwardAllowList: team.forward_allow_list,
   });
   const http = path.view;
   const context: AppContext = Object.freeze({
