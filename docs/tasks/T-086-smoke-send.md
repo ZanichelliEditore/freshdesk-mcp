@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-084, T-085, T-088
 - **Created:** 2026-11-26
 
@@ -46,18 +46,20 @@ No split point: one script on T-075's pattern.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `6709f63`: `scripts/smoke/send.ts` (`runSend`), `--send` in `scripts/smoke/cli.ts`, `make smoke-send` (`CASE=reply|forward|public-note TICKET=<id> TO=<address>[,<address>] TICKET_CC=allow-listed`), its line in `docs/architecture/overview.md` (README and CONTRIBUTING do not document `smoke-write`, so the line went where it is).
+- Tests: `test/smoke-send.test.ts` (92 tests): `::reply: one GET, step 1 sends nothing, step 2 one POST, no cc of its own`, `::forward: one POST to the TO address, no cc, attachments off`, `::public note: one POST of {body, private: false}, answered public`, `::public note answered private: true: sent, reported, exit non-zero`; tag, spam, requester, each CC field per case, missing fields; the A4 accepted case and each A4 refusal; config refusals with 0 requests; the source assertions and the `make help` line.
+- Small decisions (orchestrator's go, recorded here): a forward's `to` comes from `TO`, each address pre-checked with T-081's `onAllowList` before any request (the core checks again); a requester email is required for a forward too (fail closed, the acceptance's "missing requester email refuses" read for every case); the GET with `include=requester` goes through `context.http.requestWithRetry` (the GET-only view), since `getTicket` takes `include=stats` only and `src/client` stays unchanged; T-075's tag and spam check is re-written in `send.ts`, not imported (`write.ts` reads through `getTicket`, and importing it would pull the write smoke into the send script's graph); a public note's answer is read at the dispatcher for its `private` flag (T-088's open doubt, no `src/core` change), printed `answered private yes|no|unknown`, and anything but `no` exits 1; `unknown` is reachable only with an answer over 1 MiB, since the core already refuses an answer without a boolean `private` (`server`, `may_have_been_sent`), so it has no test.
+- Review: full round clean (see HANDOFF "Reviews"); low items parked in `docs/improvements.md` (`6709f63` entry).
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The CC field names (A6) are unverified: a fifth field or a wrong name is not seen by the script (parked at T-079). T-087's first run shows whether the GET carries all four.
+- The GET-then-POST gap: a CC or tag changed between the check and the send is not seen (accepted on owner-made `mcp-test` tickets).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

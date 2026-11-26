@@ -35,6 +35,22 @@ M3's acceptance shown on the real account: C5 reply, C4 forward and the public n
 
 No split point. Needs the owner's actions throughout; taken only after T-076 is `done`.
 
+## Owner commands (prepared by T-086, 2026-11-26)
+Placeholders only; real values stay in your shell and in `docs/private/`.
+The environment is the server's: `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`,
+and `FRESHDESK_MCP_CONFIG` pointing at the private team file, whose
+`toolsets` include `send` and whose `forward_allow_list` holds the
+internal addresses. `FRESHDESK_HOST_OVERRIDE` unset. Check first that no
+`TO`, `TICKET` or `TICKET_CC` is exported in your shell (`env | grep -E
+'^(TO|TICKET|TICKET_CC)='` prints nothing): make reads them too.
+
+1. Reply (C5, A1, A4's "no CC" side): `make smoke-send CASE=reply TICKET=<ticket id>`
+2. Forward (C4, A2, A5): `make smoke-send CASE=forward TICKET=<ticket id> TO=<allow-listed internal address>`
+3. Public note (OD-26, A3): `make smoke-send CASE=public-note TICKET=<ticket id>`
+4. A4 run, on the ticket whose only ticket-level CC is another allow-listed internal mailbox: `make smoke-send CASE=reply TICKET=<A4 ticket id> TICKET_CC=allow-listed`
+
+Each prints yes/no and counts only. A run that sent ends `smoke send <case>: ok, requests 2`; step 1's line must say `requests 0`. Step 3's last step line says `answered private no` when Freshdesk kept the note public (A3 yes); `yes` or `unknown` exits 1 and is A3's answer. A `may_have_been_sent yes` failure: check the ticket's conversation before running again. After each run: check which mailboxes received mail and read the ticket's activity log.
+
 ---
 *Filled at `/handoff`:*
 

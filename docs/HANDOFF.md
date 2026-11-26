@@ -4,63 +4,62 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T15:25:50+01:00`
-- **Describes commit:** `14a5e08` (T-088: done; handoff to T-086), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45839089153
-  (workflow `quality`, ran on `14a5e08`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T15:40:36+01:00`
+- **Describes commit:** `<hash>` (T-086: done; handoff to T-087), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled by the stamp>`.
 
-- **Current task:** T-088 `done (2026-11-26)`: `add_public_note` in
-  `send`. See `docs/tasks/T-088-add-public-note.md` "Done". Commits
-  `d8e144d` (tool, wiring, `SendKind` `"public note"`, tests, docs),
-  `1038b08` (review fixes, tests only), then this handoff commit. Started
-  from `5640358`. Decisions taken in session (small, recorded in the task
-  file): name `add_public_note` kept; failure wording "The public note may
-  have been sent"; the description points to `add_note` for a private note.
+- **Current task:** T-086 `done (2026-11-26)`: `make smoke-send`. See
+  `docs/tasks/T-086-smoke-send.md` "Done". Commits `6709f63` (script,
+  `cli.ts --send`, Makefile target, tests, overview line), then this
+  handoff commit. Started from `196a6c8`. Small decisions recorded in the
+  task file: `TO` pre-checked with `onAllowList`; requester email required
+  for a forward too; the GET through `context.http.requestWithRetry`
+  (`src/client` unchanged); a public note's answer read at the dispatcher
+  for `private`, printed `answered private yes|no|unknown`, exit 1 unless
+  `no`. No `src/` change.
 
-- **Next action:** `/pickup` T-086 (smoke send script; depends on T-084,
-  T-085, T-088, all `done`).
+- **Next action:** T-087 is the owner's run on the real account (T-076
+  must be `done` first). The exact commands, with placeholders, are in
+  `docs/tasks/T-087-m3-real-account-run.md` "Owner commands": `make
+  smoke-send CASE=reply TICKET=<ticket id>`; `CASE=forward TICKET=<ticket
+  id> TO=<allow-listed internal address>`; `CASE=public-note TICKET=<ticket
+  id>`; the A4 run `CASE=reply TICKET=<A4 ticket id>
+  TICKET_CC=allow-listed`. Env as the server's, team file with `send`.
 
-- **Read before anything else:** `docs/tasks/T-086-smoke-send.md`; T-075's smoke
-  write script `scripts/smoke/write.ts` and its test as the pattern;
-  `src/core/recipients.ts` (T-081's matcher, reused for the A4 case);
-  `docs/improvements.md` entries naming T-086 (`eff63e8`: a forward needs
-  no requester email; the GET-then-POST CC gap).
+- **Read before anything else:** `docs/tasks/T-087-m3-real-account-run.md`;
+  `scripts/smoke/send.ts` header (what each output line means).
 
-- **Owner, open:** T-087 waits only on T-086. OD-34: no npm release
-  accepting `send` (any tag from `1ef27e0` on) until T-087 is `done`.
+- **Owner, open:** T-087 waits on T-076 `done` and the owner. OD-34: no npm
+  release accepting `send` (any tag from `1ef27e0` on) until T-087 is
+  `done`.
 
-- **Reviews:** full round, R1 = `d8e144d`, range `5640358..d8e144d`.
+- **Reviews:** full round, R1 = `6709f63`, range `196a6c8..6709f63`.
   compliance-reviewer: Wireframes `none`, nothing to check.
-  security-reviewer: no findings; info, the SDK's zod "Input validation
-  error" text unchecked for echoing a caller-typed value (parked).
-  code-reviewer: clean; low, body-refusal tests asserted only `isError`
-  (fixed `1038b08`); low, the network-error test did not pin "public note"
-  (fixed `1038b08`); info, an answer `private: true` reported sent (parked,
-  core change); info, stale "not built" docs (grepped, none). All four
-  quotes matched in all three. Fixes are tests only, no mechanism changed:
-  no scoped round.
+  code-reviewer: clean; low, the `unknown` path untested (unreachable but
+  for an answer over 1 MiB, recorded in Done); low, the 11-address test's
+  name (dismissed: the tool's schema has no cap, the core's cap refuses);
+  low, tag check re-written not reused (reason recorded in Done); low,
+  stale `overview.md:52` (parked). security-reviewer: no finding at medium
+  or above; low, a stale exported `TO`/`TICKET_CC` is read by make (parked,
+  and the T-087 commands say to check); two info items (parked). All four
+  quotes matched in all three. No fix changed code: no scoped round.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - A public note Freshdesk answers `private: true` is reported sent
-    without saying so (fails safe); T-087's A3 shows the answer.
-  - Private notes in a forward (A5) unchecked: revisit `forward_ticket`'s
-    description after T-087.
-  - Whether a forward copies the ticket's existing CCs (A2/A5) unchecked;
-    T-086 refuses a forward on a ticket with CCs.
-  - Carried from T-089: whether anything in front of Freshdesk answers 408
-    after the origin took a POST is unchecked; the rule errs safe.
-  - Carried: T-076's C6 (one more run?), T-082's doubts (CRLF/U+2028,
-    unknown keys, A1 to A6 and the CC field names, OD-34 acceptance line)
-    and the older ones as in `4efcc70`'s HANDOFF.
+  - A6's CC field names unverified; a fifth CC field is not seen by the
+    script. T-087's first run shows whether the GET carries all four.
+  - The GET-then-POST gap (a CC or tag changed between check and send),
+    accepted on owner-made `mcp-test` tickets.
+  - Carried: private notes in a forward (A5) unchecked; whether a forward
+    copies existing CCs (A2/A5) unchecked, the script refuses a forward on
+    a ticket with CCs; T-089's 408-in-front-of-origin question; T-076's
+    C6, T-082's doubts and the older ones as in `4efcc70`'s HANDOFF.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `1038b08`'s tree. Vitest "Test
-  Files 57 passed (57)", "Tests 4732 passed (4732)"; `tools/checks` "Ran
+- **Checkpoint:** `make quality` exit 0 on `6709f63`'s tree. Vitest "Test
+  Files 58 passed (58)", "Tests 4824 passed (4824)"; `tools/checks` "Ran
   138 tests", OK.
