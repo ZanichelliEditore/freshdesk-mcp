@@ -10,17 +10,30 @@
 // `--write` runs T-075's write smoke (./write.ts) instead, the case and its
 // arguments from `--case`, `--tickets`, `--fields` and `--notify`: through
 // the write path built from the same configuration as the server, not
-// through the smoke's GET-only client.
+// through the smoke's GET-only client. `--send` runs T-086's send smoke
+// (./send.ts), the case and its arguments from `--case`, `--ticket`, `--to`
+// and `--ticket-cc`: through the core's send entries, built the same way.
 
 import { Agent } from "undici";
 import { main } from "./smoke.js";
+import { runSend } from "./send.js";
 import { runWrite } from "./write.js";
 
 const agent = new Agent();
 const argv = process.argv;
 // The mode is read from the flags only: a value given to an option that
 // takes one (`DAY=--core`, `FIELDS=--write`) never picks another run.
-const VALUED = ["--day", "--days", "--case", "--tickets", "--fields", "--notify"];
+const VALUED = [
+  "--day",
+  "--days",
+  "--case",
+  "--tickets",
+  "--fields",
+  "--notify",
+  "--ticket",
+  "--to",
+  "--ticket-cc",
+];
 const flags = argv.filter((_, i) => !VALUED.includes(argv[i - 1] ?? ""));
 const valueOf = (name: string) => {
   const at = argv.indexOf(name);
@@ -42,15 +55,22 @@ const day = dayAt === -1 ? undefined : (argv[dayAt + 1] ?? "");
 const out = (line: string) => {
   process.stdout.write(`${line}\n`);
 };
-process.exitCode = flags.includes("--write")
-  ? await runWrite(process.env, agent, out, {
+process.exitCode = flags.includes("--send")
+  ? await runSend(process.env, agent, out, {
       case: valueOf("--case"),
-      tickets: valueOf("--tickets"),
-      fields: valueOf("--fields"),
-      notify: valueOf("--notify"),
+      ticket: valueOf("--ticket"),
+      to: valueOf("--to"),
+      ticketCc: valueOf("--ticket-cc"),
     })
-  : await main(process.env, agent, out, mode, {
-      ...(days === undefined ? {} : { days }),
-      ...(day === undefined ? {} : { day }),
-    });
+  : flags.includes("--write")
+    ? await runWrite(process.env, agent, out, {
+        case: valueOf("--case"),
+        tickets: valueOf("--tickets"),
+        fields: valueOf("--fields"),
+        notify: valueOf("--notify"),
+      })
+    : await main(process.env, agent, out, mode, {
+        ...(days === undefined ? {} : { days }),
+        ...(day === undefined ? {} : { day }),
+      });
 await agent.close().catch(() => undefined);
