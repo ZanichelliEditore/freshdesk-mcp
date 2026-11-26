@@ -22,7 +22,7 @@
 
 - **Next action:** `/pickup` T-078 (`todo (2026-11-26)`), then T-075.
 
-- **Plan amend (2026-11-26):** commit `AMEND_HASH`, "M2 plan amend: T-078
+- **Plan amend (2026-11-26):** commit `6daa45e`, "M2 plan amend: T-078
   sized": T-078 `todo` before T-075 (T-075 depends on it), task file
   `docs/tasks/T-078-categorize-confirm-binding.md`; improvements `3a2ba75`,
   `3b3bec6` taken; owner decision on `ae54d0a` recorded.
