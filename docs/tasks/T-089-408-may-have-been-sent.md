@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** doing (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-084
 - **Created:** 2026-11-26
 
@@ -40,12 +40,20 @@ The RFC amendment is recorded in `2026-11-26-send-safety-core`'s "Amendments" (o
 *Filled at `/handoff`:*
 
 ## Done
+- `2cada3c` RFC `2026-11-26-send-safety-core`: "Amendments" bullet "OD-27 extended to 408 only" (owner, 2026-11-26), OD-27's bullet and OD-33's spent-id sentence aligned; `rfc-reviewer` run on the draft: 2 medium (OD-33 still called a 409 "no proof", the 409 rejection then contradicting it: OD-33 reworded to "one rule, no release by status"; "every send tool through `sendFailed`" untrue today: reworded to `reply_to_ticket` today, T-085 and T-088 must use the same rule), 4 low (429 never on the list; the 408 reason grounded and why it is not an A-assumption; "no change" added to Rejected; T-084 doubt cited by file and `82c8242`), all resolved before any code. Same commit: this task file, PLAN row (before T-085; T-085 and T-088 depend on it), OD-27 row's answer, `docs/architecture/overview.md`.
+- `775053d` `sendFailed` (`src/tools/toolsets/send/reply-to-ticket.ts`): a 408 after dispatch is `may_have_been_sent: true`; a 409 unchanged. Tests written first and shown failing on `2cada3c`'s `src/` (2 failed, 33 passed): `test/tools/send/reply-to-ticket.test.ts` "a 408 is may_have_been_sent: a request timeout is no proof nothing was sent", "a 409 is Freshdesk's refusal: not may_have_been_sent, the send_id spent", "a 408 with no attempt dispatched is passed on; after a dispatch it is may_have_been_sent".
+- Handoff commit: the 409 test's second confirm asserts the "already used" refusal (code-reviewer low); T-084's open doubt marked resolved; one finding parked in `docs/improvements.md` (`775053d`).
+- `make quality` exit 0: Vitest 55 files, 4647 tests passed; `tools/checks` 138 tests OK.
 
 ## Dead ends
+none
 
 ## Open doubts
+- Whether Freshdesk (or anything in front of it) ever answers 408 after taking a POST is unchecked; the rule errs on the safe side either way (RFC amendment).
+- `sendFailed`'s text says "The reply may have been sent": T-085 must generalise it for a forward (and T-088 for a public note) while keeping the 408 rule.
 
 ## Context pressure
+low
 
 ## Next action
-Record the RFC amendment and run `rfc-reviewer` on it.
+none (done).

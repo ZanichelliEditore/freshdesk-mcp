@@ -430,7 +430,11 @@ describe("reply_to_ticket: a failure after the send", () => {
     expect(sent()).toEqual([`POST ${REPLY}`]);
 
     // Spent: a second confirm of the same send_id sends nothing.
-    await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId });
+    const again = failure(
+      await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId }),
+    );
+    expect(again).toMatchObject({ code: "validation", http_status: null });
+    expect(again.message).toMatch(/already used/);
     expect(sent()).toEqual([`POST ${REPLY}`]);
   });
 });

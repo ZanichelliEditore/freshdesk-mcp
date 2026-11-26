@@ -57,7 +57,7 @@ none
 
 ## Open doubts
 - `may_have_been_sent`'s exact shape (a key on the error) is this tool's choice; T-085 and T-088 should reuse `sendFailed`'s rule.
-- A 408 or 409 after dispatch is `validation`, reported "send_id spent" but not `may_have_been_sent` (OD-27's list); the RFC says such a 4xx is not proof nothing was sent.
+- A 408 or 409 after dispatch is `validation`, reported "send_id spent" but not `may_have_been_sent` (OD-27's list); the RFC says such a 4xx is not proof nothing was sent. RESOLVED (owner, 2026-11-26): a 408 is `may_have_been_sent`, a 409 stays as it was; RFC amendment and code in T-089 (`2cada3c`, `775053d`).
 - Parked from the scoped round: `docs/improvements.md`, `4cc147b`.
 
 ## Context pressure
