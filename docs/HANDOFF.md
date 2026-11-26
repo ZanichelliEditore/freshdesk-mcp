@@ -4,25 +4,28 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T12:02:26+01:00`
-- **Describes commit:** `3870e65` (the T-075 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45807071800
-  (workflow `quality`, ran on `3870e65`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T12:41:44+01:00`
+- **Describes commit:** filled by the stamp commit.
 
-- **Current task:** T-075 (`make smoke-write` through the write path,
-  `mcp-test` tickets only) `done (2026-11-26)`. Commit `094564e`, then this
-  handoff commit (review fixes). Tests: `test/smoke-write.test.ts` (67
-  cases, MockAgent). `src/**` and `eslint.config.mjs` unchanged. Nothing
-  run against the real account.
+- **Current task:** `/decompose M3` (plan session, owner's go 2026-11-26,
+  run by a session under the orchestrator) `done (2026-11-26)`. Commits
+  `95d2c58` (M3 planned), `eff63e8` (full-round fixes), then this handoff
+  commit (scoped-round fixes). PLAN `## M3 — send toolset`: T-079 to
+  T-088, all `todo (2026-11-26)`; OD-17 to OD-34. Owner's answers
+  (2026-11-26, via the orchestrator): OD-20 an HMAC `send_id`, OD-21 the
+  ticket's existing CCs ignored, OD-26 the public note built (T-088); the
+  other ODs' proposals are the RFC's starting point. Step 4: `send` goes
+  through the write path, extended; T-079's RFC before any send code. No
+  `src/` change.
 
-- **Owner decision (2026-11-26, via the orchestrator):** the ~3 read-only
-  GETs a fake or expired `preview_id` costs with a cold schema cache are
-  accepted. `docs/improvements.md` `072dd91` first item marked DECIDED.
+- **Next action:** `/pickup` T-079 (the RFC; split point: stop at Proposed
+  after the full `rfc-reviewer` round). T-076 stays open with the owner
+  (runbook below); T-087 waits on it.
 
-- **Next action:** T-076 is the owner's: follow the runbook below, then
-  `/pickup` T-076 to record the yes lines.
+- **Read before anything else:** `docs/tasks/PLAN.md` section M3 (step-4
+  note, API assumptions A1 to A6, OD-17 to OD-34);
+  `docs/tasks/T-079-rfc-send-core.md`; RFC
+  `docs/rfc/active/2026-11-25-write-safety-core.md`.
 
 - **Owner runbook for T-076** (each run prints yes/no and counts only;
   keep its output and every id in `docs/private/account-facts.md`, never
@@ -64,38 +67,57 @@
      acted. Record one dated yes line per case and "no automation rule
      acted" in T-076's "Done".
 
-- **Read before anything else:** `docs/tasks/T-076-m2-real-account-run.md`.
-
 - **Reviews:**
-  - Full round, R1 = `094564e`, range `2c11d84..094564e`. All four quotes
-    of every reviewer checked against the diff file: correct.
-  - `code-reviewer`: clean on the acceptance, 3 low, 1 info. Tags in
-    FIELDS untested (fixed: C1, C5, C6 rows, nothing written); C5's GET
-    count not pinned (fixed: one GET asserted); check and write not atomic
-    (documented in `write.ts`'s header); `cli.ts --write` parsing untested
-    (cli.ts may not be imported by tests; fails closed, dismissed). It ran
-    one no-op `echo` against the read-only rule.
-  - `security-reviewer`: no finding. Low/info: the same non-atomic check
-    (documented).
-  - `compliance-reviewer`: wireframes `none`.
-  - Scoped round: not run. The fixes are tests and one comment; no
-    mechanism changed (rule 9).
+  - Full round, R1 = `95d2c58`, range `12afa5f..95d2c58`. Scoped round,
+    range `95d2c58..eff63e8`. All four quotes of every reviewer checked
+    against the diff files: correct (`code-reviewer`'s full-round trailer
+    quote was missing at first; re-asked, it quoted it correctly).
+  - `code-reviewer`, full: high, the `send_id` key in `src/tools` while the
+    core must check it (fixed: OD-32, `src/core/send-id.ts`, the entry
+    mints); high, a replayed `send_id` sends twice (fixed: OD-33 for the
+    RFC, test lines in T-082/T-083); medium, "no address" vs "Not sent"
+    naming recipients (fixed: "sent result"); medium, A4 uncheckable on
+    CC-free tickets (fixed: unchecked by design); medium, T-086's requester
+    email needs an API assumption (fixed: A6); low, T-079 scope vs
+    acceptance, stale goal (fixed).
+  - `security-reviewer`, full: high, smoke-send could mail a ticket CC or
+    an off-list requester (fixed in T-086); high, `send_id` checked outside
+    the core (fixed, OD-32); medium, replay (OD-33); medium, `send` enabled
+    by a team file before T-087 (OD-34); low items: two T-081 cases added,
+    two parked (improvements `95d2c58`).
+  - `compliance-reviewer`: wireframes `none`, both rounds.
+  - Scoped round, both `code-reviewer` and `security-reviewer`: two
+    fail-open items, fixed in this handoff commit: T-086 and A6 now name
+    the four CC fields (`cc_emails`, `fwd_emails`, `reply_cc_emails`,
+    `ticket_cc_emails`, names unverified); OD-33(b) reserves the id at the
+    check, before dispatch, and T-082 tests two concurrent confirms (one
+    POST). Also fixed: T-085 refuses `confirm` with no `send_id`; OD-32's
+    reason toned to "needed, not sufficient"; stale context lines. The
+    rest parked (improvements `eff63e8`). **Rule 9:** the OD-33 fix refines
+    a mechanism the RFC has yet to decide; no third round opened; said to
+    the owner.
 
-- **Proposed plan changes:** none.
+- **Proposed plan changes:** none (T-088 sized `todo` in this plan).
 
 - **Open doubts:**
+  - The four CC field names and A1 to A6 come from the planner's and
+    reviewers' knowledge of the Freshdesk v2 API, not from this repo or a
+    probe; T-079's RFC states them as unchecked, T-087 checks them.
+  - OD-32 puts a second per-process HMAC key in `src/core/send-id.ts`
+    rather than reusing `preview.ts`'s key: same mechanism as OD-20's
+    answer, a different module; the owner confirms at T-079.
+  - OD-33(b) is per-process server state, a departure from OD-15's
+    no-server-state choice for previews; for the RFC.
   - Carried: `categorize_tickets` checks values only at the confirm;
-    T-072/T-073/T-074 strict-input errors are the MCP SDK's text, not a
-    `FreshdeskError` JSON; the `getAgent` active rule is from
-    documentation, not measured (T-067); `context.ts` passing the team's
-    `toolsets` to `createWritePath` holds by inspection (T-077); default
-    fields keyed by `/ticket_fields` API name, to confirm at T-076;
-    whether `agent-native-setup update` would revert the safety-core value
-    in `.claude/commands/decompose.md` step 4 (T-040); `.claude/worktrees/`
-    is not gitignored (parked).
+    T-072/T-073/T-074 strict-input errors are the MCP SDK's text; the
+    `getAgent` active rule is from documentation (T-067); `context.ts`
+    passing the team's `toolsets` to `createWritePath` holds by inspection
+    (T-077); default fields keyed by `/ticket_fields` API name, to confirm
+    at T-076; whether `agent-native-setup update` would revert the
+    safety-core value in `.claude/commands/decompose.md` step 4 (T-040);
+    `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** none in code; see T-075's task file (MCP session dropped
-  for direct tool calls).
+- **Dead ends:** none.
 
 - **Known red:** none.
 

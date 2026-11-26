@@ -14,8 +14,8 @@ Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answ
 ## In scope
 - `scripts/smoke/send.ts`, reusing T-075's tag and spam check; cases for a reply, a forward and a public note (OD-26).
 - Each send in two steps: "Not sent" and a `send_id`, then `confirm: true` with it (OD-20).
-- One GET per ticket with `include=requester` (A6): tags, spam, requester email, `cc_emails`.
-- A reply or a public note only when the requester's email is on the team allow-list and the ticket has no `cc_emails` (OD-21 leaves CCs to the procedure; the script checks them); a missing field refuses; a forward only to allow-listed addresses from the private team file.
+- One GET per ticket with `include=requester` (A6): tags, spam, requester email, and the four CC fields `cc_emails`, `fwd_emails`, `reply_cc_emails` and `ticket_cc_emails` (names unverified; A6).
+- A reply or a public note only when the requester's email is on the team allow-list and all four CC fields are empty lists (OD-21 leaves CCs to the procedure; the script checks them); a missing field refuses; a forward only to allow-listed addresses from the private team file.
 - Output: yes/no and counts only.
 
 ## Out of scope
@@ -37,7 +37,7 @@ Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answ
 `none`
 
 ## Acceptance
-`test/smoke-send.test.ts` (MockAgent): cases for a reply, a forward and a public note; one GET per ticket (`include=requester`, A6); an untagged or spam ticket gets that GET and nothing else; a reply or a public note is refused unless the requester's email is on the team allow-list, and refused when the ticket's `cc_emails` is not empty; a ticket whose `tags`, `spam`, requester email or `cc_emails` field is missing refuses; each refusal with 0 POSTs; each send is two steps, the first returning "Not sent" and a `send_id` with 0 POSTs, the second sending with `confirm: true` and that `send_id` (OD-20); a send reaches MockAgent only through the core's entries, built from the team `loadConfig` loads (source asserted as in T-075); a failed tag check refuses with nothing sent; output holds no id, address, body, domain or key; `make help` lists `smoke-send` (OD-28); `make quality` green.
+`test/smoke-send.test.ts` (MockAgent): cases for a reply, a forward and a public note; one GET per ticket (`include=requester`, A6); an untagged or spam ticket gets that GET and nothing else; a reply or a public note is refused unless the requester's email is on the team allow-list, and refused when the ticket has any of `cc_emails`, `fwd_emails`, `reply_cc_emails` and `ticket_cc_emails` not empty (one case per field); a ticket whose `tags`, `spam` or requester email is missing, or any of the four CC fields absent, null or not a list, refuses; each refusal with 0 POSTs; each send is two steps, the first returning "Not sent" and a `send_id` with 0 POSTs, the second sending with `confirm: true` and that `send_id` (OD-20); a send reaches MockAgent only through the core's entries, built from the team `loadConfig` loads (source asserted as in T-075); a failed tag check refuses with nothing sent; output holds no id, address, body, domain or key; `make help` lists `smoke-send` (OD-28); `make quality` green.
 
 No split point: one script on T-075's pattern.
 
