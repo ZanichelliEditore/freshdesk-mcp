@@ -355,6 +355,7 @@ describe.each(writes)("$name", (write) => {
     ["an answer that is not an object", () => [CANARY]],
     ["an answer without an id", (answer) => ({ ...answer, id: undefined, note: CANARY })],
     ["an id that is not a whole number", (answer) => ({ ...answer, id: CANARY })],
+    ["a fractional id", (answer) => ({ ...answer, id: 1.5 })],
     ["an empty object", () => ({})],
   ])("refuses %s as server, saying the write may be applied", async (_, edit) => {
     on(write, 42).reply(write.status, edit(write.answer) as object, { headers: JSON_TYPE });
@@ -375,3 +376,44 @@ describe.each(writes)("$name", (write) => {
     expect(sent()).toHaveLength(1);
   });
 });
+
+// T-080 review (RFC 2026-11-26-send-safety-core, OD-27): a send's answer
+// hands the caller its conversation id and nothing else, so no address
+// Freshdesk echoes can reach a tool; an id that is not positive is another
+// shape (the send may have happened, but nothing names it).
+describe.each(writes.filter((w) => w.name === "postReply" || w.name === "postForward"))(
+  "$name's answer",
+  (write) => {
+    it("keeps the id alone, dropping every address and the body Freshdesk echoes", async () => {
+      on(write, 42).reply(
+        write.status,
+        {
+          ...write.answer,
+          to_emails: ["someone@example.com"],
+          cc_emails: ["other@example.com"],
+          from_email: "support@example.com",
+          note: CANARY,
+        },
+        { headers: JSON_TYPE },
+      );
+
+      const result = await settle(write.call(42, { body: "x" }));
+
+      expect(result).toEqual({ ok: true, value: { id: write.answer.id }, attempts: 1 });
+    });
+
+    it.each([0, -1])("refuses an answer whose id is %i as server, not sent: true", async (id) => {
+      on(write, 42).reply(write.status, { ...write.answer, id }, { headers: JSON_TYPE });
+
+      const result = await settle(write.call(42, { body: "x" }));
+
+      expect(failure(result)).toEqual({
+        code: "server",
+        http_status: write.status,
+        message: `Freshdesk sent ${write.noun} in an unexpected shape (HTTP ${write.status}): the write may have been applied.`,
+        retryable: false,
+      });
+      expect(result.attempts).toBe(1);
+    });
+  },
+);

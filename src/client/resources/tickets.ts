@@ -21,10 +21,12 @@
 // A ticket needs a whole-number `id`, `requester_id`, `status` and
 // `priority`, a string `subject` and a `custom_fields` object; a conversation
 // a whole-number `id` and `user_id`, a string `body`, booleans `incoming` and
-// `private`. Keys this module does not know are passed through. A body in any
-// other shape is `server` with the response's real status, not retryable,
-// and a message of fixed text that quotes nothing from the body. An HTTP
-// failure is returned unchanged.
+// `private`; a reply's or a forward's answer (`sentConversation`) a positive
+// whole-number `id` alone, its other keys dropped. Otherwise keys this
+// module does not know are passed through. A body in any other shape is
+// `server` with the response's real status, not retryable, and a message of
+// fixed text that quotes nothing from the body. An HTTP failure is returned
+// unchanged.
 //
 // Values are checked before anything is sent, whatever a cast let through:
 // an id is a positive safe integer, `per_page` 1–100, `page` a whole number
@@ -73,11 +75,13 @@ export const conversation = z.looseObject({
  * The answer to a reply or a forward (T-080): a conversation-like record,
  * checked loosely. Freshdesk documents a reply's answer without `incoming` or
  * `private` (RFC 2026-11-26-send-safety-core, A1 and A2, unverified until
- * T-087), so only the whole-number `id` (the `conversation_id` a send returns)
- * is required; unknown keys passed through.
+ * T-087), so only a positive whole-number `id` (the `conversation_id` a send
+ * returns) is required. Every other key is accepted and dropped, not passed
+ * through: the answer echoes addresses and the body, and a send returns no
+ * address (OD-27).
  */
-export const sentConversation = z.looseObject({
-  id: z.number().int(),
+export const sentConversation = z.object({
+  id: z.number().int().positive(),
 });
 
 /** Freshdesk returns no page of `GET /tickets` past this one (30,000 tickets at 100 a page). */

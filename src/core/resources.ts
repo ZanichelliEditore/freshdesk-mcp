@@ -27,8 +27,9 @@
 //   - A ticket id that is not a positive safe integer is `validation`,
 //     `http_status: null`, with nothing sent.
 //   - The answer is checked: a ticket for the PUT, a conversation for the
-//     note, a conversation-like record with a whole-number `id` for a reply
-//     or a forward (src/client/resources/tickets.ts' schemas). One in any
+//     note, a conversation-like record with a positive whole-number `id` for
+//     a reply or a forward, its other keys dropped so no echoed address
+//     reaches the caller (src/client/resources/tickets.ts' schemas). One in any
 //     other shape is `server` with the answer's real status, not retryable,
 //     its message fixed text that quotes nothing from the body and says the
 //     write may have been applied. An HTTP failure is returned unchanged.
