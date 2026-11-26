@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-071, T-072, T-073, T-074, T-078
 - **Created:** 2026-11-25
 
@@ -40,18 +40,46 @@ No split point.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `094564e`: `scripts/smoke/write.ts` (`runWrite`), `scripts/smoke/cli.ts`
+  `--write`, `Makefile` `smoke-write` (CASE, TICKETS, FIELDS, NOTIFY, each
+  unexpanded), `tools/checks/test_make_version.py` (help lists
+  `smoke-write`), `docs/architecture/overview.md` (`scripts/smoke/` entry).
+- The handoff commit: review fixes (tags in FIELDS refused for C1, C5, C6;
+  C5's ticket GET pinned to one; the non-atomic check written in the
+  header).
+- Tests: `test/smoke-write.test.ts` (67 cases, MockAgent): describe "the tag
+  check refuses with one GET and nothing else" (untagged and spam per case,
+  exact tag, `tags`/`spam` missing or mistyped, 404, 5xx, timeout, C1's
+  second ticket untagged); "a tagged ticket's write goes through the write
+  tools" (C1, C4, C5, C6, C8, bodies asserted); "a failed write prints its
+  code only and exits non-zero"; "refused before any request" (no `write`
+  in the team file, host override, config, every bad argument); "its source
+  takes the write side from the core's builder only" (no `src/core/` import
+  but `createWritePath`, no client, no `method`, no toolsets literal,
+  `loadConfig(env)` and `createContext(config, ...)`).
+- Design: the lint fence (T-077) lets only `src/tools/context.ts` call
+  `createWritePath`, so the script builds the context with `createContext`
+  and calls `toolsetsOf(context).write`'s tools; it imports nothing from
+  `src/core/`. No change to `src/**` or `eslint.config.mjs`.
+- Shown with an empty environment (no credentials, no request possible):
+  `make smoke-write CASE=C9` prints `config: fail (CASE takes C1, C4, C5,
+  C6 or C8)`; a FIELDS holding `$(touch <file>)` and backticks ran nothing.
 
 ## Dead ends
-none
+- Calling the tools through an in-process MCP session (as `core.ts` does):
+  its JSON-RPC client sets a `method` key, which the source check forbids;
+  calling the toolset's tools directly is simpler and the same check-then-
+  handler path `registerTool` uses.
 
 ## Open doubts
-none
+- The tag check and the write are not atomic (a tag removed in between is
+  not seen); accepted for the owner's own test tickets (both reviewers,
+  low).
+- `cli.ts`'s `--write` parsing has no test (tests may not import
+  `**/cli.ts`); traced by both reviewers as failing closed.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

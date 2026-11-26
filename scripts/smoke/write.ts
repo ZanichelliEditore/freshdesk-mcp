@@ -22,7 +22,9 @@
 //     refused: a ticket without the tag `mcp-test` (exactly, case
 //     included), a spam ticket, one whose `tags` is not a list of strings or
 //     whose `spam` is not a boolean, and a GET that fails (its code) each
-//     refuse the run with nothing written.
+//     refuse the run with nothing written. Not atomic: a tag removed or a
+//     spam mark set between the check and the write is not seen (the
+//     tickets are the owner's own test tickets).
 //   - Output: yes/no and counts, tickets by position (`ticket 1 of 2`); a
 //     failure is its error code only. Never an id, a subject, a body, a
 //     field value, a name, the domain or the key. The client's one line per

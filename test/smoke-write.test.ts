@@ -229,11 +229,12 @@ describe("smoke-write: the tag check refuses with one GET and nothing else", () 
 
 describe("smoke-write: a tagged ticket's write goes through the write tools", () => {
   it("C5 updates the fields through update_ticket, tags untouched", async () => {
-    reply(TICKET, tagged, "GET", 200, 3);
+    reply(TICKET, tagged);
     replySchema();
     reply(TICKET, rawTicket, "PUT");
     const { code, out } = await run(ARGS.C5!);
     expect(code).toBe(0);
+    expect(sent().filter((line) => line === `GET ${TICKET}`)).toHaveLength(1);
     expect(writes()).toEqual([`PUT ${TICKET}`]);
     expect(bodyOf("PUT")).toEqual({ custom_fields: { cf_hobby: HOBBY } });
     expect(out).toContain("ticket 1 of 1: tag mcp-test yes, spam no");
@@ -319,7 +320,7 @@ describe("smoke-write: a failed write prints its code only and exits non-zero", 
     [400, "validation"],
     [500, "server"],
   ])("C5's PUT answered %i", async (status, code) => {
-    reply(TICKET, tagged, "GET", 200, 3);
+    reply(TICKET, tagged);
     replySchema();
     reply(
       TICKET,
@@ -383,6 +384,14 @@ describe("smoke-write: a failed write prints its code only and exits non-zero", 
     expect(code).toBe(1);
     expect(writes()).toEqual([]);
     expect(out).toContain("update_ticket: fail validation");
+  });
+
+  it.each(["C1", "C5", "C6"])("%s: tags in FIELDS are refused, the tag stays", async (name) => {
+    reply(TICKET, tagged, "GET", 200, 2);
+    replySchema();
+    const { code } = await run({ ...ARGS[name]!, fields: JSON.stringify({ tags: [] }) });
+    expect(code).toBe(1);
+    expect(writes()).toEqual([]);
   });
 });
 
