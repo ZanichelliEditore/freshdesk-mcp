@@ -286,12 +286,14 @@ costs in API calls when it is more than one.
 
 | Tool | Purpose |
 |---|---|
-| `reply_to_ticket` | public reply to the requester; `confirm:true` required (§9) |
-| `forward_ticket` | forward to people outside Freshdesk (internal teams); `confirm:true` required; recipients must match the allow-list (e.g. `@example.com`), others refused |
+| `reply_to_ticket` | public reply to the requester; `confirm: true` and the `send_id` from a first call required (§9); `cc` only from the allow-list, no `to` or `bcc`; Freshdesk may copy the ticket's existing CCs |
+| `forward_ticket` | forward to allow-listed internal addresses (internal teams); `confirm: true` and the `send_id` required (§9); `to` and `cc` must match the allow-list (e.g. `@example.com`), others refused; the ticket's content leaves Freshdesk |
+| `add_public_note` | public note (`private: false`) on a ticket; `confirm: true` and the `send_id` required (§9); no recipient input; the requester, and possibly the ticket's existing CCs, can see it and may be emailed |
 
 A public note (`private: false`) is `send`'s too (owner, 2026-11-25, RFC
 `2026-11-25-write-safety-core`): it can reach the requester, so it is
-designed in M3 with confirm and allow-list.
+built in M3, with confirm; it has no recipient input (owner, 2026-11-26,
+RFC `2026-11-26-send-safety-core`).
 
 ### 8.3 Prepared, not active (catalogue)
 
@@ -327,9 +329,9 @@ tests, land with the toolset that first uses them (M5+).
 | Rule | Where |
 |---|---|
 | Writes need the `write` toolset enabled; customer/outside sends need `send` | config |
-| `reply_to_ticket`, `forward_ticket`: **confirm-by-argument** — without `confirm:true` the tool does nothing and returns "Not sent. Show the user the exact text and recipients; call again with confirm:true only after they approve." | `confirm.ts` |
+| `reply_to_ticket`, `forward_ticket`, `add_public_note`: **confirm-by-argument with a `send_id`** — without `confirm: true` the tool sends nothing and returns "Not sent. Show the user the exact text and recipients; call again with `confirm: true` and this `send_id` only after they approve.", with a `send_id` bound to the tool, the ticket, the body and the recipients (HMAC, per-process key, 15 minutes); a send needs `confirm: true` and a matching `send_id`, and each `send_id` sends at most once (owner, 2026-11-26, RFC `2026-11-26-send-safety-core`) | the write path (confirm, `send_id`); `confirm.ts` (the "Not sent" text) |
 | Bulk changes: preview → `preview_id` → confirm; a ticket added or a field changed invalidates the preview; a confirm of any subset of the previewed tickets, each with its previewed fields, keeps it, which is how the tickets a cut left not attempted are applied (owner, 2026-11-25, PLAN OD-13); with no server state (OD-15) a repeat confirm within its 15 minutes re-sends identical values | `categorize_tickets` |
-| Forward recipients on an allow-list; reply goes only to the ticket's requester (cc only from the allow-list) | config |
+| Forward `to` and `cc`, and reply `cc`, only from the allow-list, at most 10 recipients per send, no `bcc`; a reply goes to the ticket's requester and whoever Freshdesk copies on it (the ticket's existing CCs, not checked: RFC `2026-11-26-send-safety-core`, OD-21); the tool adds only allow-listed CCs | the write path; the list from the team file |
 | Notes written by `write` are private, always: no `private` input, the core sets it; a public note is a `send` capability (M3) | the write path (`add_note`, `hand_off_draft`) |
 | No secret or ticket content in logs; stderr logs method, path template, status, duration only | `http.ts` |
 
@@ -394,7 +396,10 @@ Two levels:
     activity log to show no automation rule or time trigger acted on
     test tickets (settled by the owner, 2026-11-26).
     The smoke script refuses to write to a ticket without the tag;
-    forwards go only to the builders' own addresses.
+    sends go only to internal mailboxes on the allow-list, on `mcp-test`
+    tickets with no ticket-level CC, except one reply run whose only
+    ticket-level CC is an allow-listed internal mailbox (A4, RFC
+    `2026-11-26-send-safety-core`).
 - Release: **public npm** (owner, 2026-11-20) as
   `@zanichelli/freshdesk-mcp`, repository public (owner, 2026-11-23),
   once it is shown that the organisation owns the `@zanichelli` scope on
@@ -451,7 +456,7 @@ splits into tasks.
 | M0 | repo, CI, client core (§7.1), rate limiter, schema service, config | tests green in CI |
 | M1 | `core` toolset → technical users via `npx` | C1 listing, C2, C3 (read), C7, C9/C10 reads work against the real account by smoke test |
 | M2 | `write` toolset | C1 apply, C4 internal, C5 update, C6, C8 (new tickets) work on `mcp-test` tickets; no automation rule acted on `mcp-test` tickets, confirmed by the activity log after each kind of write M2 performs, and no time trigger acted on them while they waited |
-| M3 | `send` toolset | C5 reply, C4 forward, with confirm and allow-list, on `mcp-test` tickets to internal addresses only |
+| M3 | `send` toolset | C5 reply, C4 forward and a public note, with confirm and allow-list, on `mcp-test` tickets to internal addresses only; mail reached only the expected internal mailboxes, and no automation rule acted on `mcp-test` tickets after a reply, a forward or a public note, confirmed by the activity log (owner, 2026-11-26, OD-31) |
 | M4 | `.mcpb`, Italian operator guide, internal team config | an operator installs on a clean machine without a terminal |
 | M5+ | catalogue toolsets on demand | per toolset |
 

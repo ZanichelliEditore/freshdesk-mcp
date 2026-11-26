@@ -4,6 +4,13 @@
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
 - [ ] Implemented
+- **Extended by:** RFC `2026-11-26-send-safety-core` (owner, 2026-11-26),
+  which adds the `send` entries to this core and changes three points:
+  the consequence that SPEC §9's "reply goes only to the requester" holds
+  for M3 (it holds for the `to`, not the ticket's CCs); owner decision 2's
+  public note "with M3's confirm and allow-list" (confirm only, no
+  recipient input); and caps kept out of the core (for `send`, the
+  confirm, the `send_id` and the recipient cap of 10 are in it).
 
 ## Context
 

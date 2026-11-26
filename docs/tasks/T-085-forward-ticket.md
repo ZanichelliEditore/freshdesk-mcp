@@ -34,7 +34,7 @@ Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answ
 `none`
 
 ## Acceptance
-`test/tools/send/forward-ticket.test.ts` (MockAgent): without `confirm` the "Not sent" result with a `send_id` and 0 dispatches; with `confirm: true` and that `send_id` one POST to `/forward` holding only allow-listed `to` and `cc`; a `send_id` minted for other recipients or another body, `confirm: true` with no `send_id`, an off-list address, a `bcc` or an empty allow-list gives 0 dispatches; the description says the ticket's content leaves Freshdesk (OD-29) and never to "always allow" it; no address in the sent result; `make quality` green.
+`test/tools/send/forward-ticket.test.ts` (MockAgent): without `confirm` the "Not sent" result with a `send_id` and 0 dispatches; with `confirm: true` and that `send_id` one POST to `/forward` holding only allow-listed `to` and `cc`; a `send_id` minted for other recipients or another body, `confirm: true` with no `send_id`, an off-list address, a `bcc` or an empty allow-list gives 0 dispatches; the description and the "Not sent" text name the ticket id first and ask the user to check it is the ticket they mean (threat 1); the description says the ticket's content leaves Freshdesk (OD-29) and never to "always allow" it; no address in the sent result; `make quality` green.
 
 No split point: one tool on an existing wiring.
 

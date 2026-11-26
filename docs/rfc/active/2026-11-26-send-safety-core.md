@@ -1,6 +1,6 @@
 # `send` on the write path: confirm with a `send_id`, recipient allow-list, closed payload keys
 
-- **Status:** Proposed
+- **Status:** Active (owner, 2026-11-26)
 - **Date:** 2026-11-26
 - **Author:** freshdesk-mcp team
 - [ ] Implemented
@@ -58,8 +58,9 @@ parses `forward_allow_list` (`@domain` or a full address, default empty);
 
 The decisions this RFC takes are PLAN's OD-17 to OD-34 (M3 section). The
 owner answered three on 2026-11-26 (via the orchestrator): OD-20, OD-21,
-OD-26. For the others the planner's proposal is the starting point; this
-RFC answers each and the owner confirms or changes it at acceptance.
+OD-26. For the others the planner's proposal was the starting point; this
+RFC answers each, and the owner accepted every answer as written on
+2026-11-26 ("The owner's decisions (2026-11-26)").
 
 ### API assumptions, all unchecked
 
@@ -86,13 +87,12 @@ the design leans on one, the section says so.
   no send entry reads it.
 
 If A1, A2 or A3 is wrong, the resource rows (T-080, T-088) fail their
-first real run in T-087, before any send on a production ticket. A4 is **not
-checked in M3**: T-087 records it as "not checked, no ticket-level CC by
-design", because T-086 refuses a ticket with one. The first evidence on
-A4 would therefore come from production use, unless the owner adds one
-test (question at the end of OD-21). If A4 is wrong in the safe direction
-(a reply never copies ticket CCs), OD-21's consequence is smaller than
-stated. If A5's private-note question
+first real run in T-087, before any send on a production ticket. A4 is
+checked by **one** T-087 run (owner, 2026-11-26, OD-21): a reply on an
+`mcp-test` ticket whose only ticket-level CC is an allow-listed internal
+mailbox, run with T-086's one opt-in flag; T-087 records whether
+Freshdesk copied the CC. If A4 is wrong in the safe direction (a reply
+never copies ticket CCs), OD-21's consequence is smaller than stated. If A5's private-note question
 answers yes, OD-29's consequence is larger; T-087 records it.
 
 ### Threat model
@@ -175,11 +175,11 @@ limiter. Each holds the confirm check, the `send_id` mint and check, the
 recipient allow-list check and its closed payload in the core. AGENTS.md
 rule 1 is unchanged: still one path, now with more entries.
 
-Each OD below says its status: **decided** (the owner answered), or
-**proposed** (this RFC's answer, which the owner confirms or changes at
-acceptance). The rejected alternatives follow each.
+Each OD below says its status: **decided** (the owner answered before
+the draft), or **accepted** (this RFC's answer, accepted as written by the
+owner on 2026-11-26). The rejected alternatives follow each.
 
-### OD-17: the RFC's form — proposed
+### OD-17: the RFC's form — accepted (owner, 2026-11-26)
 
 A new RFC that extends `2026-11-25-write-safety-core`; the old one gets
 one dated line, "Extended by `<this RFC>` (owner, <date>)", at acceptance.
@@ -189,7 +189,7 @@ accepted; mixing M3's design into it would make it hard to read what was
 in force for M2 and would put the whole old text back under review.
 Precedent: T-066's RFC extended T-063's choice in a separate file.
 
-### OD-18: one core or two — proposed
+### OD-18: one core or two — accepted (owner, 2026-11-26)
 
 (a) Extend the write path: the send entries live in `src/core/`, beside
 the write entries, on the one client.
@@ -199,7 +199,7 @@ path; a second client would double the budget (SPEC §4 goal 4) and need
 T-077's lint fences twice. (c) The checks in the tools. The previous RFC
 rejected this for OD-3: nothing stops the next tool from skipping them.
 
-### OD-19: where confirm lives — proposed
+### OD-19: where confirm lives — accepted (owner, 2026-11-26)
 
 (c) The core's send entry refuses anything but a literal `confirm ===
 true` together with a valid `send_id` (OD-20). `src/tools/confirm.ts`
@@ -246,15 +246,36 @@ twice on its own (threat 1).
 - **The ticket's existing CCs are ignored**: not read, not checked, no
   extra GET. Freshdesk may copy them on the reply (threat 3, stated
   plainly there). M3's test tickets carry no ticket-level CC (owner
-  action), and the smoke script refuses one that does (T-086, A6).
+  action), and the smoke script refuses one that does (T-086, A6),
+  except the one A4 run below.
 - The reply tool's description and the "Not sent" text say "Freshdesk may
   also copy the ticket's existing CC addresses, which this tool does not
   check" (new line for T-083's and T-084's acceptance, below).
-- **Question for the owner (not decided):** A4 stays unchecked in M3.
-  Optionally, one T-087 run on an `mcp-test` ticket whose only
-  ticket-level CC is an allow-listed internal mailbox would check it at
-  no risk; T-086 would then accept a ticket CC that is on the list, for
-  that one case. The draft does not add it.
+- **The A4 test (owner, 2026-11-26: yes).** One T-087 reply run on an
+  `mcp-test` ticket whose only ticket-level CC is an allow-listed
+  internal mailbox records whether Freshdesk copied the CC. T-086's
+  `make smoke-send` refuses a ticket with any CC, with exactly one
+  exception, for this run:
+  - one explicit opt-in flag, `TICKET_CC=allow-listed`, accepted on the
+    reply case only; on a forward or public-note case it refuses;
+  - with it, the four CC fields (A6) taken together, lower-cased, hold
+    exactly one distinct address, that address is on the team
+    allow-list by OD-23's matching (T-081's matcher, not a second
+    parser), and it is not the requester's email (lower-cased); the
+    requester's email is on the list as always; the reply sends no `cc`
+    of its own;
+  - anything else with the flag refuses, 0 POSTs: no CC at all, two
+    distinct CCs, an off-list CC, a CC equal to the requester's email, a
+    field absent, null or not a list;
+  - without the flag, any non-empty CC field refuses, as before.
+
+  The run can reach no address outside the allow-list: the only address
+  Freshdesk could copy is one the owner put on it. The reply's own `cc`
+  input stays empty in this run and the CC is not the requester, so a
+  copy in that mailbox can only come from the ticket's CC. Rejected: a
+  flag that accepts any ticket CC (an unlisted address could receive the
+  reply); a separate script for one run (a second smoke path); leaving A4
+  unchecked (the first evidence would come from production use).
 
 Rejected by the owner: (b) list the ticket's CCs in "Not sent", and (c)
 refuse a reply when any ticket CC is off the list (one GET per reply,
@@ -265,7 +286,7 @@ copies matter.
 Rejected by this RFC: a separate `reply_cc_allow_list` key. Nobody asked
 for it, and one list of internal addresses is one thing to review.
 
-### OD-22: forward recipients — proposed
+### OD-22: forward recipients — accepted (owner, 2026-11-26)
 
 `to` and `cc` each checked address by address against the allow-list;
 `to` needs at least one address; `bcc` refused; an empty allow-list
@@ -278,7 +299,7 @@ Rejected: no cap (a forward to the whole of an allowed `@domain` list in
 one call is not C4's purpose); a cap per field (two numbers to tune for
 no gain); truncating (the user approved a list, not a prefix of it).
 
-### OD-23: address matching — proposed
+### OD-23: address matching — accepted (owner, 2026-11-26)
 
 The core parses each address and each allow-list entry itself;
 `config.ts` is unchanged.
@@ -304,7 +325,7 @@ mean exactly that address); Unicode normalisation (look-alike domains are
 the attack; refusing non-ASCII removes them); tightening `config.ts`'s
 regex (the core must check anyway, and two parsers drift).
 
-### OD-24: closed payload keys and the body — proposed
+### OD-24: closed payload keys and the body — accepted (owner, 2026-11-26)
 
 The core builds each payload from a closed key set; nothing else is sent:
 
@@ -337,7 +358,9 @@ return. Those characters can make the text the customer reads differ from
 the text the user approved, or carry text no one sees. One rule over two
 whole classes, as the core already uses for addresses
 (`src/core/write-path.ts`, `EMAIL`), not a list of code points that
-misses some. This rule is this RFC's addition to the planner's proposal.
+misses some. The rule covers control and format characters only: other
+invisible characters, such as variation selectors (`\p{Mn}`) and Hangul
+fillers (`\p{Lo}`), are not refused (Consequences, "Not covered"). This rule is this RFC's addition to the planner's proposal.
 
 **Against `add_note`:** `add_note` and `hand_off_draft` pass their body
 to Freshdesk unchanged (`src/core/write-path.ts`, `noteWrite`): a private
@@ -353,7 +376,7 @@ own, against SPEC §4's anti-goal, for formatting nobody asked for);
 attachments (C4 and C5 do not need them; a file is content no prompt
 shows).
 
-### OD-25: does `send` need `write` — proposed
+### OD-25: does `send` need `write` — accepted (owner, 2026-11-26)
 
 (a) Independent: `send` alone builds the send entries and no write
 entries; `write` alone builds no send entries.
@@ -376,7 +399,7 @@ confirm; it has no recipient input".
 
 What the owner rejected: (b) designed only, T-088 left `proposed`.
 
-### OD-27: what a send returns — proposed
+### OD-27: what a send returns — accepted (owner, 2026-11-26)
 
 - Sent: `{ sent: true, ticket_id, conversation_id }` and
   `api_calls_used`; no address, even when Freshdesk's answer echoes one
@@ -394,18 +417,18 @@ Rejected: echoing the addresses sent to (a 400's field message or the
 answer may hold the requester's or a CC's address, which then reaches the
 model and the logs of its client); a retry on 5xx (a mail sent twice).
 
-### OD-28: smoke — proposed
+### OD-28: smoke — accepted (owner, 2026-11-26)
 
 (b) A separate `make smoke-send`, never cases in `make smoke-write`: a
 send is never one flag away from a write run. Same tag and spam checks as
 smoke-write; one GET per ticket (A6); a reply or public note only when
 the requester's email is on the allow-list and the four CC fields are
-empty; a forward only to allow-listed addresses from the private team
-file; each send in two steps (mint, then confirm). Details are T-086's.
+empty, except OD-21's one A4 opt-in; a forward only to allow-listed
+addresses from the private team file; each send in two steps (mint, then confirm). Details are T-086's.
 
 Rejected: (a) cases in `smoke-write` (a typo in `CASE=` would mail).
 
-### OD-29: what a forward takes out of Freshdesk — proposed
+### OD-29: what a forward takes out of Freshdesk — accepted (owner, 2026-11-26)
 
 A forward sends the ticket's content to allow-listed internal addresses:
 that is C4's purpose, accepted. `include_original_attachments: false` is
@@ -417,7 +440,7 @@ Rejected: forwarding attachments (files no prompt shows); a forward that
 quotes nothing (Freshdesk's forward endpoint decides what it quotes,
 A5; building our own mail would be a second send path).
 
-### OD-30: where "never always allow" is written — proposed
+### OD-30: where "never always allow" is written — accepted (owner, 2026-11-26)
 
 One sentence in each send tool's description and a README section, with
 T-084; the Italian operator guide stays M4 (SPEC §11).
@@ -426,7 +449,7 @@ Rejected: README only (the model and the approval prompt never show the
 README); the server refusing to run when "always allow" is set (it cannot
 see it, threat 2).
 
-### OD-31: SPEC §13's M3 row — proposed; changed only by the owner's word
+### OD-31: SPEC §13's M3 row — accepted (owner, 2026-11-26)
 
 (b) Add M2's activity-log clause. Proposed wording for M3's "Done when":
 
@@ -440,7 +463,7 @@ The public note is added because OD-26 builds it. T-087 records both
 lines either way. Rejected: (a) the row as it is (a reply may fire a rule
 that emails, and M2 already found the activity log the way to see it).
 
-### OD-32: where the `send_id`'s key lives and who mints — proposed
+### OD-32: where the `send_id`'s key lives and who mints — accepted (owner, 2026-11-26)
 
 (b) `src/core/send-id.ts`: its own 32-byte key, made once per process in
 the module, never read from the environment or config; minted and
@@ -460,19 +483,26 @@ checking: the check would be outside the core (OD-19). Sharing
 `preview.ts`'s key from the core: the key would have to move into
 `src/core/`, a change to `categorize_tickets` that M3 does not need.
 
-### OD-33: a `send_id` confirmed twice — proposed
+### OD-33: a `send_id` confirmed twice — accepted (owner, 2026-11-26)
 
 (b) **Single use.** A `send_id` sends at most once. The core keeps an
-in-process set of spent ids: at the check, with no `await` between the
+in-process set of spent ids. A `send_id` has exactly one tag (unlike a
+`preview_id`, which has one per ticket): it is parsed whole by an
+anchored pattern, `time.nonce.tag`, and anything else is refused. The set
+holds the id's nonce, not its text, so no rewriting of a spent id's text
+that still checks can pass as unspent. At the check, with no `await` between the
 check and the reservation, a valid id not in the set is added to it,
 before any dispatch. A second confirm of that id is `validation`, "this
 `send_id` was already used; nothing was sent", nothing sent, whether the
 first is still in flight, succeeded or `may_have_been_sent`. The id is
-released (removed from the set) only when no request left the process:
-a refusal the core made itself (`http_status: null`), or an error with 0
-attempts dispatched (the limiter refused, or under 10 s left). Any result
-after a request was dispatched keeps the id spent, a Freshdesk 4xx
-included: `src/client/errors.ts` maps every 4xx but 401, 403, 404 and 429
+released (removed from the set) only when no request left the process,
+that is when the result counts 0 attempts dispatched (`src/client/http.ts`
+counts an attempt once it is handed to `fetch`): a refusal the core made
+itself, the limiter refusing, or under 10 s left. `http_status: null` is
+not that test: a timeout or a reset after the POST left is a `network`
+error with `http_status: null` and may have been sent. Any result with an
+attempt dispatched keeps the id spent, a network error and a Freshdesk
+4xx included: `src/client/errors.ts` maps every 4xx but 401, 403, 404 and 429
 to `validation`, and a 408 or 409 is not proof that nothing was sent. The
 caller can always mint a new id.
 
@@ -497,7 +527,7 @@ twice. Idempotency through Freshdesk (no idempotency key in A1 to A3).
 Reading the conversation before each send to detect a duplicate (one GET
 more per send, and a race all the same).
 
-### OD-34: a team file enabling `send` before T-087 — proposed
+### OD-34: a team file enabling `send` before T-087 — accepted (owner, 2026-11-26)
 
 (a) Procedure, as M2: no team file enables `send` against the real
 account, and no `make smoke-send` runs, before T-087's dependencies are
@@ -526,27 +556,58 @@ answers:
 - §9: the confirm row per OD-19 and OD-20; the recipients row per OD-21
   (threat 3), "Where": the write path, the list from the team file.
 - §11 real-account line: "sends only to internal mailboxes on the
-  allow-list, on `mcp-test` tickets with no ticket-level CC".
+  allow-list, on `mcp-test` tickets with no ticket-level CC, except one
+  reply run whose only ticket-level CC is an allow-listed internal
+  mailbox (A4)".
 - §13's M3 row only by the owner's word on OD-31.
 
 ### Rows this RFC governs
 
-At acceptance, T-080 to T-088's acceptance lines are re-checked against
-the answers (decompose step 6). This draft's answers change the planned
-lines in these places, to apply then:
+At acceptance (2026-11-26), T-080 to T-088's acceptance lines were
+re-checked against the answers (decompose step 6). This RFC amended the
+acceptance line of **T-082, T-083, T-084, T-085, T-086, T-087 and T-088**,
+in `docs/tasks/PLAN.md` and in each task file; T-080 and T-081 were
+re-checked and left unchanged. What changed:
 
 - T-082: the body rule of OD-24 (`\p{Cc}` and `\p{Cf}` refused but tab,
   line feed and carriage return; line breaks to `<br>`); every check at
   the mint and again at the confirm (OD-24); `to` needs at least one
   address (OD-22); the reply `cc` cap (OD-22); the release rule of OD-33
-  (a dispatched request, a 4xx included, keeps the id spent; no pruning).
+  (only 0 attempts dispatched frees the id; a network error or a 4xx
+  after dispatch keeps it spent; no pruning).
 - T-082 and T-083: "body as sent" reads "the body before escaping"
-  (OD-24); T-083: the spent set is never pruned (OD-33).
+  (OD-24); T-083: the spent set is never pruned, a `send_id` has exactly
+  one tag and the set holds its nonce (OD-33).
 - T-083, T-084, T-085 and T-088: the "Not sent" text and each send tool's
   description put the ticket id first and ask the user to check it is the
   ticket they mean (threat 1); the reply's and the public note's carry
   OD-21's CC sentence.
-- T-087: the public note in SPEC §13's wording, if the owner adopts OD-31.
+- T-086: the A4 opt-in of OD-21 (one flag, reply only, one allow-listed
+  ticket CC that is not the requester, no `cc` of the reply's own; every
+  other CC case refuses).
+- T-087: the activity-log line after a reply, a forward and a public note
+  (SPEC §13, OD-31); the A4 line becomes the result of the opt-in run
+  (whether the CC mailbox received the reply), not "not checked". By the
+  owner's word (2026-11-26, "Amend T-086 and T-087 to match"), T-086's
+  and T-087's "In scope" and T-087's "Goal" were aligned with the A4 run
+  in their task files.
+
+## The owner's decisions (2026-11-26)
+
+Given via the orchestrator on 2026-11-26:
+
+- **Every proposal accepted as written:** OD-17, OD-18, OD-19, OD-22 to
+  OD-25 and OD-27 to OD-33, including OD-33's single-use `send_id`, a
+  stated exception to OD-15's no-server-state choice.
+- **OD-34:** the procedure, plus no npm release that accepts `send` until
+  T-087 is `done`.
+- **OD-31:** SPEC §13's M3 row worded as proposed (adopted with every
+  proposal).
+- **The A4 test (OD-21's question): yes.** One T-087 reply run on an
+  `mcp-test` ticket whose only CC is an allow-listed internal mailbox,
+  recording whether Freshdesk copied the CC; T-086's smoke-send allows
+  exactly that case, with one explicit opt-in flag and the CC on the
+  allow-list (OD-21, "The A4 test"); T-086 and T-087 amended to match.
 
 ## Consequences
 
@@ -567,6 +628,11 @@ lines in these places, to apply then:
 - **Given up:** HTML formatting in replies; attachments; a team-specific
   reply CC list; resending by re-confirming.
 - **Not covered:**
+  - invisible characters in the body outside `\p{Cc}` and `\p{Cf}`
+    (variation selectors, Hangul fillers; OD-24): they could carry text
+    the approver does not see. Widening the rule, for example to
+    `\p{Default_Ignorable_Code_Point}`, is a change to the core's body
+    rule and goes through `/rfc`;
   - the content of the body, and which ticket (so which requester) a
     reply or a public note goes to (threat 1): only the approval prompt
     guards them, and it shows a ticket id, not a person;
@@ -622,3 +688,33 @@ finding; five medium, three low, all resolved in this draft.
 Findings 1 to 3 change a mechanism (`/rfc` step 5, AGENTS.md rule 9): the
 scoped round, on those three only, is in T-079's second half, after the
 owner's answers.
+
+`rfc-reviewer`, 2026-11-26, scoped round (the last, AGENTS.md rule 9) on
+findings 1 to 3's fixes and on the new A4 opt-in: two high, two low; all
+resolved by wording or by a check that adds no mechanism.
+
+9. (high, fail-open) OD-33's release test named `http_status: null`,
+   which a `network` error after the POST left also has
+   (`src/client/errors.ts`, `networkError`): the test is now 0 attempts
+   dispatched only. Wording: "no request left the process" already meant
+   this.
+10. (high, fail-open) a `preview_id` has one tag per ticket and a confirm
+    looks only at the tags it needs (`src/tools/preview.ts`); a
+    `send_id` copied in that form, its spent set keyed by text, would let
+    a spent id with a tag appended pass as unspent: a `send_id` now has
+    exactly one tag, parsed by an anchored pattern, and the set holds the
+    nonce. This pins the form of OD-20's id and what "spent" is keyed on;
+    the mechanism (HMAC, TTL, a spent set checked before dispatch) is
+    unchanged.
+11. (low) OD-24 claimed to refuse every character that carries text no
+    one sees; variation selectors and Hangul fillers are outside
+    `\p{Cc}`/`\p{Cf}`: the claim is narrowed to control and format
+    characters, and the rest is under "Not covered". Widening the rule is
+    left to the owner (a body-rule change, `/rfc`), not done in this round.
+12. (low) A4: the one ticket CC could be the requester's own address,
+    giving a false "copied": with the flag, a CC equal to the requester's
+    email refuses, and the reply sends no `cc` of its own (smoke script
+    only, no core change).
+
+Parked from the scoped round, with its other notes, in
+`docs/improvements.md`.
