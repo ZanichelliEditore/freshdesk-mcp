@@ -4,7 +4,8 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T15:40:36+01:00`
+- **Written:** `2026-11-26T15:50:21+01:00` (M4 plan line added; the rest as at
+  `2026-11-26T15:40:36+01:00`)
 - **Describes commit:** `171d6e5` (T-086: done; handoff to T-087), pushed
   to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
   https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45841679140
@@ -47,7 +48,11 @@
   and the T-087 commands say to check); two info items (parked). All four
   quotes matched in all three. No fix changed code: no scoped round.
 
-- **Proposed plan changes:** none.
+- **Proposed plan changes:** M4 decomposed 2026-11-26 (`/decompose M4`,
+  PLAN "M4"): T-090 (RFC, `.mcpb`) and T-091 (spike, owner installs a
+  throwaway bundle) `todo`, both may run while T-087 is open; T-092 to
+  T-099 `proposed`, waiting on OD-35 to OD-42 (owner) and T-090. The M3
+  next action above is unchanged.
 
 - **Open doubts:**
   - A6's CC field names unverified; a fifth CC field is not seen by the

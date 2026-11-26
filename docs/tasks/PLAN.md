@@ -22,9 +22,9 @@ Ordered task list. One task = one session (SPEC.md
 **Sizing calibration:** tasks that overflowed: 0 · tasks split after the
 fact: 0 · sessions that ran two tasks: 0 · split points set at planning and
 taken: 0 · split points set at planning and not needed: 7 (T-007, T-001, T-013, T-047, T-050, T-063, T-084) ·
-split points set at planning, pending: 20 (T-017, T-019, T-022, T-023, T-026,
+split points set at planning, pending: 21 (T-017, T-019, T-022, T-023, T-026,
 T-030, T-031, T-032, T-037, T-043, T-049, T-066, T-064, T-068, T-071, T-073, T-077, T-078,
-T-079, T-082). T-088 sized with no split point (one tool on the
+T-079, T-082, T-090). T-088 sized with no split point (one tool on the
 send wiring, its test file). A
 raised row split at planning (not after the fact): T-064 into T-064, T-068
 and T-069 (`/decompose M2`, 2026-11-25); T-068 into T-068 and T-077 when the
@@ -492,6 +492,71 @@ dispatch (OD-33).
 Order: T-079; T-080, T-081 and T-083 (any order); T-082; T-084; T-089; T-085;
 T-088; T-086; T-087. Every row leaves `make quality` green. No send code before
 T-079 is `done`.
+
+## M4 — `.mcpb`, Italian operator guide, internal team config
+
+Done when: an operator installs on a clean machine without a terminal
+(SPEC §13). Decomposed 2026-11-26 (`/decompose M4`, run by a session
+under the orchestrator, with the `planner`'s proposal). M3's build rows
+are done; T-087, the owner's M3 run on the real account, is in progress
+and is not changed by this plan.
+
+**Decompose step 4.** M4 adds no capability that writes to Freshdesk and
+no row touches the safety core (the write path, RFC
+`2026-11-25-write-safety-core` and `2026-11-26-send-safety-core`): it
+packages the existing server. The dangerous part of M4 is distribution:
+a bundle with `send` enabled, or with the internal team config baked in,
+reaching people it should not. So: the RFC (T-090) comes before any
+packaging code, because `@anthropic-ai/mcpb` is a new dependency
+(AGENTS.md rule 3; RFCs `2026-11-23-adopt-runtime-stack` and
+`2026-11-25-release-on-npm` left it to "M4, their own RFC"); every tag,
+release or distributed bundle depends on T-087 `done` (OD-34); the
+internal team config never enters a tracked file (AGENTS.md rule 2, SPEC
+§14 item 2).
+
+**Found while planning.** The README passes the export directory as
+`--export-dir` in `args`. An `.mcpb` `user_config` field left empty would
+pass `--export-dir` with an empty value, and `parseCliArgs` stops the
+start ("--export-dir needs a directory", `src/config.ts:180`). The
+manifest should pass it as `FRESHDESK_EXPORT_DIR`, which `loadConfig`
+already treats as unset when empty (`src/config.ts:236-243`). T-090
+decides; T-091 checks what Claude Desktop actually passes.
+
+**Owner actions for M4:** answer OD-35 to OD-42 (T-090's RFC is where
+they are recorded); finish T-087; run T-091's install checks in Claude
+Desktop (a build session cannot); later, T-096 and T-099.
+
+**Owner decisions for M4** (numbering continues the M3 table). Open: no
+row that depends on them is sized.
+
+| OD | Question | Governs | Options | Proposal | Answer |
+|---|---|---|---|---|---|
+| OD-35 | The `.mcpb` tool | T-090, T-092 | (a) `@anthropic-ai/mcpb` as a pinned devDependency; (b) `npx @anthropic-ai/mcpb@<exact>` in CI only, no lock entry; (c) no tool: the zip and manifest written by a script | (a): local and CI builds use the same locked version, and `npm audit` sees it | open |
+| OD-36 | Signing the bundle | T-090, T-094, T-097 | (a) unsigned; (b) `mcpb sign` self-signed; (c) an organisation code-signing certificate (IT) | (a) for 1.0.0, with the warning Claude Desktop shows explained in the guide and a SHA-256 in the release notes; (c) revisited with IT | open |
+| OD-37 | The internal bundle (team config baked in, SPEC §10): who builds it, where it is shared | T-095, T-099 | (a) a maintainer runs `make mcpb-internal` from the private file and puts the bundle on an internal drive; (b) a private repository's CI builds it; (c) no internal bundle: operators get the public bundle and pick the team file in the install form | (a): no private config near public CI, and operators type only domain and key | open |
+| OD-38 | The Italian operator guide: where it lives, what it may name | T-097 | (a) a generic guide in the repo (`docs/guida-operatore.md`), Zanichelli specifics (domain, where to get the bundle) on an internal page; (b) the whole guide internal; (c) in the repo, naming Zanichelli | (a): SPEC §1 keeps the repo publishable; the repo copy names no domain, allow-list or field meaning | open |
+| OD-39 | Where the Zanichelli team config lives (SPEC §12: "chosen at M4") | T-095, T-096 | (a) an internal drive next to the bundle; (b) a private git repository; (c) only on the maintainer's machine (`docs/private/`, gitignored) | (b): history and review for a file that sets the allow-list and the toolsets | open |
+| OD-40 | Toolsets the internal config enables for operators | T-096, T-097, T-099 | (a) `core`; (b) `core` and `write`; (c) all three | (a) at first; `write` by a later owner word; `send` not before T-087 `done` (OD-34) and the DPO (SPEC §12) | open |
+| OD-41 | DPO validation before M4's operator install | T-098, T-099 | (a) required before T-099; (b) required only before a rollout beyond a named pilot operator | (a): SPEC §12 says "before rollout beyond the builders", and an operator is beyond the builders | open |
+| OD-42 | Claude Desktop's bundled Node against `engines >=22.19` (RFC `2026-11-23-adopt-runtime-stack`) | T-090, T-092 | (a) keep the floor if T-091 finds the bundled Node meets it; (b) require a system Node (a terminal step, against M4's acceptance); (c) lower the floor (amends the runtime RFC) | (a); decided after T-091 | open |
+
+| Id | Title | Type | Depends | Acceptance | Status |
+|---|---|---|---|---|---|
+| T-090 | RFC: `.mcpb` packaging, tooling, signing and the internal bundle | plan | none (may run while T-087 is open) | A new RFC is in `docs/rfc/active/` after `make rfc-sync`, Status Active by the owner's word (no word in session: stop at Proposed, no code); it answers OD-35 to OD-42 with the alternatives rejected, the `user_config` mapping (domain, key `sensitive`, team file, export directory by env, not `args`) and T-091's findings if done (else OD-42 stated open, T-092 waiting on T-091); one dated "extended by" line in `2026-11-25-release-on-npm`; `rfc-reviewer` findings resolved (AGENTS.md rule 9); at acceptance the `proposed` rows T-092 to T-099 re-checked and handed to a `/decompose M4` amendment to size; `make quality` green. Split point: draft and full review round first, stopping at Proposed; owner's answers and acceptance second. | todo (2026-11-26) |
+| T-091 | Spike: Claude Desktop facts with a throwaway bundle (owner installs) | spike | none | "Done" holds dated yes/no lines, from a bundle built in the scratchpad with `zip` (no new dependency, nothing tracked) whose entry point logs only shapes, never values: the Node version Claude Desktop runs it on and whether it meets `>=22.19`; what an unset optional `user_config` string, file and directory field arrives as (absent, empty string, or literal `${user_config.<name>}`); whether a `sensitive` field is kept out of plain-text config files; whether a `file` and a `directory` field work; the Claude Desktop version and OS; no real-account call; `make quality` green. | todo (2026-11-26) |
+| T-092 | `manifest.json` and `make mcpb` (public bundle) | build | T-090, T-091 | proposed: a test that the manifest's version equals `package.json`'s, the key is `sensitive`, the export directory goes by env, no account value; `make mcpb` writes a bundle holding `dist/` and production `node_modules` only. Split point: manifest and test first, target second. | proposed (2026-11-26) |
+| T-093 | Unset `user_config` reaches the server as unset | build | T-091 | proposed, only if T-091 finds a value `loadConfig` does not already treat as unset (e.g. a literal `${user_config.`): a test that reproduces it, then the fix in `src/config.ts`; dropped if T-091 finds empty strings or absent. | proposed (2026-11-26) |
+| T-094 | `release.yml` builds and attaches the `.mcpb` to the GitHub release | build | T-092 | proposed: `tools/checks/test_release_workflow.py` asserts the new job (every `uses:` by SHA, `contents: write` in that job only); a `workflow_dispatch` run uploads the bundle as an artifact, green. | proposed (2026-11-26) |
+| T-095 | `make mcpb-internal TEAM_CONFIG=<path>` | build | T-092, OD-37, OD-39 | proposed: refuses a path inside the repo, validates the file with the server's schema before packing, writes only to a gitignored directory, the bundle reading its own team file; the install form asks domain and key only; the `account-patterns` hook passes. | proposed (2026-11-26) |
+| T-096 | Zanichelli team config in its internal place (owner action) | spike | T-090, OD-39, OD-40 | proposed: a dated line that `make smoke` passes with `FRESHDESK_MCP_CONFIG` on the internal file, its `toolsets` as OD-40 says; the place named by slug only. | proposed (2026-11-26) |
+| T-097 | Italian operator guide | build | T-090, OD-38 | proposed: a test that every tool of the toolsets the guide covers is named in it; the guide covers installing the bundle, getting the API key, the signing warning (OD-36) and never "consenti sempre" for a `send` tool. Split point: install and key first, tools second. | proposed (2026-11-26) |
+| T-098 | 1.0.0: version, CHANGELOG, tag (owner pushes the tag) | build | T-087 `done` (OD-34), T-093 (or dropped), T-094, T-097, OD-41 | proposed: `tools/checks/release_version.py v1.0.0` passes; after the owner's tag the release run is green and the GitHub release carries the bundle. | proposed (2026-11-26) |
+| T-099 | M4 acceptance: an operator installs on a clean machine (owner and an operator) | spike | T-095, T-096, T-097, T-098 | proposed: "Done" lists dated yes lines: no terminal opened and no Node installed; double-click install; only domain and key typed; the tools listed; one `core` read worked; the key not in a plain-text file. | proposed (2026-11-26) |
+
+Order: T-090 and T-091 (any order, both may run while T-087 is open);
+then a `/decompose M4` amendment sizes T-092 to T-099 on the RFC's
+answers. No packaging code before T-090 is `done`; no tag, release or
+distributed bundle before T-087 is `done`.
 
 ## Wireframes
 
