@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T13:19:41+01:00`
-- **Describes commit:** `<hash>` (T-080: done; handoff to T-081).
-  **CI:** filled by the stamp commit.
+- **Describes commit:** `7c5bdca` (T-080: done; handoff to T-081),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45818863560
+  (workflow `quality`, ran on `7c5bdca`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-080 `done (2026-11-26)`: `postReply` and
   `postForward` in `src/core/resources.ts`, commits `8457bed` (resources
