@@ -4,25 +4,28 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T14:45:52+01:00`
-- **Describes commit:** `82c8242` (T-084: done; handoff to T-085),
-  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45832672901
-  (workflow `quality`, ran on `82c8242`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T14:53:41+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-084 `done (2026-11-26)`: `reply_to_ticket` in
-  `src/tools/toolsets/send/reply-to-ticket.ts`, the `send` wiring in
-  `src/tools/toolsets/send/index.ts`, built by `src/tools/context.ts` from
-  the write path's `sends`; `send` no longer a `ConfigError`. Commits
-  `1ef27e0` (build), `4cc147b` (review fixes), then this handoff commit.
-  See `docs/tasks/T-084-reply-to-ticket.md` "Done". Started from `b6aa9fb`
-  (owner commit after the T-082 stamp `dd95fdd`, `docs/improvements.md`
-  only: the `kb_write` proposal; not a mismatch).
+- **Current task:** T-076 `done (2026-11-26)`: M2 acceptance on `mcp-test`
+  tickets, recorded from the owner's `make smoke-write` runs and activity
+  log reads (values in `docs/private/account-facts.md`, gitignored). See
+  `docs/tasks/T-076-m2-real-account-run.md` "Done". Commits `6c31811`,
+  then this handoff commit. Started from `f06a917`. Taken ahead of T-085
+  by the owner's choice (2026-11-26).
+  - Owner decision, 2026-11-26: the overnight check on the earlier
+    `mcp-test` ticket (created 2026-11-25, left waiting the night of
+    2026-11-25 to 2026-11-26; its activity log showed no automation or
+    time trigger acted) is accepted as the time-trigger evidence for all of
+    M2; the six T-076 tickets created 2026-11-26 get no overnight check of
+    their own, and T-076 closed on 2026-11-26.
+  - Owner's call, 2026-11-26: Freshdesk's email behaviour is out of scope
+    for now.
+  - SPEC §13's M2 row already held the settled wording; unchanged.
 
 - **Next action:** `/pickup` T-085 (`forward_ticket`; depends on T-084,
-  `done`). T-076 (owner action) stays first in PLAN order and is not a
-  session's to take.
+  `done`).
 
 - **Read before anything else:** `docs/tasks/T-085-forward-ticket.md`;
   `src/tools/toolsets/send/reply-to-ticket.ts` (`sendFailed`: the rule for
@@ -31,45 +34,40 @@
   `eslint.tool-imports.json`; the `4cc147b` entry in `docs/improvements.md`
   (drop `retry_after_s` on a spent id's `rate_limited`).
 
-- **Owner, open:** T-076 `todo (2026-11-25)`: the overnight check that no
-  time trigger acted on the `mcp-test` tickets, due 2026-11-27. OD-34: no
-  npm release accepting `send` (any tag from `1ef27e0` on) until T-087 is
-  `done`.
+- **Owner, open:** T-087 now waits only on T-086 (T-076 is `done`). OD-34:
+  no npm release accepting `send` (any tag from `1ef27e0` on) until T-087
+  is `done`.
 
-- **Reviews:**
-  - Full round, R1 = `1ef27e0`, range `b6aa9fb..1ef27e0`: code-reviewer
-    no fail-open; medium: send imported a write module for
-    `withoutAddresses` (fixed: moved to `src/tools/format.ts`); low:
-    description's ticket check was the second sentence (fixed, first, test
-    `startsWith`); low: a 429 or 4xx after dispatch did not say the
-    `send_id` is spent (fixed, all dispatched failures `retryable: false`);
-    low: network `may_have_been_sent` unit-tested only (fixed, MockAgent
-    test); nit: overview blank lines (fixed). security-reviewer: no high or
-    medium, no fail-open; low: `rate_limited` after dispatch (fixed, as
-    above); info: T4 imports write (fixed); info: residual "always allow"
-    risk (stated in the RFC). compliance-reviewer: Wireframes `none`.
-  - Scoped round, range `1ef27e0..4cc147b`: code-reviewer no blocker, 3
-    parkable; security-reviewer no blocker, 2 parkable; compliance `none`.
-    All parked in `docs/improvements.md` (`4cc147b`). The handoff commit's
-    one test change (the zero-width case written with
-    `String.fromCodePoint`, same string) is not reviewed again.
-  - All quotes of base, HEAD, stat and trailer matched in both rounds. The
-    full-round code-reviewer made one read-only `git grep` call (it said
-    so).
+- **Reviews:** full round, R1 = `6c31811`, range `f06a917..6c31811`.
+  compliance-reviewer: Wireframes `none`, nothing to check.
+  security-reviewer: no findings; no account value, core not weakened.
+  code-reviewer: first run misquoted the `--stat` line (dropped
+  "changed"): stale diff file, red gate, dispatched again; the rerun
+  quoted all four correctly. Its findings: medium, C6's yes rests on a
+  no-op assignment (fixed: caveat on the yes line; owner's judgment in
+  "Open doubts"); medium, hook and `make quality` not recorded in Done
+  (fixed); low, Done named HANDOFF not in the range (fixed: names the
+  handoff commit); low, SPEC §13 wording unverified (checked in session:
+  `SPEC.md` M2 row holds the settled wording). All fixes are wording in
+  the task file, no mechanism changed: no scoped round. All other quotes
+  matched in every run.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - `may_have_been_sent` is a boolean key on the error, the code kept;
-    T-085 and T-088 should follow `sendFailed`.
-  - A 408 or 409 after dispatch reports "send_id spent", not
-    `may_have_been_sent` (OD-27's list), though the RFC says such a 4xx is
-    no proof nothing was sent.
+  - T-076's C6: the assignment PUT set the group and agent the ticket
+    already had, so it shows the PUT accepted, not an assignment that
+    changed a value; and no assignment-triggered automation had a change
+    to fire on. Owner to judge whether one more C6 run with a different
+    assignee is wanted.
+  - Carried from T-084: `may_have_been_sent` is a boolean key on the
+    error, T-085 and T-088 should follow `sendFailed`; a 408 or 409 after
+    dispatch reports "send_id spent", not `may_have_been_sent`.
   - Carried from T-082: CRLF/CR/LF each one `<br>`; U+2028/U+2029 neither
     refused nor `<br>` (owner, `/rfc`); unknown keys on a send entry
     refused; A1 to A6 and the four CC field names unverified (T-087);
     OD-34's release rule has no acceptance line; the older carried doubts
-    (T-040, T-067, T-072 to T-074, T-076, T-077) as in `4efcc70`'s HANDOFF.
+    (T-040, T-067, T-072 to T-074, T-077) as in `4efcc70`'s HANDOFF.
 
 - **Dead ends:** none.
 

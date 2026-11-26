@@ -48,7 +48,8 @@ names and values only in `docs/private/account-facts.md` ("T-076 runs
 - C4 internal: yes (2026-11-26), one private note written, notified 1.
 - C5 update: yes (2026-11-26), status changed.
 - C6: yes (2026-11-26), private note written and assignment PUT answered
-  200, notified 1 (see "Open doubts").
+  200, notified 1; the assignment set values the ticket already had, so it
+  changed nothing (see "Open doubts").
 - C8 (new tickets): yes (2026-11-26), written 1.
 - No automation rule acted (2026-11-26): the activity log, read after each
   kind of write (C1, C8, C4, C5, C6), shows only the API user's own
@@ -64,7 +65,10 @@ names and values only in `docs/private/account-facts.md` ("T-076 runs
   notification email was received for C4, C5 or C6.
 - SPEC §13's M2 row already holds the settled wording (2026-11-26);
   unchanged.
-- No code change; this file, PLAN and HANDOFF only.
+- No code change: `6c31811` (this file, PLAN's T-076 row), then the
+  handoff commit (HANDOFF, this file's review fixes).
+- The `account-patterns` commit hook passed on `6c31811`; `make quality`
+  exit 0 (counts in HANDOFF's "Checkpoint").
 
 ## Dead ends
 none
