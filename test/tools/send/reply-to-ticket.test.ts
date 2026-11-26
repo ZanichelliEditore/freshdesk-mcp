@@ -394,6 +394,45 @@ describe("reply_to_ticket: a failure after the send", () => {
     expect(error.errors?.[0]?.message).toContain("is not a valid email");
     expect(text(result)).not.toMatch(/@/);
   });
+
+  // T-089 (RFC 2026-11-26-send-safety-core, OD-27 as amended 2026-11-26).
+  it("a 408 is may_have_been_sent: a request timeout is no proof nothing was sent", async () => {
+    const s = await session();
+    const sendId = await mint(s);
+    replyPost({ description: "Request Timeout" }, 408);
+
+    const error = failure(
+      await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId }),
+    );
+
+    expect(error).toMatchObject({
+      http_status: 408,
+      retryable: false,
+      may_have_been_sent: true,
+    });
+    expect(error.message).toMatch(/check the ticket's conversation before sending again/);
+    expect(error.message).toMatch(/This send_id is spent/);
+    expect(sent()).toEqual([`POST ${REPLY}`]);
+  });
+
+  it("a 409 is Freshdesk's refusal: not may_have_been_sent, the send_id spent", async () => {
+    const s = await session();
+    const sendId = await mint(s);
+    replyPost({ description: "Conflict" }, 409);
+
+    const error = failure(
+      await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId }),
+    );
+
+    expect(error).toMatchObject({ code: "validation", http_status: 409, retryable: false });
+    expect(error.may_have_been_sent).toBeUndefined();
+    expect(error.message).toMatch(/This send_id is spent/);
+    expect(sent()).toEqual([`POST ${REPLY}`]);
+
+    // Spent: a second confirm of the same send_id sends nothing.
+    await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId });
+    expect(sent()).toEqual([`POST ${REPLY}`]);
+  });
 });
 
 describe("reply_to_ticket: sendFailed", () => {
@@ -430,6 +469,21 @@ describe("reply_to_ticket: sendFailed", () => {
     expect(result.error).toMatchObject({ code: "rate_limited", retryable: false });
     expect(result.error.may_have_been_sent).toBeUndefined();
     expect(result.error.message).toMatch(/This send_id is spent/);
+  });
+
+  it("a 408 with no attempt dispatched is passed on; after a dispatch it is may_have_been_sent", () => {
+    const timeout = {
+      code: "validation" as const,
+      http_status: 408,
+      message: "Freshdesk refused the request (HTTP 408).",
+      retryable: false,
+    };
+    expect(sendFailed(timeout, 0).error).toEqual(timeout);
+    expect(sendFailed(timeout, 1).error).toMatchObject({
+      http_status: 408,
+      retryable: false,
+      may_have_been_sent: true,
+    });
   });
 
   it("replaces an address in the message of a failure", async () => {

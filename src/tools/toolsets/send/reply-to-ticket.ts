@@ -28,8 +28,10 @@
 //     core keeps the `send_id` spent (OD-33), so the error is `retryable:
 //     false` and says to start over without `confirm`; a `server` or
 //     `network` error (a 5xx, a timeout, a 3xx, an answer of another shape)
-//     is also `may_have_been_sent: true` and says to check the ticket's
-//     conversation before sending again (OD-27).
+//     or a 408 is also `may_have_been_sent: true` and says to check the
+//     ticket's conversation before sending again (OD-27; the 408 by the
+//     owner's amendment of 2026-11-26, T-089). A 409, as any other 4xx, is
+//     Freshdesk's refusal: not `may_have_been_sent`.
 //   - One deadline, CALL_DEADLINE_MS from the call's start; the client starts
 //     no write with under 10 s of it left.
 
@@ -90,7 +92,9 @@ export function sendFailed(
   if (attempts === 0) return { ok: false, error: shown };
   const again =
     "This send_id is spent: to send again, start over without confirm, which gives a new send_id.";
-  if (shown.code !== "server" && shown.code !== "network") {
+  const unknownOutcome =
+    shown.code === "server" || shown.code === "network" || shown.http_status === 408;
+  if (!unknownOutcome) {
     return {
       ok: false,
       error: { ...shown, retryable: false, message: `${shown.message} ${again}` },
