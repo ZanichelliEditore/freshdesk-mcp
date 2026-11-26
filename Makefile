@@ -4,7 +4,7 @@ ifneq ($(filter 0 1 2 3,$(firstword $(subst ., ,$(MAKE_VERSION)))),)
 $(error GNU Make 4 or later is required, this is $(MAKE_VERSION). On macOS: brew install make, then put its gnubin directory first in PATH, e.g. export PATH="$$(brew --prefix make)/libexec/gnubin:$$PATH", or run gmake instead of make)
 endif
 
-.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core smoke-order-probe account-patterns-range
+.PHONY: help install bootstrap lint format format-check typecheck test build quality rfc-sync improvement smoke smoke-probes smoke-date-probes smoke-core smoke-order-probe smoke-write account-patterns-range
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /  /'
@@ -71,6 +71,16 @@ smoke-order-probe: ## T-063's GET-only probe of search's order on one UTC day (o
 	npx tsc -p tsconfig.smoke.json
 	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
 	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --order --day "$${DAY:-}"
+
+# CASE, TICKETS, FIELDS and NOTIFY reach the shell unexpanded, as variables: nothing in them runs.
+smoke-write: export override CASE := $(value CASE)
+smoke-write: export override TICKETS := $(value TICKETS)
+smoke-write: export override FIELDS := $(value FIELDS)
+smoke-write: export override NOTIFY := $(value NOTIFY)
+smoke-write: ## T-075's writes through the write path, on mcp-test tickets only (owner runs it; same env as the server, write enabled; CASE=C1|C4|C5|C6|C8 TICKETS=<id>[,<id>] FIELDS='<json>' NOTIFY=<agent id>[,<id>]): yes/no and counts, no names or ids
+	npx tsc -p tsconfig.smoke.json
+	printf '{"type":"module"}\n' > $(SMOKE_OUT)/package.json
+	node --no-experimental-detect-module $(SMOKE_OUT)/scripts/smoke/cli.js --write --case "$${CASE:-}" --tickets "$${TICKETS:-}" --fields "$${FIELDS:-}" --notify "$${NOTIFY:-}"
 
 # RANGE reaches the shell unexpanded, as a variable: nothing in it runs.
 account-patterns-range: export override RANGE := $(value RANGE)

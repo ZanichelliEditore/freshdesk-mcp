@@ -78,6 +78,7 @@ class NewMakeRuns(unittest.TestCase):
                 ]
                 self.assertIn("quality", names)
                 self.assertIn("smoke-core", names)
+                self.assertIn("smoke-write", names)
                 for word in FIX_WORDS:
                     self.assertNotIn(word, result.stdout)
 

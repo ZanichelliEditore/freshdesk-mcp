@@ -7,15 +7,25 @@
 // T-055's date probes; `--core`, T-039's run of every `core` tool, its period
 // the last `--days N` days (7 when absent); `--order`, T-063's order probe of
 // search on the UTC day `--day YYYY-MM-DD` (yesterday when absent or empty).
+// `--write` runs T-075's write smoke (./write.ts) instead, the case and its
+// arguments from `--case`, `--tickets`, `--fields` and `--notify`: through
+// the write path built from the same configuration as the server, not
+// through the smoke's GET-only client.
 
 import { Agent } from "undici";
 import { main } from "./smoke.js";
+import { runWrite } from "./write.js";
 
 const agent = new Agent();
 const argv = process.argv;
-// The mode is read from the flags only: a value given to --day or --days
-// (`DAY=--core`) never picks another run.
-const flags = argv.filter((_, i) => argv[i - 1] !== "--day" && argv[i - 1] !== "--days");
+// The mode is read from the flags only: a value given to an option that
+// takes one (`DAY=--core`, `FIELDS=--write`) never picks another run.
+const VALUED = ["--day", "--days", "--case", "--tickets", "--fields", "--notify"];
+const flags = argv.filter((_, i) => !VALUED.includes(argv[i - 1] ?? ""));
+const valueOf = (name: string) => {
+  const at = argv.indexOf(name);
+  return at === -1 ? undefined : (argv[at + 1] ?? "");
+};
 const mode = flags.includes("--core")
   ? "core"
   : flags.includes("--order")
@@ -29,13 +39,18 @@ const at = argv.indexOf("--days");
 const days = at === -1 ? undefined : (argv[at + 1] ?? "");
 const dayAt = argv.indexOf("--day");
 const day = dayAt === -1 ? undefined : (argv[dayAt + 1] ?? "");
-process.exitCode = await main(
-  process.env,
-  agent,
-  (line) => {
-    process.stdout.write(`${line}\n`);
-  },
-  mode,
-  { ...(days === undefined ? {} : { days }), ...(day === undefined ? {} : { day }) },
-);
+const out = (line: string) => {
+  process.stdout.write(`${line}\n`);
+};
+process.exitCode = flags.includes("--write")
+  ? await runWrite(process.env, agent, out, {
+      case: valueOf("--case"),
+      tickets: valueOf("--tickets"),
+      fields: valueOf("--fields"),
+      notify: valueOf("--notify"),
+    })
+  : await main(process.env, agent, out, mode, {
+      ...(days === undefined ? {} : { days }),
+      ...(day === undefined ? {} : { day }),
+    });
 await agent.close().catch(() => undefined);
