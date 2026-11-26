@@ -16,14 +16,18 @@ const ITEMS: PreviewItem[] = [
   { ticket_id: 7, fields: { Category: "Access", Product: ["web", "app"] } },
   { ticket_id: 4242, fields: { Category: null, Urgent: true, Score: 3 } },
 ];
-const T0 = new Date("2026-11-26T10:00:00.000Z");
+/** The mint time: milliseconds on the process's monotonic clock. */
+const T0 = 5_000_000;
+/** Sets the monotonic clock (`performance.now()`) the module reads. */
+function setClock(ms: number): void {
+  vi.spyOn(performance, "now").mockReturnValue(ms);
+}
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(T0);
+  setClock(T0);
 });
 afterEach(() => {
-  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function minted(items: readonly PreviewItem[] = ITEMS, tool = TOOL): string {
@@ -96,7 +100,7 @@ describe("mintPreviewId / checkPreviewId: what checks", () => {
   it("no server state: a repeat within 15 minutes also checks", () => {
     const id = minted();
     expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
-    vi.setSystemTime(T0.getTime() + 60_000);
+    setClock(T0 + 60_000);
     expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
     expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toEqual({ ok: true });
     expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toEqual({ ok: true });
@@ -174,7 +178,7 @@ describe("checkPreviewId: what is refused (validation, http_status null, id not 
   it("an edited mint time, later or earlier, still within 15 minutes of now", () => {
     const id = minted();
     const [time, ...rest] = id.split(".");
-    vi.setSystemTime(T0.getTime() + 60_000);
+    setClock(T0 + 60_000);
     for (const delta of [1, 1000, 60_000, -1, -1000]) {
       refusedWithoutQuoting([String(Number(time) + delta), ...rest].join("."), ITEMS);
     }
@@ -219,21 +223,37 @@ describe("checkPreviewId: what is refused (validation, http_status null, id not 
 
   it("an id older than 15 minutes; one exactly 15 minutes old still checks", () => {
     const id = minted();
-    vi.setSystemTime(T0.getTime() + PREVIEW_TTL_MS);
+    setClock(T0 + PREVIEW_TTL_MS);
     expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
-    vi.setSystemTime(T0.getTime() + PREVIEW_TTL_MS + 1);
+    setClock(T0 + PREVIEW_TTL_MS + 1);
     const error = refusedWithoutQuoting(id, ITEMS);
     expect(error.message).toContain("15 minutes");
     refusedWithoutQuoting(id, [ITEMS[0]!]);
+  });
+
+  it("the mint time is the monotonic clock's whole millisecond; the wall clock does not count", () => {
+    setClock(T0 + 0.9);
+    const id = minted();
+    expect(id.split(".")[0]).toBe(String(T0));
+    // A wall clock set back (or forward) changes nothing.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2020-01-01T00:00:00.000Z"));
+    setClock(T0 + PREVIEW_TTL_MS);
+    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
+    vi.setSystemTime(new Date("2040-01-01T00:00:00.000Z"));
+    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
+    setClock(T0 + PREVIEW_TTL_MS + 0.5);
+    refusedWithoutQuoting(id, ITEMS);
+    vi.useRealTimers();
   });
 
   it("PREVIEW_TTL_MS is 15 minutes", () => {
     expect(PREVIEW_TTL_MS).toBe(15 * 60 * 1000);
   });
 
-  it("an id from the future (the clock went back) is refused", () => {
+  it("an id whose mint time is ahead of the clock is refused", () => {
     const id = minted();
-    vi.setSystemTime(T0.getTime() - 1);
+    setClock(T0 - 1);
     refusedWithoutQuoting(id, ITEMS);
   });
 
@@ -254,6 +274,39 @@ describe("checkPreviewId: what is refused (validation, http_status null, id not 
     ["fields that are null", [{ ticket_id: 101, fields: null }]],
     ["fields that are not JSON", [{ ticket_id: 101, fields: { Category: new Date(0) } }]],
     ["a value that is NaN", [{ ticket_id: 101, fields: { Score: Number.NaN } }]],
+    [
+      "an item whose getter throws",
+      [
+        Object.defineProperty({ fields: {} }, "ticket_id", {
+          enumerable: true,
+          get() {
+            throw new Error("boom");
+          },
+        }),
+      ],
+    ],
+    [
+      "a Proxy list that throws",
+      new Proxy([ITEMS[0]], {
+        get() {
+          throw new Error("boom");
+        },
+      }),
+    ],
+    [
+      "fields with a throwing getter",
+      [
+        {
+          ticket_id: 101,
+          fields: Object.defineProperty({}, "Category", {
+            enumerable: true,
+            get() {
+              throw new Error("boom");
+            },
+          }),
+        },
+      ],
+    ],
   ])("items given by a cast: %s", (_label, items) => {
     refusedWithoutQuoting(minted(), items as PreviewItem[]);
   });
@@ -290,6 +343,14 @@ describe("mintPreviewId: what is refused", () => {
     ["fields missing", [{ ticket_id: 101 }]],
     ["fields that are not JSON", [{ ticket_id: 101, fields: { At: new Map() } }]],
     ["a value that is Infinity", [{ ticket_id: 101, fields: { Score: Number.POSITIVE_INFINITY } }]],
+    [
+      "a Proxy list that throws",
+      new Proxy([], {
+        get() {
+          throw new Error("boom");
+        },
+      }),
+    ],
   ])("items given by a cast: %s", (_label, items) => {
     refusal(mintPreviewId(TOOL, items as PreviewItem[]));
   });

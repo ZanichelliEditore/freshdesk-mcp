@@ -18,8 +18,11 @@
 //     `timingSafeEqual`); the id's other tags are not looked at. A ticket
 //     added, a field changed, dropped or added, another tool's id, an edited
 //     id or another process's id matches no tag and is refused.
-//   - Valid 15 minutes from the mint time, the end included; a mint time in
-//     the future (the clock went back) is refused. The tickets are not read
+//   - The mint time is this process's monotonic clock (`performance.now()`,
+//     whole milliseconds since the process began): the key dies with the
+//     process too, and a wall clock set back cannot stretch the 15 minutes.
+//   - Valid 15 minutes from the mint time, the end included; a mint time
+//     ahead of the clock is refused. The tickets are not read
 //     again at confirm (OD-15). With no server state the check cannot tell
 //     which tickets a confirm already wrote: a repeat confirm within the
 //     15 minutes checks again and re-sends identical values.
@@ -27,7 +30,8 @@
 //     truncated; no items and a ticket named twice are refused too.
 //   - Every refusal is a `validation` error with `http_status: null`, and no
 //     message quotes the id. The items and the id are model-supplied: a value
-//     of any other shape (a cast) is refused, not thrown.
+//     of any other shape (a cast, a throwing getter or Proxy included) is
+//     refused, not thrown.
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { FreshdeskError } from "../client/errors.js";
@@ -66,9 +70,9 @@ interface Entry {
 
 /** A preview id for `items` under `tool`, minted now. */
 export function mintPreviewId(tool: string, items: readonly PreviewItem[]): MintResult {
-  const read = readItems(items, "Not previewed");
+  const read = readItems(items, false);
   if (!read.ok) return read;
-  const time = Date.now();
+  const time = Math.floor(performance.now());
   const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const tags = read.entries.map((entry) => tag(tool, time, nonce, entry)).join("");
   return { ok: true, preview_id: `${time}.${nonce}.${tags}` };
@@ -84,15 +88,15 @@ export function checkPreviewId(
   previewId: unknown,
   items: readonly PreviewItem[],
 ): CheckResult {
-  const read = readItems(items, "Not applied");
+  const read = readItems(items, true);
   if (!read.ok) return read;
   if (typeof previewId !== "string" || previewId.length > PREVIEW_ID_MAX_LENGTH) {
-    return refuse("Not applied", "the preview_id is not one this server gave");
+    return refuse("the preview_id is not one this server gave", true);
   }
   const match = ID_FORM.exec(previewId);
   const time = Number(match?.[1]);
   if (match === null || !Number.isSafeInteger(time)) {
-    return refuse("Not applied", "the preview_id is not one this server gave");
+    return refuse("the preview_id is not one this server gave", true);
   }
   const nonce = match[2]!;
   const given = match[3]!;
@@ -108,16 +112,14 @@ export function checkPreviewId(
     }
     if (!found) {
       return refuse(
-        "Not applied",
         "the preview_id does not cover these tickets with these fields (a ticket added or a field changed since the preview, another tool's preview, or a server restart)",
+        true,
       );
     }
   }
-  const age = Date.now() - time;
-  if (age < 0) return refuse("Not applied", "the preview_id is not one this server gave");
-  if (age > PREVIEW_TTL_MS) {
-    return refuse("Not applied", "the preview_id is older than 15 minutes");
-  }
+  const age = performance.now() - time;
+  if (age < 0) return refuse("the preview_id's mint time is ahead of this server's clock", true);
+  if (age > PREVIEW_TTL_MS) return refuse("the preview_id is older than 15 minutes", true);
   return { ok: true };
 }
 
@@ -130,33 +132,42 @@ function tag(tool: string, time: number, nonce: string, entry: Entry): string {
     .toString("base64url");
 }
 
+/** `confirm`: the check's refusals, which say to preview again. Anything that throws is refused. */
 function readItems(
   items: unknown,
-  prefix: string,
+  confirm: boolean,
 ): { ok: true; entries: Entry[] } | { ok: false; error: FreshdeskError } {
-  if (!Array.isArray(items)) return refuse(prefix, "the tickets are not a list");
-  if (items.length === 0) return refuse(prefix, "no tickets are named");
+  try {
+    return readEntries(items, confirm);
+  } catch {
+    return refuse("the tickets are not JSON", confirm);
+  }
+}
+
+function readEntries(
+  items: unknown,
+  confirm: boolean,
+): { ok: true; entries: Entry[] } | { ok: false; error: FreshdeskError } {
+  if (!Array.isArray(items)) return refuse("the tickets are not a list", confirm);
+  if (items.length === 0) return refuse("no tickets are named", confirm);
   if (items.length > PREVIEW_CAP) {
-    return refuse(prefix, `${items.length} tickets are over the cap of ${PREVIEW_CAP} a call`);
+    return refuse(`${items.length} tickets are over the cap of ${PREVIEW_CAP} a call`, confirm);
   }
   const seen = new Set<number>();
   const entries: Entry[] = [];
   for (const item of items as unknown[]) {
-    if (!isPlainObject(item)) return refuse(prefix, "a ticket is not an object");
+    if (!isPlainObject(item)) return refuse("a ticket is not an object", confirm);
     const ticketId = item.ticket_id;
     if (!Number.isSafeInteger(ticketId) || (ticketId as number) < 1) {
-      return refuse(prefix, "a ticket id is not a whole number, 1 or more");
+      return refuse("a ticket id is not a whole number, 1 or more", confirm);
     }
-    if (seen.has(ticketId as number)) return refuse(prefix, "a ticket is named twice");
+    if (seen.has(ticketId as number)) return refuse("a ticket is named twice", confirm);
     seen.add(ticketId as number);
-    if (!isPlainObject(item.fields)) return refuse(prefix, "a ticket's fields are not an object");
-    let fieldsText: string;
-    try {
-      fieldsText = canonical(item.fields);
-    } catch {
-      return refuse(prefix, "a ticket's fields are not JSON");
+    if (!isPlainObject(item.fields)) {
+      return refuse("a ticket's fields are not an object", confirm);
     }
-    entries.push({ ticketId: ticketId as number, fieldsText });
+    // `canonical` throws a TypeError for a value that is not JSON: refused by readItems.
+    entries.push({ ticketId: ticketId as number, fieldsText: canonical(item.fields) });
   }
   return { ok: true, entries };
 }
@@ -167,16 +178,16 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-function refuse(prefix: string, why: string): { ok: false; error: FreshdeskError } {
+/** `confirm`: refused at the check (not applied), else at the mint (not previewed). */
+function refuse(why: string, confirm: boolean): { ok: false; error: FreshdeskError } {
   return {
     ok: false,
     error: {
       code: "validation",
       http_status: null,
-      message:
-        prefix === "Not applied"
-          ? `${prefix}: ${why}. Call again without confirm to preview again.`
-          : `${prefix}: ${why}.`,
+      message: confirm
+        ? `Not applied: ${why}. Call again without confirm to preview again.`
+        : `Not previewed: ${why}.`,
       retryable: false,
     },
   };
