@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T10:47:50+01:00`
-- **Describes commit:** `<hash>` (the T-072 handoff commit). **CI:** to be
-  stamped.
+- **Describes commit:** `536368c` (the T-072 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45795550167
+  (workflow `quality`, ran on `536368c`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-072 (`add_note`) `done (2026-11-26)`. Commits
   `23ebc5d` (implementation), `e985d67` (full-round fixes), then this
