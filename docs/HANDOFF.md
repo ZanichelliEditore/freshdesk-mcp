@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T10:19:48+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `ce9e57e` (the T-070 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45791102184
+  (workflow `quality`, ran on `ce9e57e`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-070 (stateless preview and `preview_id`)
   `done (2026-11-26)`. Commits `70be151` (implementation), `f64d743`
