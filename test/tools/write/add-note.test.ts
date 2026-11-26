@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
+import { type AddNoteEntry, addNote } from "../../../src/tools/toolsets/write/add-note.js";
 import {
   type CallResult,
   callTool,
@@ -252,6 +253,23 @@ describe("add_note: inputs it refuses, with nothing sent", () => {
     expect(sent()).toEqual([]);
   });
 
+  it("takes exactly 10 distinct agents, repeats not counted: 10 GETs, one POST", async () => {
+    const s = await session();
+    const ids = Array.from({ length: 10 }, (_, i) => 501 + i);
+    for (const id of ids) replyAgent(id);
+    replyNote();
+
+    const result = await callTool(s, TOOL, {
+      ticket_id: ID,
+      body: BODY,
+      notify_agent_ids: [...ids, 501, 510],
+    });
+
+    expect(output(result)).toMatchObject({ notified_agent_ids: ids, api_calls_used: 11 });
+    expect(sent()).toHaveLength(11);
+    expectNoEmail(result);
+  });
+
   it("refuses more than 10 distinct agents before any request", async () => {
     const s = await session();
 
@@ -391,4 +409,51 @@ describe("add_note: registration", () => {
     const tools = await listTools(await session({ toolsets: ["core"] }));
     expect(tools.map((item) => item.name)).not.toContain(TOOL);
   });
+});
+
+describe("add_note: an address in any error text is replaced", () => {
+  /** The tool on a fake entry that refuses with `message` and one field error. */
+  async function refusedWith(text: string) {
+    const entry: AddNoteEntry = {
+      note: async () => ({
+        ok: false,
+        error: {
+          code: "validation",
+          http_status: 400,
+          message: `Refused for ${text} today`,
+          retryable: false,
+          errors: [{ field: text, code: text, message: `bad ${text}, really` }],
+        },
+        attempts: 1,
+      }),
+    };
+    const tool = addNote(entry);
+    return tool.handler({ ticket_id: ID, body: BODY }, {} as never);
+  }
+
+  it.each([
+    ["plain", "agent501@example.test"],
+    ["fullwidth", "agent501\uFF20example.test"],
+    ["decimal entity", "agent501&#64;example.test"],
+    ["padded decimal entity", "agent501&#064example.test"],
+    ["hex entity", "agent501&#x40;example.test"],
+    ["named entity", "agent501&commat;example.test"],
+    ["lone at sign", "@"],
+  ])(
+    "replaces a %s address in the message, the field, the code and the field message",
+    async (_, address) => {
+      const result = await refusedWith(address);
+
+      expect(result.ok).toBe(false);
+      const json = JSON.stringify(result);
+      expect(json).not.toContain("example.test");
+      expect(json).not.toMatch(/@|\uFF20|&#|&commat;/i);
+      if (!result.ok) {
+        expect(result.error.message).toBe("Refused for [address] today");
+        expect(result.error.errors).toEqual([
+          { field: "[address]", code: "[address]", message: "bad [address] really" },
+        ]);
+      }
+    },
+  );
 });

@@ -19,8 +19,10 @@
 //     notified (de-duplicated, in order) and `api_calls_used` (the lookups and
 //     the POST, retries included).
 //   - No email ever reaches the output: a refusal's `errors[]` (Freshdesk's
-//     field errors on a 400 may quote an address) has every address-shaped
-//     run replaced before it is returned.
+//     field errors on a 400 may quote an address) has every word holding an
+//     at sign (`@`, fullwidth `＠`, or its HTML entity `&#64;`, `&#x40;`,
+//     `&commat;`) replaced with `[address]` before it is returned. Words are
+//     split on whitespace and each tested once: linear, no backtracking.
 //   - One deadline, CALL_DEADLINE_MS from the call's start, for the lookups
 //     and the POST; the client starts no write with under 10 s of it left.
 
@@ -55,9 +57,14 @@ const input = z.strictObject({
   notify_agent_ids: z.array(z.number().int().positive()).optional(),
 });
 
-/** Anything shaped like an address: a run with an `@` in it. */
-const ADDRESS = /[^\s@]*@[^\s@]*/g;
-const hide = (text: string) => text.replace(ADDRESS, "[address]");
+/** An at sign, plain, fullwidth or as an HTML entity. */
+const AT = /@|\uFF20|&#0*64;?|&#x0*40;?|&commat;/i;
+/** Every word holding an at sign replaced: the text split on whitespace, each word tested once. */
+const hide = (text: string) =>
+  text
+    .split(/(\s+)/)
+    .map((word) => (AT.test(word) ? "[address]" : word))
+    .join("");
 
 /** The error with every address in its field errors replaced. */
 function withoutAddresses(error: FreshdeskError): FreshdeskError {
