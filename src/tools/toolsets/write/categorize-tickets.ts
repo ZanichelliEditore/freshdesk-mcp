@@ -30,12 +30,23 @@
 //     `reachedDeadline`) cuts the preview: that ticket and the rest are
 //     `not_read`. Any other failed read lists that ticket with its code and
 //     goes on. The `preview_id` (src/tools/preview.ts) covers only the
-//     tickets read; with none read there is none.
-//   - Confirm (`confirm: true` and the `preview_id`): checked first, no
-//     request before (OD-15: the tickets are not read again). The writes use
-//     only the items the check gives back (docs/improvements.md 70be151,
-//     f64d743): each `ticket_id` and `fields` as the tags were checked on,
-//     read once; never the call's items again. Then one PUT per ticket, in
+//     tickets read, each field keyed by the API name its key resolved to
+//     (each value read once into a plain object); with none read there is
+//     none.
+//   - Confirm (`confirm: true` and the `preview_id`): the items' own checks,
+//     then the `preview_id`'s presence, then the schema (loaded if not
+//     cached: the only request before the id is checked; OD-15: the tickets
+//     are not read again). Each key is resolved against that schema as the
+//     preview resolved it; an unknown, ambiguous or not-writable field, or
+//     two keys on one field, refuses the whole confirm, nothing sent. The
+//     `preview_id` is checked on the items keyed by API name (T-078,
+//     docs/improvements.md 3a2ba75): a label now on another field resolves
+//     to another API name and the confirm is refused, so a confirm writes
+//     only the fields the approved preview resolved; a field named by label
+//     or by API name is the same field. The writes use only the items the
+//     check gives back (docs/improvements.md 70be151, f64d743): each
+//     `ticket_id` and `fields` as the tags were checked on, keyed by API
+//     name, read once; never the call's items again. Then one PUT per ticket, in
 //     the confirm's order, each through the entry. A result per ticket:
 //     `written`; `refused` with the error (Freshdesk's answer, or the core's
 //     field errors); `may_have_been_applied` with the error when the PUT was
@@ -186,42 +197,68 @@ function shown(error: FreshdeskError): FreshdeskError {
   };
 }
 
-async function preview(items: readonly Item[], context: Context, deadline: number) {
-  const loaded = await context.schema.get();
-  if (!loaded.ok) return loaded;
-  const { schema } = loaded;
-  // One problem per distinct key: the same key names the same field on every ticket.
+/** A ticket's fields, each key resolved to its field and its value read once. */
+interface Resolved {
+  ticket_id: number;
+  fields: [Field, unknown][];
+}
+
+/**
+ * Each item's keys resolved against `schema` as `findField` resolves them,
+ * each value read once; or the problems, one per distinct key (the same key
+ * names the same field on every ticket).
+ */
+function resolve(schema: Schema, items: readonly Item[]) {
   const problems = new Map<string, FieldError>();
-  const resolved = items.map((one) => {
-    const fields: [string, Field][] = [];
+  const resolved = items.map((one): Resolved => {
+    const fields: [Field, unknown][] = [];
     for (const key of Object.keys(one.fields)) {
       const found = findField(schema, key);
       if (!found.ok) problems.set(key, found.problem);
-      else if (fields.some(([, field]) => field.name === found.field.name)) {
+      else if (fields.some(([field]) => field.name === found.field.name)) {
         // The core refuses a field given twice (`ticketInput`): never in an approved table.
         problems.set(key, {
           field: key,
           code: "duplicate_field",
           message: `Field ${plainName(found.field.label)} is given more than once for one ticket.`,
         });
-      } else fields.push([key, found.field]);
+      } else fields.push([found.field, one.fields[key]]);
     }
-    return fields;
+    return { ticket_id: one.ticket_id, fields };
   });
+  return { problems, resolved };
+}
+
+function fieldsRefusal(problems: ReadonlyMap<string, FieldError>, message: string) {
+  const hidden = problems.size - MAX_PROBLEMS;
+  return {
+    ok: false as const,
+    error: {
+      code: "validation" as const,
+      http_status: null,
+      message: message + (hidden > 0 ? ` ${hidden} more problems are not listed.` : ""),
+      retryable: false,
+      errors: [...problems.values()].slice(0, MAX_PROBLEMS),
+    },
+  };
+}
+
+/** A resolved ticket keyed by API name: what a `preview_id` covers and what the entry gets. */
+const byApiName = (one: Resolved): PreviewItem => ({
+  ticket_id: one.ticket_id,
+  fields: Object.fromEntries(one.fields.map(([field, value]) => [field.name, value])),
+});
+
+async function preview(items: readonly Item[], context: Context, deadline: number) {
+  const loaded = await context.schema.get();
+  if (!loaded.ok) return loaded;
+  const { schema } = loaded;
+  const { problems, resolved } = resolve(schema, items);
   if (problems.size > 0) {
-    const hidden = problems.size - MAX_PROBLEMS;
-    return {
-      ok: false as const,
-      error: {
-        code: "validation" as const,
-        http_status: null,
-        message:
-          "Not previewed: some fields cannot be set by this tool; nothing was read or changed." +
-          (hidden > 0 ? ` ${hidden} more problems are not listed.` : ""),
-        retryable: false,
-        errors: [...problems.values()].slice(0, MAX_PROBLEMS),
-      },
-    };
+    return fieldsRefusal(
+      problems,
+      "Not previewed: some fields cannot be set by this tool; nothing was read or changed.",
+    );
   }
 
   let calls = loaded.attempts;
@@ -229,7 +266,7 @@ async function preview(items: readonly Item[], context: Context, deadline: numbe
   const notPreviewed: { ticket_id: number; code: string }[] = [];
   const read: PreviewItem[] = [];
   let cut = false;
-  for (const [at, one] of items.entries()) {
+  for (const one of resolved) {
     if (cut) {
       notPreviewed.push({ ticket_id: one.ticket_id, code: "not_read" });
       continue;
@@ -243,13 +280,13 @@ async function preview(items: readonly Item[], context: Context, deadline: numbe
     }
     tickets.push({
       ticket_id: one.ticket_id,
-      changes: resolved[at]!.map(([key, field]) => ({
+      changes: one.fields.map(([field, value]) => ({
         field: plainName(field.label),
         current: current(context, schema, field, found.ticket),
-        new: fieldValue(field, one.fields[key]),
+        new: fieldValue(field, value),
       })),
     });
-    read.push(one);
+    read.push(byApiName(one));
   }
 
   let previewId: string | null = null;
@@ -291,10 +328,19 @@ async function apply(
       "Not applied: confirm: true needs the preview_id a preview gave. Call without confirm to preview first.",
     );
   }
-  const checked = checkPreviewId(TOOL, previewId, items);
-  if (!checked.ok) return checked;
+  // The keys resolved against the schema as it is now: the tags cover API names, so a
+  // label now on another field, on two fields, or on none no longer matches (3a2ba75).
   const loaded = await context.schema.get();
   if (!loaded.ok) return loaded;
+  const { problems, resolved } = resolve(loaded.schema, items);
+  if (problems.size > 0) {
+    return fieldsRefusal(
+      problems,
+      "Not applied: some fields no longer name a field this tool can set as the preview showed it; nothing was changed. Preview again.",
+    );
+  }
+  const checked = checkPreviewId(TOOL, previewId, resolved.map(byApiName));
+  if (!checked.ok) return checked;
   let calls = loaded.attempts;
   const results: Record<string, unknown>[] = [];
   const counts = { written: 0, refused: 0, may_have_been_applied: 0, not_attempted: 0 };
@@ -358,7 +404,7 @@ export function categorizeTickets(entry: CategorizeTicketsEntry): Tool<typeof in
     description: [
       `Set category fields on up to ${PREVIEW_CAP} tickets: the ticket type and custom fields (product, sub-product, issue type and the like), given per ticket in items as {ticket_id, fields}, each field by API name or label, each value by its choice name (a nested field as "A > B > C").`,
       "Status, priority, group, agent and every other default field are refused, and nothing is sent: use update_ticket for those.",
-      "Two steps. Without confirm it changes nothing: it reads each ticket and returns a preview, the current and new value of each field, and a preview_id. Show that table to the user; only after they approve, call again with confirm: true, the preview_id and the previewed items (any of them, each with exactly its previewed fields), within 15 minutes. A ticket added or a field changed refuses the whole confirm: preview again.",
+      "Two steps. Without confirm it changes nothing: it reads each ticket and returns a preview, the current and new value of each field, and a preview_id. Show that table to the user; only after they approve, call again with confirm: true, the preview_id and the previewed items (any of them, each with exactly its previewed fields), within 15 minutes. A field may be named by label or by API name; a ticket added, a field changed, or a field the confirm resolves to another field than the preview did (relabelled or removed meanwhile) refuses the whole confirm: preview again.",
       "The confirm writes one ticket at a time and returns a result per ticket: written, refused (with the error; a value that is not a valid choice refuses that ticket only), may_have_been_applied (with the error: sent without a clear answer, so check the ticket with get_ticket before sending it again), or not attempted when the call's time (30 s) or the API budget ran out. To apply the tickets not attempted, call again with confirm: true, the same preview_id and only those tickets.",
       "Freshdesk automations may act on each change, as for an agent's edit.",
     ].join(" "),

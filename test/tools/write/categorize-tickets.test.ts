@@ -8,6 +8,7 @@ import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../../src/config.js";
+import type { Schema } from "../../../src/schema/index.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
 import { mintPreviewId, PREVIEW_CAP } from "../../../src/tools/preview.js";
@@ -92,8 +93,8 @@ function puts(): [string, unknown][] {
     .map((call) => [call.path, JSON.parse(call.body as string)]);
 }
 
-/** A session on a server from the real registry, built as cli.ts builds it; its schema not loaded. */
-async function cold(team: unknown = FAST): Promise<Session> {
+/** A context as cli.ts builds it, on MockAgent; its schema not loaded. */
+function contextFor(team: unknown = FAST) {
   const path = join(dir, `team-${++fileCount}.json`);
   writeFileSync(path, JSON.stringify(team));
   const config = loadConfig({
@@ -101,7 +102,23 @@ async function cold(team: unknown = FAST): Promise<Session> {
     FRESHDESK_API_KEY: "k3y-Secret-Value-123",
     FRESHDESK_MCP_CONFIG: path,
   });
-  const server = createServer(createContext(config, mock));
+  return createContext(config, mock);
+}
+
+/** The fixture's schema as the context loads it, MockAgent's history cleared. */
+async function loadedSchema(): Promise<Schema> {
+  reply(FIELDS, schemaFieldsPayload);
+  reply(AGENTS, agentPages.flat());
+  reply(GROUPS, groupPages.flat());
+  const loaded = await contextFor().schema.get();
+  if (!loaded.ok) throw new Error("schema not loaded");
+  mock.clearCallHistory();
+  return loaded.schema;
+}
+
+/** A session on a server from the real registry, built as cli.ts builds it; its schema not loaded. */
+async function cold(team: unknown = FAST): Promise<Session> {
+  const server = createServer(contextFor(team));
   servers.push(server);
   return open(server);
 }
@@ -661,7 +678,8 @@ describe("categorize_tickets: the confirm", () => {
 // are freshly parsed JSON, so this calls the handler with a getter directly.
 describe("categorize_tickets: the confirm writes only the checked values", () => {
   it("a value that reads differently after the check is written as checked; an extra key never", async () => {
-    const minted = mintPreviewId(TOOL, [{ ticket_id: 4242, fields: { Type: "Question" } }]);
+    // The preview mints over the API name its key resolved to.
+    const minted = mintPreviewId(TOOL, [{ ticket_id: 4242, fields: { ticket_type: "Question" } }]);
     if (!minted.ok) throw new Error("mint refused");
     let reads = 0;
     const fields = {};
@@ -679,7 +697,7 @@ describe("categorize_tickets: the confirm writes only the checked values", () =>
         return { ok: true, value: ticketOf(change.id), attempts: 1 };
       },
     });
-    const schema = { fields: [], agents: {}, groups: {} };
+    const schema = await loadedSchema();
     const context = { schema: { get: async () => ({ ok: true, schema, attempts: 0 }) } };
     const result = await tool.handler(
       {
@@ -693,9 +711,124 @@ describe("categorize_tickets: the confirm writes only the checked values", () =>
     expect(result.ok).toBe(true);
     expect(received).toHaveLength(1);
     expect(received[0]!.id).toBe(4242);
-    expect(received[0]!.fields).toEqual({ Type: "Question" });
+    expect(received[0]!.fields).toEqual({ ticket_type: "Question" });
     expect(received[0]!.fields).not.toBe(fields);
     expect(Object.keys(received[0]!)).not.toContain("private");
     expect(readsAtWrite).toBe(1);
+  });
+});
+
+// docs/improvements.md 3a2ba75 (T-078): the confirm writes the fields the
+// approved preview resolved, by API name. The preview goes through MCP; the
+// confirm calls the handler with a stub context whose schema is the one
+// "loaded at confirm", changed after the preview, and a stub entry.
+describe("categorize_tickets: the confirm is bound to the API names the preview resolved", () => {
+  /** A confirm on `schema`, through the handler: its result and what the entry received. */
+  async function confirmOn(
+    schema: Schema,
+    items: readonly { ticket_id: number; fields: Record<string, unknown> }[],
+    previewId: string,
+  ) {
+    const received: CategorizeChange[] = [];
+    const tool = categorizeTickets({
+      update: async (change) => {
+        received.push(change);
+        return { ok: true, value: ticketOf(change.id), attempts: 1 };
+      },
+    });
+    const context = { schema: { get: async () => ({ ok: true, schema, attempts: 0 }) } };
+    const result = await tool.handler(
+      { items: [...items], confirm: true, preview_id: previewId },
+      context as never,
+    );
+    return { result, received };
+  }
+
+  /** `schema` with each field `change` maps by API name replaced; a `null` removes it. */
+  function changed(
+    schema: Schema,
+    change: Record<string, Partial<Schema["fields"][number]> | null>,
+  ): Schema {
+    const fields = schema.fields.flatMap((field) => {
+      const to = change[field.name];
+      if (to === null) return [];
+      return [to === undefined ? field : { ...field, ...to }];
+    });
+    return { ...schema, fields };
+  }
+
+  it("a confirm naming the fields by API name, where the preview used labels, writes as previewed", async () => {
+    const session = await warm();
+    const id = await previewed(session);
+    for (const ticket of IDS) reply(ticketPath(ticket), ticketOf(ticket), "PUT");
+    const items = IDS.map((ticket_id) => ({
+      ticket_id,
+      fields: { ticket_type: "Question", cf_shelf: "South > Middle" },
+    }));
+    const applied = output(
+      await callTool(session, TOOL, { items, confirm: true, preview_id: id }),
+    ) as unknown as Applied;
+    expect(applied.written).toBe(3);
+    for (const [, body] of puts()) {
+      expect(body).toEqual({
+        type: "Question",
+        custom_fields: { cf_shelf: "South", cf_tier: "Middle" },
+      });
+    }
+  });
+
+  it("the entry receives the API names, whichever way the confirm names the fields", async () => {
+    const schema = await loadedSchema();
+    const session = await warm();
+    const id = await previewed(session, [ITEMS[0]]);
+    for (const fields of [CHANGE, { ticket_type: "Question", shelf: "South > Middle" }]) {
+      const { result, received } = await confirmOn(schema, [{ ticket_id: 4242, fields }], id);
+      expect(result.ok).toBe(true);
+      expect(received.map((change) => change.fields)).toEqual([
+        { ticket_type: "Question", cf_shelf: "South > Middle" },
+      ]);
+    }
+  });
+
+  it.each([
+    [
+      "a label now on another custom field",
+      { cf_shelf: { label: "Old shelf" }, cf_hobby: { label: "Shelf" } },
+      undefined,
+    ],
+    ["a label now naming two fields", { cf_hobby: { label: "Shelf" } }, "ambiguous_field"],
+    ["the field removed", { cf_shelf: null }, "unknown_field"],
+  ])(
+    "%s refuses the whole confirm as validation, nothing written",
+    async (_label, change, code) => {
+      const schema = await loadedSchema();
+      const session = await warm();
+      const id = await previewed(session, ITEMS.slice(0, 2));
+      const { result, received } = await confirmOn(changed(schema, change), ITEMS.slice(0, 2), id);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("validation");
+      expect(result.error.message).toContain("Not applied");
+      expect(result.error.message).toContain("preview");
+      if (code !== undefined) expect(result.error.errors?.map((one) => one.code)).toEqual([code]);
+      expect(received).toEqual([]);
+    },
+  );
+
+  it("two keys naming one field, or a field this tool cannot set, refuse the confirm, nothing written", async () => {
+    const schema = await loadedSchema();
+    const session = await warm();
+    const id = await previewed(session, [ITEMS[0]]);
+    for (const [fields, code] of [
+      [{ ...CHANGE, ticket_type: "Question" }, "duplicate_field"],
+      [{ ...CHANGE, Status: "Open" }, "field_not_writable"],
+    ] as const) {
+      const { result, received } = await confirmOn(schema, [{ ticket_id: 4242, fields }], id);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("validation");
+      expect(result.error.errors?.map((one) => one.code)).toEqual([code]);
+      expect(received).toEqual([]);
+    }
   });
 });
