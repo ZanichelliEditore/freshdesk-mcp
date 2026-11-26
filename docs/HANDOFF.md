@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T13:49:48+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `1956a95` (T-083: done; handoff to T-082),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45823559506
+  (workflow `quality`, ran on `1956a95`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-083 `done (2026-11-26)`: `src/core/send-id.ts`
   (`mintSendId`, `checkSendId`, `SEND_ID_TTL_MS`), `src/tools/confirm.ts`
