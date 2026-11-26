@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T14:53:41+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `c7f0f99` (T-076: done; handoff to T-085),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45833721474
+  (workflow `quality`, ran on `c7f0f99`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-076 `done (2026-11-26)`: M2 acceptance on `mcp-test`
   tickets, recorded from the owner's `make smoke-write` runs and activity
