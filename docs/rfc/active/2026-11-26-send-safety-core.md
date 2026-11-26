@@ -496,7 +496,9 @@ holds the id's nonce, not its text, so no rewriting of a spent id's text
 that still checks can pass as unspent. At the check, with no `await` between the
 check and the reservation, a valid id not in the set is added to it,
 before any dispatch. A second confirm of that id is `validation`, "this
-`send_id` was already used; nothing was sent", nothing sent, whether the
+`send_id` was already used, and the earlier call may have sent; check the
+ticket before sending again" (wording amended by the owner, 2026-11-26,
+"Amendments"), nothing sent, whether the
 first is still in flight, succeeded or `may_have_been_sent`. The id is
 released (removed from the set) only when no request left the process,
 that is when the result counts 0 attempts dispatched (`src/client/http.ts`
@@ -613,6 +615,18 @@ Given via the orchestrator on 2026-11-26:
   recording whether Freshdesk copied the CC; T-086's smoke-send allows
   exactly that case, with one explicit opt-in flag and the CC on the
   allow-list (OD-21, "The A4 test"); T-086 and T-087 amended to match.
+
+## Amendments
+
+- **2026-11-26, owner (via the orchestrator), text only.** OD-33's
+  message for a `send_id` already used was "this `send_id` was already
+  used; nothing was sent". After a first confirm that sent, or that ended
+  `may_have_been_sent`, a model can read "nothing was sent" as about the
+  mail, mint a new id and send twice (T-083 security review,
+  `docs/improvements.md`, `3aed115`). The message is now "this `send_id`
+  was already used, and the earlier call may have sent; check the ticket
+  before sending again". The mechanism is unchanged: the same refusal,
+  `validation`, nothing sent by this call.
 
 ## Consequences
 

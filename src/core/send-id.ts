@@ -111,7 +111,10 @@ export function checkSendId(
   const age = Date.now() - time;
   if (age < 0) return refuse("the send_id's mint time is ahead of this server's clock");
   if (age > SEND_ID_TTL_MS) return refuse("the send_id is older than 15 minutes");
-  if (SPENT.has(nonce)) return refuse("this send_id was already used; nothing was sent");
+  if (SPENT.has(nonce))
+    return refuse(
+      "this send_id was already used, and the earlier call may have sent; check the ticket before sending again",
+    );
   const reservation = {};
   SPENT.set(nonce, reservation);
   return {

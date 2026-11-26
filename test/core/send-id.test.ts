@@ -236,7 +236,7 @@ describe("checkSendId: each send_id sends at most once (OD-33)", () => {
     expect(first).toMatchObject({ ok: true });
     const error = refusedWithoutQuoting(second, id);
     expect(error.message).toBe(
-      "Not sent: this send_id was already used; nothing was sent. Call again without confirm to get a new send_id.",
+      "Not sent: this send_id was already used, and the earlier call may have sent; check the ticket before sending again. Call again without confirm to get a new send_id.",
     );
   });
 
