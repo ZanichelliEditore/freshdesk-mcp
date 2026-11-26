@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T11:24:26+01:00`
-- **Describes commit:** pending (the T-074 handoff commit). **CI:** pending.
+- **Describes commit:** `c80cc91` (the T-074 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45801185680
+  (workflow `quality`, ran on `c80cc91`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-074 (`hand_off_draft`) `done (2026-11-26)`. Commits
   `ae54d0a` (implementation, `add_note`'s public-note error), `d8f274e`
