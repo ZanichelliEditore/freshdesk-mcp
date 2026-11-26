@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T12:53:40+01:00`
-- **Describes commit:** `<hash>` (T-079 first half: RFC draft at
-  Proposed). **CI:** `<run>`.
+- **Describes commit:** `708a751` (T-079 first half: RFC draft at
+  Proposed), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45814896378
+  (workflow `quality`, ran on `708a751`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-079 `doing (2026-11-26)`, first half done (plan
   session under the orchestrator, owner's go 2026-11-26). RFC
@@ -106,4 +109,5 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 (see commit).
+- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 50 passed
+  (50)", "Tests 4044 passed (4044)"; `tools/checks` "Ran 138 tests", OK.
