@@ -149,11 +149,42 @@ describe("checkRecipients: per field, by position (OD-22)", () => {
         to: ["a@example.com"],
         cc: ["builder@example.org", "B@EXAMPLE.COM"],
       }),
-    ).toEqual({ ok: true });
+    ).toEqual({
+      ok: true,
+      recipients: { to: ["a@example.com"], cc: ["builder@example.org", "B@EXAMPLE.COM"] },
+    });
+  });
+
+  it("returns frozen copies, so a later change to the caller's lists cannot reach the send", () => {
+    const to = ["a@example.com"];
+    const result = checkRecipients(LIST, { to });
+    to[0] = "x@off.test";
+    to.push("y@off.test");
+    expect(result).toEqual({ ok: true, recipients: { to: ["a@example.com"] } });
+    if (result.ok) {
+      expect(result.recipients.to).not.toBe(to);
+      expect(Object.isFrozen(result.recipients)).toBe(true);
+      expect(Object.isFrozen(result.recipients.to)).toBe(true);
+    }
+  });
+
+  it("reads each list once: a list whose length changes between reads is counted and checked as first read", () => {
+    let reads = 0;
+    const shifty = new Proxy(["a@example.com"], {
+      get(target, key, receiver) {
+        if (key === "length") return reads++ === 0 ? 1 : 50;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const result = checkRecipients(LIST, { to: shifty });
+    expect(result).toEqual({ ok: true, recipients: { to: ["a@example.com"] } });
   });
 
   it("accepts no recipients at all", () => {
-    expect(checkRecipients(LIST, { to: [], cc: [] })).toEqual({ ok: true });
+    expect(checkRecipients(LIST, { to: [], cc: [] })).toEqual({
+      ok: true,
+      recipients: { to: [], cc: [] },
+    });
   });
 
   it("refuses an off-list address by field and 1-based position, never the address", () => {
@@ -190,6 +221,43 @@ describe("checkRecipients: per field, by position (OD-22)", () => {
     expect(result).toMatchObject({ ok: false, field: "cc", position: 1, reason: "malformed" });
   });
 
+  it("refuses fields that are not an object, without throwing", () => {
+    for (const fields of [null, undefined, "to", ["a@example.com"]]) {
+      expect(checkRecipients(LIST, fields as unknown as Record<string, string[]>)).toMatchObject({
+        ok: false,
+        field: null,
+        position: null,
+        reason: "malformed",
+      });
+    }
+  });
+
+  it("refuses everything with an allow-list that is not a list, without throwing", () => {
+    for (const list of [null, undefined, "@example.com", { 0: "@example.com" }]) {
+      const allowList = list as unknown as string[];
+      expect(onAllowList(allowList, "a@example.com")).toBe(false);
+      expect(checkRecipients(allowList, { to: ["a@example.com"] })).toMatchObject({
+        ok: false,
+        reason: "not_allowed",
+      });
+    }
+  });
+
+  it("refuses, without throwing, a list that throws when read", () => {
+    const throwing = new Proxy([], {
+      get() {
+        throw new Error("boom");
+      },
+    });
+    expect(checkRecipients(LIST, { to: throwing })).toMatchObject({
+      ok: false,
+      field: null,
+      position: null,
+      reason: "malformed",
+    });
+    expect(onAllowList(throwing, "a@example.com")).toBe(false);
+  });
+
   it("refuses a field that is not a list, without throwing", () => {
     const result = checkRecipients(LIST, { cc: "a@example.com" as unknown as string[] });
     expect(result).toMatchObject({ ok: false, field: "cc", position: null, reason: "malformed" });
@@ -215,7 +283,9 @@ describe("checkRecipients: the cap, all fields together (OD-22)", () => {
   });
 
   it("accepts exactly the cap, split across fields", () => {
-    expect(checkRecipients(LIST, { to: addresses(4), cc: addresses(6) })).toEqual({ ok: true });
+    expect(checkRecipients(LIST, { to: addresses(4), cc: addresses(6) })).toMatchObject({
+      ok: true,
+    });
   });
 
   it("refuses one over the cap in one field", () => {
