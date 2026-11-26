@@ -62,18 +62,24 @@ const noGlobalFetchRules = {
 //   `resources` (an extension, `./`, `//` or `..` between them, any case), as
 //   an import, a type import, a re-export or a literal dynamic import(). Broad
 //   on purpose: a future src/tools/toolsets/core/resources.ts is refused too.
-// - client (T-077, invariant 1): a value import of HttpClient or RateLimiter,
-//   named, aliased, re-exported, or the whole module by `import *` or
-//   `export *`, and `new HttpClient(` or `new RateLimiter(` (also as
-//   `ns.HttpClient`). Type imports pass. Exempt: the defining modules and
-//   scripts/smoke/smoke.ts (SmokeClient, GET-only by override;
-//   docs/improvements.md 4b2a159).
+// - client (T-077, invariant 1): a value import of HttpClient, RateLimiter or
+//   SmokeClient (a subclass of HttpClient), named, aliased, re-exported, or
+//   the whole module by `import *`, `export *` or a literal dynamic import(),
+//   and `new HttpClient(` or `new RateLimiter(` (also as `ns.HttpClient`).
+//   Type imports pass. Exempt: the defining modules and scripts/smoke/smoke.ts
+//   (SmokeClient, GET-only by override; docs/improvements.md 4b2a159).
 // - ticketInput (T-077, invariant 2): any import of it, or of its module by
-//   `import *` or `export *`. Exempt: src/schema/input.ts, its own module.
+//   `import *`, `export *` or a literal dynamic import(). Exempt:
+//   src/schema/input.ts, its own module.
 // - writePath (T-077, invariant 3): createWritePath builds the write side
-//   from the toolsets it is given, so only src/tools/context.ts, which passes
-//   the team file's, may import or call it (also as `ns.createWritePath(`).
+//   from the toolsets it is given, so only src/tools/context.ts may import or
+//   call it (also as `ns.createWritePath(`, or its module by a literal dynamic
+//   import()); that it passes the team file's toolsets holds by inspection.
 //   Type imports of the module's other names pass.
+//
+// An exempt module passes nothing on: the defining modules and smoke.ts have
+// no re-export and no value export list, and context.ts exports no
+// createWritePath under any name and re-exports nothing from write-path.
 //
 // The client, ticketInput and writePath patterns match a module by its last
 // segment (`http`, `rate-limit`, `input`, `write-path`, with or without an
@@ -96,12 +102,19 @@ const noCoreResources =
 const noClient =
   "Only src/core/** may build an HttpClient or a RateLimiter (RFC 2026-11-25-write-safety-core, invariant 1): import them as types only.";
 const noTicketInput =
-  "Only src/core/** may import ticketInput (RFC 2026-11-25-write-safety-core, invariant 2): the core's table is the one source of an allow set.";
+  "Only src/core/** and its own module may import ticketInput (RFC 2026-11-25-write-safety-core, invariant 2): the core's table is the one source of an allow set.";
 const noWritePath =
   "Outside src/core/**, only src/tools/context.ts may import or call createWritePath (RFC 2026-11-25-write-safety-core, invariant 3): it builds the write side from the team file.";
 const noCoreReexport =
   "No re-export in src/core/** (RFC 2026-11-25-write-safety-core): a core module must not pass the client, src/core/resources or ticketInput on past the lint fence.";
+const noExemptExport =
+  "No re-export or export list in a module a core fence exempts (RFC 2026-11-25-write-safety-core): it must not pass what it holds on under another name.";
 const coreResources = String.raw`(^|/)core/(.*/)?resources(\.[cm]?[jt]s)?/*$`;
+/** A literal dynamic import() of the module named `name` (its last segment). */
+const importOf = (name, message) => ({
+  selector: `ImportExpression > Literal.source[value=${esqueryRegex(lastSegment(name))}]`,
+  message,
+});
 /** `new X(` and `new ns.X(` for each name. */
 const newOf = (names, message) => [
   { selector: `NewExpression[callee.name=/^(${names.join("|")})$/]`, message },
@@ -124,6 +137,7 @@ const coreFences = {
     patterns: [
       ["http", "HttpClient"],
       ["rate-limit", "RateLimiter"],
+      ["smoke", "SmokeClient"],
     ].map(([module, name]) => ({
       regex: lastSegment(module),
       caseSensitive: false,
@@ -131,7 +145,10 @@ const coreFences = {
       allowTypeImports: true,
       message: noClient,
     })),
-    syntax: newOf(["HttpClient", "RateLimiter"], noClient),
+    syntax: [
+      ...newOf(["HttpClient", "RateLimiter"], noClient),
+      ...["http", "rate-limit", "smoke"].map((name) => importOf(name, noClient)),
+    ],
   },
   ticketInput: {
     patterns: [
@@ -142,7 +159,7 @@ const coreFences = {
         message: noTicketInput,
       },
     ],
-    syntax: [],
+    syntax: [importOf("input", noTicketInput)],
   },
   writePath: {
     patterns: [
@@ -155,6 +172,7 @@ const coreFences = {
       },
     ],
     syntax: [
+      importOf("write-path", noWritePath),
       { selector: 'CallExpression[callee.name="createWritePath"]', message: noWritePath },
       {
         selector: 'CallExpression > MemberExpression.callee[property.name="createWritePath"]',
@@ -163,11 +181,31 @@ const coreFences = {
     ],
   },
 };
-/** The fence block for `files`: every fence but those in `except`. */
-function fenceBlock(files, except = [], ignores = []) {
+// A module a fence exempts as the one defining what the fence guards, or as
+// the recorded exception, passes nothing on: no re-export, no value export
+// list (`export { x as y }`); a type export list is harmless.
+// src/tools/context.ts, exempt from writePath, exports no `createWritePath`
+// under any name and re-exports nothing from write-path.
+const exemptExports = [
+  {
+    selector: 'ExportNamedDeclaration[declaration=null][exportKind="value"]',
+    message: noExemptExport,
+  },
+  { selector: "ExportAllDeclaration", message: noExemptExport },
+];
+const contextExports = [
+  { selector: 'ExportSpecifier[local.name="createWritePath"]', message: noWritePath },
+  {
+    selector: `ExportAllDeclaration > Literal.source[value=${esqueryRegex(lastSegment("write-path"))}]`,
+    message: noWritePath,
+  },
+];
+/** The fence block for `files`: every fence but those in `except`, then `extra` selectors. */
+function fenceBlock(files, { except = [], ignores = [], extra = [] } = {}) {
   const fences = Object.entries(coreFences)
     .filter(([name]) => !except.includes(name))
     .map(([, fence]) => fence);
+  fences.push({ patterns: [], syntax: extra });
   return {
     files,
     ignores,
@@ -181,13 +219,13 @@ function fenceBlock(files, except = [], ignores = []) {
   };
 }
 const coreFenceBlocks = [
-  fenceBlock(["src/**", "scripts/**"], [], ["src/core/**"]),
-  fenceBlock(
-    ["src/client/http.ts", "src/client/rate-limit.ts", "scripts/smoke/smoke.ts"],
-    ["client"],
-  ),
-  fenceBlock(["src/schema/input.ts"], ["ticketInput"]),
-  fenceBlock(["src/tools/context.ts"], ["writePath"]),
+  fenceBlock(["src/**", "scripts/**"], { ignores: ["src/core/**"] }),
+  fenceBlock(["src/client/http.ts", "src/client/rate-limit.ts", "scripts/smoke/smoke.ts"], {
+    except: ["client"],
+    extra: exemptExports,
+  }),
+  fenceBlock(["src/schema/input.ts"], { except: ["ticketInput"], extra: exemptExports }),
+  fenceBlock(["src/tools/context.ts"], { except: ["writePath"], extra: contextExports }),
   {
     files: ["src/core/**"],
     rules: {
