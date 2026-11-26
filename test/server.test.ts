@@ -205,6 +205,7 @@ describe("createServer: enabled toolsets come from the team file only", () => {
       "update_ticket",
       "add_note",
       "categorize_tickets",
+      "hand_off_draft",
     ]);
   });
 
@@ -398,6 +399,7 @@ describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
       "update_ticket",
       "add_note",
       "categorize_tickets",
+      "hand_off_draft",
     ]);
     expect(Object.isFrozen(tools)).toBe(true);
   });
@@ -409,6 +411,7 @@ describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
       "update_ticket",
       "add_note",
       "categorize_tickets",
+      "hand_off_draft",
     ]);
   });
 });

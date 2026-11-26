@@ -217,6 +217,24 @@ describe("add_note: a private note", () => {
   });
 });
 
+describe("add_note: a note Freshdesk answers as public", () => {
+  it("is an error naming the note_id, saying the note is public and must be checked", async () => {
+    const s = await session();
+    replyAgent(501);
+    replyNote(noteAnswer({ private: false }));
+
+    const result = await callTool(s, TOOL, { ticket_id: ID, body: BODY, notify_agent_ids: [501] });
+
+    const error = failure(result);
+    expect(error.code).toBe("server");
+    expect(error.message).toContain("note_id 9001");
+    expect(error.message).toMatch(/public/);
+    expect(error.message).toMatch(/check/);
+    expect(sent()).toEqual(["GET /api/v2/agents/501", `POST ${NOTES}`]);
+    expectNoEmail(result);
+  });
+});
+
 describe("add_note: inputs it refuses, with nothing sent", () => {
   it.each([
     ["private: true", { private: true }],

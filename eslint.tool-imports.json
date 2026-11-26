@@ -76,6 +76,7 @@
         "./update-ticket.js",
         "./add-note.js",
         "./categorize-tickets.js",
+        "./hand-off-draft.js",
         "../../format.js",
         "../../preview.js",
         "../../../client/resources/tickets.js"

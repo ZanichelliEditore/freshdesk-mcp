@@ -11,12 +11,13 @@
 //   - `factories` is a parameter so a test can see what each factory
 //     receives (test/server.test.ts); the context passes none.
 //   - `add_note` (T-072) gets `entries.add_note`, `categorize_tickets`
-//     (T-073) `entries.categorize_tickets`. T-074 adds `hand_off_draft` here,
-//     with its own entry.
+//     (T-073) `entries.categorize_tickets`, `hand_off_draft` (T-074)
+//     `entries.hand_off_draft` (its note and its assignment).
 
 import type { Tool } from "../index.js";
 import { type AddNoteEntry, addNote } from "./add-note.js";
 import { type CategorizeTicketsEntry, categorizeTickets } from "./categorize-tickets.js";
+import { type HandOffDraftEntry, handOffDraft } from "./hand-off-draft.js";
 import { type UpdateTicketEntry, updateTicket } from "./update-ticket.js";
 
 /** The core's write entries, as the write tools take them. */
@@ -24,6 +25,7 @@ export interface WriteToolEntries {
   readonly update_ticket: UpdateTicketEntry;
   readonly add_note: AddNoteEntry;
   readonly categorize_tickets: CategorizeTicketsEntry;
+  readonly hand_off_draft: HandOffDraftEntry;
 }
 
 /** One factory per write tool, keyed by its entry point. */
@@ -31,6 +33,7 @@ export const WRITE_FACTORIES = Object.freeze({
   update_ticket: updateTicket,
   add_note: addNote,
   categorize_tickets: categorizeTickets,
+  hand_off_draft: handOffDraft,
 });
 
 /** The `write` toolset's tools, each built from its own entry. */
@@ -42,5 +45,6 @@ export function writeTools(
     factories.update_ticket(entries.update_ticket),
     factories.add_note(entries.add_note),
     factories.categorize_tickets(entries.categorize_tickets),
+    factories.hand_off_draft(entries.hand_off_draft),
   ]);
 }

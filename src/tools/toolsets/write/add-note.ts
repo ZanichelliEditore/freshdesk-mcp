@@ -23,6 +23,10 @@
 //     at sign (`@`, fullwidth `＠`, or its HTML entity `&#64;`, `&#x40;`,
 //     `&commat;`) replaced with `[address]` before it is returned. Words are
 //     split on whitespace and each tested once: linear, no backtracking.
+//   - A note Freshdesk answers `private: false` (owner, 2026-11-26) is an
+//     error, `server`, naming the `note_id` and saying the note is public and
+//     must be checked: the core sent `private: true`, so such an answer means
+//     something did not hold, and the caller must not read it as done.
 //   - One deadline, CALL_DEADLINE_MS from the call's start, for the lookups
 //     and the POST; the client starts no write with under 10 s of it left.
 
@@ -66,8 +70,21 @@ const hide = (text: string) =>
     .map((word) => (AT.test(word) ? "[address]" : word))
     .join("");
 
+/** A note Freshdesk answered as public: an error naming the note, to be checked (owner, 2026-11-26). */
+export function publicNote(noteId: number, after = ""): { ok: false; error: FreshdeskError } {
+  return {
+    ok: false,
+    error: {
+      code: "server",
+      http_status: null,
+      message: `Freshdesk answered that the note (note_id ${noteId}) is public, not private: the requester may see it, and it must be checked on the ticket now.${after}`,
+      retryable: false,
+    },
+  };
+}
+
 /** The error with every address in its field errors replaced. */
-function withoutAddresses(error: FreshdeskError): FreshdeskError {
+export function withoutAddresses(error: FreshdeskError): FreshdeskError {
   if (error.errors === undefined) return { ...error, message: hide(error.message) };
   return {
     ...error,
@@ -108,6 +125,7 @@ export function addNote(entry: AddNoteEntry): Tool<typeof input> {
         deadline: Date.now() + CALL_DEADLINE_MS,
       });
       if (!result.ok) return { ok: false, error: withoutAddresses(result.error) };
+      if (result.value.private !== true) return publicNote(result.value.id);
       return {
         ok: true,
         value: {

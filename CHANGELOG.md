@@ -19,6 +19,15 @@ and stay 0.x until milestone M4, then 1.0.0.
   a `preview_id`), then applied with `confirm: true`, one ticket at a time,
   with a result per ticket. Tickets the call's time or the API budget left
   are reported not attempted, and the same `preview_id` applies them later.
+- **Added:** `hand_off_draft` in `write`: a draft reply handed to another
+  agent in one call, as a private note headed `DRAFT REPLY`, then the ticket
+  assigned to an agent and/or a group, the agents named by id notified. With
+  nothing to assign, only the note is written. If the assignment fails after
+  the note, the error gives the note's id; the note stays and nothing is
+  retried. No email address in its output.
+- **Changed:** `add_note` now returns an error naming the `note_id` when
+  Freshdesk answers that the note is public (`private: false`): the note
+  must be checked on the ticket.
 
 ## 0.3.1 (2026-11-25)
 
