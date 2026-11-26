@@ -69,33 +69,53 @@ ticket's one). Ids, addresses and mail text in `docs/private/account-facts.md`
   mailbox. A4 reply: the requester and the ticket's CC, as designed.
 - No automation rule acted: yes, from the activity log after the reply,
   the forward, the public note and the A4 reply (owner, 2026-11-26).
-- A1: yes, `POST /tickets/{id}/reply` answered 201.
-- A2: yes, `POST /tickets/{id}/forward` answered 201.
-- A3: yes, `POST /tickets/{id}/notes` answered 201 and the note stayed
-  public.
-- A4: yes. The ticket-level CC mailbox received a reply sent with an
-  empty `cc`: Freshdesk copies ticket CCs on a reply. This is the case
-  OD-21 guards against, so its consequence is as stated, not smaller.
-- A5: yes for the description. The forward quotes it under the agent's
-  signature. Not checked: conversation and private notes, because the
-  ticket had neither. Reply and status: no status change seen (Open
-  after the reply; Open was the UI form's default, not read back before
-  the run).
-- A6: yes. The GET with `include=requester` carried all four CC fields
-  as lists, and the tags, `spam` and the requester's email (all four
-  tickets).
-- No account value in this file. `make quality` green on this tree.
+- A1: yes (2026-11-26) for the endpoint and the keys the core sends:
+  `POST /tickets/{id}/reply` answered 201. The other keys A1 lists are
+  never sent (closed payload) and were not checked.
+- A2: yes (2026-11-26) for the endpoint and the keys the core sends:
+  `POST /tickets/{id}/forward` answered 201. Same limit as A1.
+- A3: yes (2026-11-26): `POST /tickets/{id}/notes` answered 201 and the
+  note stayed public. The ticket had no CC, so whether a public note
+  notifies ticket CCs is not checked (Open doubts).
+- A4: yes (2026-11-26). The ticket-level CC mailbox received a reply sent
+  with an empty `cc`: Freshdesk copies ticket CCs on a reply. The GET
+  before the run showed the CC in `cc_emails`, `reply_cc_emails` and
+  `ticket_cc_emails`, `fwd_emails` empty; one run cannot tell which field
+  Freshdesk reads. This is the consequence OD-21 accepts, as stated, not
+  smaller.
+- A5: partial (2026-11-26). Yes for the description: the forward quotes
+  it under the agent's signature. Not answered: whether a forward quotes
+  the conversation or private notes (the ticket had neither), and
+  whether a reply changes the status (Open after the reply, but the
+  status before was not read back, so the check could not fail). Both in
+  Open doubts and proposed T-100.
+- A6: yes (2026-11-26). The GET with `include=requester` carried all four
+  CC fields as lists, and the tags, `spam` and the requester's email (all
+  four tickets).
+- No account value in this file; the commit hook (`account values in the
+  index`, gitleaks) passed on `cced6b5`. `make quality` exit 0 on
+  `cced6b5`'s tree: Vitest 4824 passed, `tools/checks` 138 OK.
 
 ## Dead ends
-none
+Chrome DevTools MCP to create the tickets: its browser had no Freshdesk
+session (401); the owner made them in the UI.
 
 ## Open doubts
-none
+- A4 yes makes OD-21's accepted risk real: on a production ticket,
+  `reply_to_ticket` reaches every ticket-level CC, inside or outside the
+  allow-list, and the approval prompt does not show them. The owner
+  decides before T-098 (1.0.0) whether to ship with it accepted or raise
+  an RFC for the core to read or refuse ticket CCs (security-reviewer,
+  2026-11-26; hard rule 1: no core change outside `/rfc`).
+- The RFC's "API assumptions, all unchecked" (`2026-11-26-send-safety-core`
+  :65-70) is now out of date; a dated pointer to this Done section is
+  left to the owner or a `/rfc` amendment, not written here.
+- A5 open: private notes or conversation in a forward (OD-29's size) and
+  a reply's effect on status. Proposed T-100.
+- Whether a public note notifies ticket CCs (RFC threat 3): not checked.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

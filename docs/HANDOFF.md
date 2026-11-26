@@ -4,70 +4,62 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T15:50:21+01:00` (M4 plan line added; the rest as at
-  `2026-11-26T15:40:36+01:00`)
-- **Describes commit:** `171d6e5` (T-086: done; handoff to T-087), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45841679140
-  (workflow `quality`, ran on `171d6e5`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T18:19:27+01:00`
+- **Describes commit:** `<filled at stamp>`. **CI:** `<filled at stamp>`.
 
-- **Current task:** T-086 `done (2026-11-26)`: `make smoke-send`. See
-  `docs/tasks/T-086-smoke-send.md` "Done". Commits `6709f63` (script,
-  `cli.ts --send`, Makefile target, tests, overview line), then this
-  handoff commit. Started from `196a6c8`. Small decisions recorded in the
-  task file: `TO` pre-checked with `onAllowList`; requester email required
-  for a forward too; the GET through `context.http.requestWithRetry`
-  (`src/client` unchanged); a public note's answer read at the dispatcher
-  for `private`, printed `answered private yes|no|unknown`, exit 1 unless
-  `no`. No `src/` change.
+- **Current task:** T-087 `done (2026-11-26)`: M3 acceptance on the real
+  account. See `docs/tasks/T-087-m3-real-account-run.md` "Done" (one dated
+  line per item; values in `docs/private/account-facts.md` "T-087 test
+  tickets" and "T-087 runs"). Commits `cced6b5` (results), then this
+  handoff commit. Started from `54eb820`. Four owner runs of `make
+  smoke-send` on 2026-11-26, all `ok, requests 2`; no automation acted;
+  A1 to A4 and A6 yes, A5 partial. M3's "Done when" is met.
 
-- **Next action:** T-087 is the owner's run on the real account (T-076
-  must be `done` first). The exact commands, with placeholders, are in
-  `docs/tasks/T-087-m3-real-account-run.md` "Owner commands": `make
-  smoke-send CASE=reply TICKET=<ticket id>`; `CASE=forward TICKET=<ticket
-  id> TO=<allow-listed internal address>`; `CASE=public-note TICKET=<ticket
-  id>`; the A4 run `CASE=reply TICKET=<A4 ticket id>
-  TICKET_CC=allow-listed`. Env as the server's, team file with `send`.
+- **Next action:** owner's choice. (a) Decide T-087's first open doubt
+  (A4 yes: reply reaches every ticket CC) before T-098; (b) confirm or
+  drop proposed T-100; (c) take T-090 (RFC `.mcpb`, `todo`) or T-091
+  (Desktop spike, `todo`). OD-34 is lifted by T-087 `done`: an npm release
+  accepting `send` is no longer blocked by it.
 
-- **Read before anything else:** `docs/tasks/T-087-m3-real-account-run.md`;
-  `scripts/smoke/send.ts` header (what each output line means).
+- **Read before anything else:** T-087 "Open doubts";
+  `docs/rfc/active/2026-11-26-send-safety-core.md` OD-21 and threat 3.
 
-- **Owner, open:** T-087 waits on T-076 `done` and the owner. OD-34: no npm
-  release accepting `send` (any tag from `1ef27e0` on) until T-087 is
-  `done`.
+- **Reviews:** full round, R1 = `cced6b5`, range `54eb820..cced6b5`.
+  compliance-reviewer: Wireframes `none`, nothing to check (it also said
+  "compliance-reviewer still has to be run", a misreading of its own
+  role; dismissed). security-reviewer: medium, A4 yes confirms OD-21's
+  risk with Open doubts `none` (fixed: open doubt for the owner before
+  T-098); low, public note to ticket CCs unchecked (fixed: open doubt);
+  low, A5 private notes only in prose (fixed: open doubt, T-100); low,
+  which CC field (fixed: A4 line names the three fields that held it);
+  T-096's title naming an organisation, outside the range (parked,
+  `docs/improvements.md`). code-reviewer: medium, A5 overstated (fixed:
+  "partial", status half could not fail); medium, Open doubts `none`
+  (fixed); low-medium, A1/A2 scope (fixed: "for the endpoint and the keys
+  the core sends"); low, RFC "all unchecked" stale (recorded as open
+  doubt, not edited: core RFC); low, A4 "guards" wording (fixed:
+  "accepts"); low, template sections (fixed); low, hook line (fixed). It
+  ran one Bash `grep` (read-only, no write; reported by itself). All four
+  quotes matched in all three. Fixes were text only, no mechanism: no
+  scoped round.
 
-- **Reviews:** full round, R1 = `6709f63`, range `196a6c8..6709f63`.
-  compliance-reviewer: Wireframes `none`, nothing to check.
-  code-reviewer: clean; low, the `unknown` path untested (unreachable but
-  for an answer over 1 MiB, recorded in Done); low, the 11-address test's
-  name (dismissed: the tool's schema has no cap, the core's cap refuses);
-  low, tag check re-written not reused (reason recorded in Done); low,
-  stale `overview.md:52` (parked). security-reviewer: no finding at medium
-  or above; low, a stale exported `TO`/`TICKET_CC` is read by make (parked,
-  and the T-087 commands say to check); two info items (parked). All four
-  quotes matched in all three. No fix changed code: no scoped round.
-
-- **Proposed plan changes:** M4 decomposed 2026-11-26 (`/decompose M4`,
-  PLAN "M4"): T-090 (RFC, `.mcpb`) and T-091 (spike, owner installs a
-  throwaway bundle) `todo`, both may run while T-087 is open; T-092 to
-  T-099 `proposed`, waiting on OD-35 to OD-42 (owner) and T-090. The M3
-  next action above is unchanged.
+- **Proposed plan changes:** T-100 (A5 follow-up, owner action:
+  forward on a ticket with a private note, reply with status read before
+  and after), `proposed (2026-11-26)`, after T-087 in PLAN's M3 table.
 
 - **Open doubts:**
-  - A6's CC field names unverified; a fifth CC field is not seen by the
-    script. T-087's first run shows whether the GET carries all four.
-  - The GET-then-POST gap (a CC or tag changed between check and send),
-    accepted on owner-made `mcp-test` tickets.
-  - Carried: private notes in a forward (A5) unchecked; whether a forward
-    copies existing CCs (A2/A5) unchecked, the script refuses a forward on
-    a ticket with CCs; T-089's 408-in-front-of-origin question; T-076's
-    C6, T-082's doubts and the older ones as in `4efcc70`'s HANDOFF.
+  - A4 yes: production replies reach every ticket CC, unlisted ones too,
+    unseen in the approval prompt. Owner decides before T-098.
+  - The send RFC still says "API assumptions, all unchecked".
+  - A5's private-note and status halves; public note to ticket CCs.
+  - Carried: the GET-then-POST gap; T-089's 408 question; T-076's C6,
+    T-082's doubts and older ones as in `4efcc70`'s HANDOFF.
 
-- **Dead ends:** none.
+- **Dead ends:** Chrome DevTools MCP to create tickets: no Freshdesk
+  session (401); the owner made the tickets in the UI.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `6709f63`'s tree. Vitest "Test
+- **Checkpoint:** `make quality` exit 0 on `cced6b5`'s tree. Vitest "Test
   Files 58 passed (58)", "Tests 4824 passed (4824)"; `tools/checks` "Ran
   138 tests", OK.
