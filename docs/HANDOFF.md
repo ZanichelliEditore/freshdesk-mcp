@@ -4,73 +4,63 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T11:07:33+01:00`
-- **Describes commit:** `61a8a58` (the T-073 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45798673354
-  (workflow `quality`, ran on `61a8a58`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T11:24:26+01:00`
+- **Describes commit:** pending (the T-074 handoff commit). **CI:** pending.
 
-- **Current task:** T-073 (`categorize_tickets`) `done (2026-11-26)`.
-  Commits `3a2ba75` (implementation), `3b3bec6` (full-round fixes), then
-  this handoff commit. Tests: `test/tools/write/categorize-tickets.test.ts`
-  (29 cases), `test/tools/preview.test.ts` "the checked items it gives
-  back", `test/server.test.ts` "the write wiring". No version bump or tag
-  (OD-16). MockAgent only, no real Freshdesk call.
+- **Current task:** T-074 (`hand_off_draft`) `done (2026-11-26)`. Commits
+  `ae54d0a` (implementation, `add_note`'s public-note error), `d8f274e`
+  (full-round fixes), then this handoff commit. Tests:
+  `test/tools/write/hand-off-draft.test.ts` (38 cases),
+  `test/tools/write/add-note.test.ts` "a note Freshdesk answers as public"
+  and "a POST whose outcome is unknown", `test/server.test.ts` "the write
+  wiring". No version bump or tag: OD-16 now allows a release, which stays
+  the owner's go. MockAgent only, no real Freshdesk call.
 
-- **Next action:** `/pickup` T-074 (`hand_off_draft`), the first `todo`
-  row whose dependencies (T-072, T-041) are `done`.
+- **Next action:** `/decompose` sizing T-078 (`proposed`, below) before
+  T-075.
 
-- **Read before anything else:** `docs/tasks/T-074-hand-off-draft.md`;
-  the owner decision below; `docs/improvements.md` entry `a57ef9b` (T-074's
-  allow-listed output and no-email test).
-
-- **Owner decisions (2026-11-26, via the orchestrator):**
-  - OD-13 applied in T-073: what fits the deadline is applied, the rest
-    reported `not_attempted` with the `preview_id` still valid for them; a
-    confirm may name any subset of the previewed tickets.
-  - **For T-074 to implement:** if Freshdesk's note reply says
-    `private: false`, `add_note` and `hand_off_draft` return an error that
-    includes the `note_id` and says the note is public and must be
-    checked. `add_note` (T-072) still reports it as given today: T-074
-    changes both.
+- **Read before anything else:** `docs/tasks/PLAN.md` row T-078;
+  `docs/improvements.md` entries `3a2ba75` and `3b3bec6` (T-078's source);
+  entry `ae54d0a` (owner question below).
 
 - **Reviews:**
-  - Full round, R1 = `3a2ba75`, range `04579a2..3a2ba75`. Scoped round,
-    range `3a2ba75..3b3bec6`. All four quotes of every reviewer checked
+  - Full round, R1 = `ae54d0a`, range `2c649fc..ae54d0a`. Scoped round,
+    range `ae54d0a..d8f274e`. All four quotes of every reviewer checked
     against the diff files: correct.
-  - `code-reviewer`, full: medium, a sent write answered `network`/`server`
-    reported plainly `refused` (fixed: `may_have_been_applied` and a note);
-    low, no tool-level test that only checked values are written (fixed:
-    handler test with a getter); low, budget-cut halves of two acceptance
-    lines untested (fixed); low, the tool parsed the id's format (fixed:
-    `expires_at` from `mintPreviewId`); low, a field named twice passed the
-    preview (fixed: `duplicate_field`).
-  - `security-reviewer`, full: no safety-core bypass; `not_attempted` sound
-    (only `rate_limited`, never applied). Low-medium, same as code's medium
-    (fixed); low, label rebinding at confirm (parked, owner question,
-    improvements `3a2ba75`); info, duplicate field (fixed).
+  - `code-reviewer`, full: medium, assignment error kept `retryable: true`
+    after the note (fixed: `retryable: false`, points at `update_ticket`);
+    medium, a 5xx/network PUT said "failed" though it may have landed
+    (fixed: "may or may not have been applied"); medium, values checked
+    only after the note (not fixed: `ticketInput` is lint-fenced out of
+    `src/tools/` by T-077; owner question, improvements `ae54d0a`); low,
+    missing tests for ambiguous key, dedupe, `agent: null` (added); low,
+    problems over 10 dropped silently (fixed); low, duplicated key lookup
+    (parked); low, "not retried" wording (fixed).
+  - `security-reviewer`, full: no safety-core bypass. Medium, same as
+    code's first (fixed); low, a 5xx/network note POST gave no "may have
+    been written" hint (fixed in both tools, `noteFailed`); info, header
+    comment overclaimed (fixed).
   - `compliance-reviewer`: wireframes `none`, both rounds.
   - Scoped round: nothing blocking from all three. Parked (improvements
-    `3b3bec6`): `may_have_been_applied` counted in `refused`; no 2xx-of-
-    another-shape test; a flagged ticket can be re-sent within 15 minutes.
+    `d8f274e`): six test-strength items, the dropped top-level message.
+    Dismissed: errors[] unwrapped (the registry's `sentError` wraps them).
 
-- **Proposed plan changes:** none.
+- **Proposed plan changes:** T-078 "categorize_tickets: confirm bound to
+  the API field name the preview resolved; `may_have_been_applied` as its
+  own result state and count", `proposed`, from improvements
+  `3a2ba75`/`3b3bec6`, owner-approved 2026-11-26; to size at `/decompose`.
 
 - **Open doubts:**
-  - Owner question: bind a confirm to the field the preview resolved (mint
-    over API names, confirm by API name) rather than the label typed?
-    Today a relabel inside the 15 minutes could redirect a write to another
-    custom field (improvements `3a2ba75`).
-  - Owner question: should a `may_have_been_applied` ticket be its own
-    result or count, beyond OD-13's three states (improvements `3b3bec6`)?
+  - Owner question: a mistyped agent or group value in `hand_off_draft` is
+    found only at the PUT, after the note is posted and the agents emailed
+    (the error names the `note_id` and says the assignment was not
+    applied). Accept, or have the core's `hand_off_draft` entry check the
+    assignment before the note (a core change, `/rfc` first)?
   - `categorize_tickets` checks values only at the confirm (tools cannot
     import `ticketInput`); a bad choice refuses that ticket then.
   - T-072's acceptance "a `private` input is `validation`" is the MCP SDK's
     "Input validation error" text, not a `FreshdeskError` JSON; the same
-    holds for T-073's extra item key.
-  - T-074 still owes the allow-listed output and no-email test
-    (improvements `a57ef9b`).
+    holds for T-073's extra item key and T-074's `private`/`body` inputs.
   - From T-067: the `getAgent` active rule comes from Freshdesk's
     documentation, not measured.
   - From T-077: that `context.ts` passes the team file's `toolsets` to
@@ -81,10 +71,12 @@
     the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** none.
+- **Dead ends:** MockAgent 429/5xx-on-every-attempt tests took 3 s or more
+  (client retries and pacing), near Vitest's 5 s timeout; replaced by a
+  fake-entry handler test and a 401 schema load.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `3b3bec6`'s tree. Vitest
-  "Tests 3924 passed (3924)"; `tools/checks` "Ran 138 tests", OK; lint,
-  format, typecheck, build and both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on `d8f274e`'s tree. Vitest
+  "Tests 3970 passed (3970)", 49 files; `tools/checks` "Ran 138 tests", OK;
+  lint, format, typecheck, build and both gitleaks scans passed.
