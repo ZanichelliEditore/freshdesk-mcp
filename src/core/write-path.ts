@@ -52,14 +52,34 @@
 //     the key. A change that sets nothing (no field, no tags) is refused.
 //   - A note entry takes the ticket id and the body (a string), and nothing that names
 //     a note's visibility or author: the payload is built here from a closed
-//     key set, `{ body, private: true }` (`notify_emails` is T-069's,
-//     invariant 4), so `private: false`, `user_id`, `incoming` or attachments
-//     never reach Freshdesk, even passed by a cast.
+//     key set, `{ body, private: true }` and the resolved `notify_emails`
+//     (below), so `private: false`, `user_id`, `incoming`, attachments or a
+//     caller's own `notify_emails` never reach Freshdesk, even passed by a cast.
 //   - An entry never rejects. Every refusal is `validation`, `http_status:
 //     null`, with nothing sent, per-field entries where a field is the cause;
 //     an input that throws when read (a cast's getter, `null`) is one too.
 //     The writes go through src/core/resources.ts, whose snapshot refuses a
 //     body JSON cannot carry.
+//
+// And invariant 4 (T-069), notify recipients by agent id:
+//   - A note entry's `notify` is a list of agent ids, never names or
+//     addresses. The list is copied once; every id must be a positive safe
+//     integer; the ids are de-duplicated, then capped at `NOTIFY_CAP` (10,
+//     OD-14, owner 2026-11-25). A list that breaks any of these is refused
+//     before any request.
+//   - Each distinct id is looked up with `getAgent` (src/client/resources/
+//     agents.ts), one GET each, in order, stopping at the first that fails.
+//     The whole write is refused, no POST sent, when a lookup fails (404,
+//     5xx, timeout, `rate_limited`), when the agent is not clearly active
+//     (fail closed: `getAgent` reads a flag missing or not a boolean as not
+//     active), or when its email is null, empty or not one plain address
+//     (`EMAIL`: one `@`, a dot in the domain, no space, control character or
+//     list separator). Never a note to the recipients that did resolve.
+//   - No ids (absent or an empty list) sends the note with no
+//     `notify_emails` key and no GET. The lookups are counted in the
+//     result's `attempts`, whether the write is sent, refused or fails.
+//   - A refusal names the agent id and the cause, never an address; the
+//     addresses live in this call's locals only, so the core keeps none.
 
 import type { FieldError, FreshdeskError } from "../client/errors.js";
 import {
@@ -75,6 +95,7 @@ import {
   type RetryResult,
 } from "../client/http.js";
 import { RateLimiter, type RateLimitOptions } from "../client/rate-limit.js";
+import { getAgent } from "../client/resources/agents.js";
 import type { Conversation, Ticket } from "../client/resources/tickets.js";
 import type { Schema } from "../schema/index.js";
 import { ticketInput } from "../schema/input.js";
@@ -115,6 +136,8 @@ export interface TagChange extends TicketChange {
 export interface NoteInput {
   id: number;
   body: string;
+  /** Agent ids to notify, at most `NOTIFY_CAP` once de-duplicated; their emails are looked up here. */
+  notify?: readonly number[];
   /** Epoch ms, the caller's: see `requestWithRetry`. */
   deadline?: number;
 }
@@ -204,12 +227,80 @@ async function ticketWrite(
   return putTicket(http, id, body, deadline);
 }
 
+/** The most agents one note may notify, once de-duplicated (OD-14, owner 2026-11-25). */
+export const NOTIFY_CAP = 10;
+
+/** One plain address: one `@`, a dot in the domain, no space, control character or list separator. */
+const EMAIL =
+  /^[^\s\x00-\x1f\x7f@,;<>"()]+@[^\s\x00-\x1f\x7f@,;<>"()]+\.[^\s\x00-\x1f\x7f@,;<>"()]+$/;
+
+type Refusal = { ok: false; error: FreshdeskError; attempts: number };
+type Recipients = { ok: true; emails: string[]; attempts: number } | Refusal;
+
+function notifyRefusal(message: string, code: string, attempts: number): Refusal {
+  const refusal = notSent(`Not sent: ${message} The whole note was refused; nothing was sent.`);
+  return {
+    ...refusal,
+    error: { ...refusal.error, errors: [{ field: "notify", code, message }] },
+    attempts,
+  };
+}
+
+/** The ids, copied once and checked, de-duplicated; a refusal when any is not an id or too many. */
+function notifyIds(notify: unknown): number[] | Refusal {
+  if (notify === undefined) return [];
+  const list: unknown[] = Array.isArray(notify) ? Array.from(notify) : [undefined];
+  if (
+    !Array.isArray(notify) ||
+    !list.every((id) => Number.isSafeInteger(id) && (id as number) > 0)
+  ) {
+    return notifyRefusal(
+      "notify is a list of agent ids (positive whole numbers).",
+      "invalid_value",
+      0,
+    );
+  }
+  const ids = [...new Set(list as number[])];
+  if (ids.length > NOTIFY_CAP) {
+    return notifyRefusal(`a note notifies at most ${NOTIFY_CAP} agents.`, "too_many", 0);
+  }
+  return ids;
+}
+
+/** Each agent's work email, one GET per id, in order; a refusal at the first that does not resolve. */
+async function recipients(http: HttpClient, ids: number[], deadline?: number): Promise<Recipients> {
+  const emails: string[] = [];
+  let attempts = 0;
+  for (const id of ids) {
+    const found = await getAgent(http, id, deadline);
+    attempts += found.attempts;
+    if (!found.ok) {
+      return notifyRefusal(
+        `agent ${id} could not be looked up (${found.error.code}).`,
+        found.error.code,
+        attempts,
+      );
+    }
+    if (!found.agent.active) {
+      return notifyRefusal(`agent ${id} is not active.`, "inactive", attempts);
+    }
+    const email = found.agent.email;
+    if (email === null || !EMAIL.test(email)) {
+      return notifyRefusal(`agent ${id} has no usable work email.`, "no_email", attempts);
+    }
+    emails.push(email);
+  }
+  return { ok: true, emails, attempts };
+}
+
 async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResult<Conversation>> {
   let id: number;
   let deadline: number | undefined;
   let body: unknown;
+  let ids: number[] | Refusal;
   try {
     ({ id, body, deadline } = input);
+    ids = notifyIds(input.notify);
   } catch {
     return notSent(UNREADABLE);
   }
@@ -218,8 +309,19 @@ async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResul
       { field: "body", code: "invalid_value", message: "A note body is a string." },
     ]);
   }
-  // The closed key set: a note from a write entry is private, always.
-  return postNote(http, id, { body, private: true }, deadline);
+  if (!Array.isArray(ids)) return ids;
+  // Checked again by `postNote`; here so a bad ticket id spends no lookup.
+  if (!(Number.isSafeInteger(id) && id > 0)) {
+    return notSent("Not sent: ticket id is not a valid value.");
+  }
+  const resolved = await recipients(http, ids, deadline);
+  if (!resolved.ok) return resolved;
+  // The closed key set: a note from a write entry is private, always, and
+  // notifies only the addresses resolved here.
+  const payload: Record<string, unknown> = { body, private: true };
+  if (resolved.emails.length > 0) payload.notify_emails = resolved.emails;
+  const result = await postNote(http, id, payload, deadline);
+  return { ...result, attempts: result.attempts + resolved.attempts };
 }
 
 function notGet(): { ok: false; error: FreshdeskError } {
