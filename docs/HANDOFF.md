@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T11:43:07+01:00`
-- **Describes commit:** `HANDOFF_HASH` (the T-078 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** recorded by the stamp commit.
+- **Describes commit:** `b5d284c` (the T-078 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45804059023
+  (workflow `quality`, ran on `b5d284c`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-078 (`categorize_tickets` confirm binding,
   `may_have_been_applied`) `done (2026-11-26)`. Commits `edca65b` (result
