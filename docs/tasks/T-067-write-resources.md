@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** doing (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-064
 - **Created:** 2026-11-25
 
@@ -40,18 +40,51 @@ No split point.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `85f48fd` (implementation), `deceac6` (review fixes).
+- `test/core/resources.test.ts` (MockAgent), per `putTicket` and `postNote`:
+  "sends the body exactly as given to the right path, and parses the
+  answer"; "does not retry a %i and returns it with retryable: false"
+  (500, 502, 503) and the timeout case; "retries a 429 after the limiter's
+  wait, and counts both attempts"; "gives up after four 429s, as
+  rate_limited with every attempt counted"; "sends the body as it read at
+  the call on every attempt, whatever it answers later" (security fix);
+  "refuses id %s as validation, with nothing sent"; "refuses %s as server,
+  saying the write may be applied".
+- `getAgent`'s tests are in `test/client/resources/agents.test.ts`
+  ("getAgent"), not in `test/core/resources.test.ts` as the acceptance line
+  says: `getAgent` is a read in the agents resource (In scope, Files
+  expected to change). They cover id, email and active parsed; the flag
+  missing, null, `"true"`, `1`, `deactivated` true, `"false"` or null as not
+  active; a 404 as `not_found`; malformed records and another agent's id as
+  `server`; bad ids as `validation`, nothing sent.
+- Active flag (OD-14): from Freshdesk's documented agent object
+  (developers.freshdesk.com/api, read 2026-11-26): `contact.active` "Set to
+  true if the agent is verified" on View an Agent; `deactivated` "True if
+  the agent is deactivated" only on service accounts and the availability
+  list. `active` = `contact.active === true` and `deactivated` absent or
+  `false`. Not measured on the account.
+- `test/lint-rules.test.ts` "eslint: only src/core/** imports
+  src/core/resources": refused in `src/` (server, cli, client, schema,
+  context.ts) and `scripts/`, in 8 spellings, as import, type import,
+  side-effect import, re-export and dynamic `import()`; allowed in
+  `src/core/**` and `test/`.
+- `make quality` exit 0 on `deceac6`'s tree: Vitest 2993 passed, checks
+  138 OK.
 
 ## Dead ends
-none
+- Reading Freshdesk's API page through WebFetch: the page is cut off before
+  the Agents section. The raw HTML (curl, then grep) had it.
 
 ## Open doubts
-none
+- The active rule is from the documentation, not measured on the account;
+  T-076's first real run, or a GET-only probe, should confirm
+  `contact.active` is `true` for working agents.
+- `make quality` timed out on real-time tests under machine load
+  (2026-11-26); they pass alone and on rerun (`docs/improvements.md`,
+  `deceac6` entry).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

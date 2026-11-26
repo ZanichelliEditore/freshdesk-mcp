@@ -169,3 +169,10 @@ stands for. End an entry with the task id it came from.
 - A view that checks a request's `method` once and forwards the caller's object can be beaten by a getter (GET on the check, PUT on the send): read it twice and forward a copy with the literal GET (and no body). `paginate` is safe only because the client rebuilds the page request field by field. T-064
 - An `it.each` row that returns early (here `add_note`, with no allowed field) shows as a passing test that asserts nothing: filter the rows given to `it.each` instead. T-065
 - A name → id record from JSON cannot show two ids of one name: `JSON.parse` keeps the last of two equal keys, silently. Resolving a name from such a record needs a second source listing ids (here the agents or groups list), and a refusal when that source is truncated. T-041
+
+## 2026-11-26
+
+- Freshdesk's API reference is one 3 MB HTML page; WebFetch and its summaries cut it before the Agents section. `curl` the raw page into the scratchpad and grep the text instead. T-067
+- In zod 4, `z.unknown()` inside an object makes the key required: a missing key fails as "expected nonoptional". Use `z.unknown().optional()` for a flag that may be absent. T-067
+- esquery (an eslint selector's attribute regex) ends a regex at its first `/`, escaped or not: write `\x2F` for a slash. T-067
+- A `make quality` run piped into `grep` reports grep's exit code to a background task: append `echo make_exit=$?` to the log to see make's own. T-067
