@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T13:32:42+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `fd9b209` (T-081: done; handoff to T-083),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45820957190
+  (workflow `quality`, ran on `fd9b209`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-081 `done (2026-11-26)`: `src/core/recipients.ts`
   (`onAllowList`, `checkRecipients`, `RECIPIENT_CAP`), commits `644cb6c`
