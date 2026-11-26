@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T14:45:52+01:00`
-- **Describes commit:** filled by the stamp commit. **CI:** filled by the
-  stamp commit.
+- **Describes commit:** `82c8242` (T-084: done; handoff to T-085),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45832672901
+  (workflow `quality`, ran on `82c8242`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-084 `done (2026-11-26)`: `reply_to_ticket` in
   `src/tools/toolsets/send/reply-to-ticket.ts`, the `send` wiring in
