@@ -35,7 +35,7 @@ Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answ
 `none`
 
 ## Acceptance
-`test/tools/send/add-public-note.test.ts` (MockAgent): without `confirm` 0 dispatches and the "Not sent" result with a `send_id`; with `confirm: true` and that `send_id` one POST to `/tickets/{id}/notes` whose body is exactly `{body, private: false}`; `confirm: true` with no `send_id`, or one minted for another ticket, another body or another tool, 0 dispatches; a `private`, `notify_emails`, `user_id` or `incoming` input `validation` with 0 dispatches; a 5xx after the send `may_have_been_sent`, no retry; no email address in the result; listed with `destructiveHint` only with `send`; the description says the requester can see the note and may be emailed, and never to "always allow" it (OD-30); `make quality` green.
+`test/tools/send/add-public-note.test.ts` (MockAgent): without `confirm` 0 dispatches and the "Not sent" result with a `send_id`; with `confirm: true` and that `send_id` one POST to `/tickets/{id}/notes` whose body is exactly `{body, private: false}`; `confirm: true` with no `send_id`, or one minted for another ticket, another body or another tool, 0 dispatches; a `private`, `notify_emails`, `user_id` or `incoming` input `validation` with 0 dispatches; a 5xx after the send `may_have_been_sent`, no retry; no email address in the sent result; listed with `destructiveHint` only with `send`; the description says the requester can see the note and may be emailed, and never to "always allow" it (OD-30); `make quality` green.
 
 No split point: one tool on the send wiring.
 

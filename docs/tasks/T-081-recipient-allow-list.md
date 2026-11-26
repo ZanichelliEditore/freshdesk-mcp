@@ -33,7 +33,7 @@ One pure core module that says whether an address is on the team's `forward_allo
 `none`
 
 ## Acceptance
-`test/core/recipients.test.ts` (table): `@example.com` matches `a@example.com`, `A@EXAMPLE.COM`, `a+x@example.com`; refuses `a@sub.example.com`, `a@example.com.evil`, `Name <a@example.com>`, a comma or semicolon list, two `@`, whitespace, a control or non-ASCII character, and empty; a full-address entry matches only itself, case-insensitively; an empty list refuses everything; more than the cap is refused; a refusal names the position, never the address; `make quality` green (rules per OD-23).
+`test/core/recipients.test.ts` (table): `@example.com` matches `a@example.com`, `A@EXAMPLE.COM`, `a+x@example.com`; refuses `a@sub.example.com`, `a@example.com.evil`, `a@evilexample.com`, `a@example.com.` (trailing dot), `Name <a@example.com>`, a comma or semicolon list, two `@`, whitespace, a control or non-ASCII character, and empty; a full-address entry matches only itself, case-insensitively; an empty list refuses everything; more than the cap is refused; a refusal names the position, never the address; `make quality` green (rules per OD-23).
 
 No split point: one pure module and its table test.
 
