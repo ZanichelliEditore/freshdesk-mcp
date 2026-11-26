@@ -68,18 +68,24 @@
 //     OD-14, owner 2026-11-25). A list that breaks any of these is refused
 //     before any request.
 //   - Each distinct id is looked up with `getAgent` (src/client/resources/
-//     agents.ts), one GET each, in order, stopping at the first that fails.
+//     agents.ts) through `view`, the GET-only view, one GET each, in order,
+//     stopping at the first that fails.
 //     The whole write is refused, no POST sent, when a lookup fails (404,
 //     5xx, timeout, `rate_limited`), when the agent is not clearly active
 //     (fail closed: `getAgent` reads a flag missing or not a boolean as not
 //     active), or when its email is null, empty or not one plain address
-//     (`EMAIL`: one `@`, a dot in the domain, no space, control character or
-//     list separator). Never a note to the recipients that did resolve.
+//     (`EMAIL`: one `@`, a dot in the domain, no space, control or format
+//     character, list separator or other delimiter). Never a note to the
+//     recipients that did resolve. A deadline that is not a number is refused
+//     too, so the entry resolves rather than rejects.
 //   - No ids (absent or an empty list) sends the note with no
 //     `notify_emails` key and no GET. The lookups are counted in the
 //     result's `attempts`, whether the write is sent, refused or fails.
-//   - A refusal names the agent id and the cause, never an address; the
-//     addresses live in this call's locals only, so the core keeps none.
+//   - A refusal names the agent id and the cause, never an address. The core
+//     keeps no address after the call. Not claimed: that none reaches the
+//     caller. The note's answer is passed back as Freshdesk sends it, and may
+//     echo the recipients (docs/improvements.md: the tool must not return
+//     them).
 
 import type { FieldError, FreshdeskError } from "../client/errors.js";
 import {
@@ -159,15 +165,15 @@ export function createWritePath(options: WritePathOptions): WritePath {
   const http = new HttpClient({ ...client, limiter: new RateLimiter(limits) });
   const view = new GetView(http);
   if (!toolsets.includes("write")) return Object.freeze({ view });
-  return Object.freeze({ view, entries: writeEntries(http) });
+  return Object.freeze({ view, entries: writeEntries(http, view) });
 }
 
-function writeEntries(http: HttpClient): WriteEntries {
+function writeEntries(http: HttpClient, view: GetHttp): WriteEntries {
   const ticket = (entry: WriteEntry) => {
     const allow = allowSet(entry);
     return (change: TagChange) => ticketWrite(http, allow, change);
   };
-  const note: NoteWrite = (input) => noteWrite(http, input);
+  const note: NoteWrite = (input) => noteWrite(http, view, input);
   return Object.freeze({
     update_ticket: Object.freeze({ update: ticket("update_ticket") }),
     categorize_tickets: Object.freeze({ update: ticket("categorize_tickets") }),
@@ -230,9 +236,13 @@ async function ticketWrite(
 /** The most agents one note may notify, once de-duplicated (OD-14, owner 2026-11-25). */
 export const NOTIFY_CAP = 10;
 
-/** One plain address: one `@`, a dot in the domain, no space, control character or list separator. */
+/**
+ * One plain address: one `@`, a dot in the domain, and no space, control or
+ * format character (`\p{Cc}`, `\p{Cf}`: C0, C1, zero-width, bidi) and none of
+ * `,;<>"()[]:\`.
+ */
 const EMAIL =
-  /^[^\s\x00-\x1f\x7f@,;<>"()]+@[^\s\x00-\x1f\x7f@,;<>"()]+\.[^\s\x00-\x1f\x7f@,;<>"()]+$/;
+  /^[^\s\p{Cc}\p{Cf}@,;<>"()[\]:\\]+@[^\s\p{Cc}\p{Cf}@,;<>"()[\]:\\]+\.[^\s\p{Cc}\p{Cf}@,;<>"()[\]:\\]+$/u;
 
 type Refusal = { ok: false; error: FreshdeskError; attempts: number };
 type Recipients = { ok: true; emails: string[]; attempts: number } | Refusal;
@@ -249,17 +259,12 @@ function notifyRefusal(message: string, code: string, attempts: number): Refusal
 /** The ids, copied once and checked, de-duplicated; a refusal when any is not an id or too many. */
 function notifyIds(notify: unknown): number[] | Refusal {
   if (notify === undefined) return [];
-  const list: unknown[] = Array.isArray(notify) ? Array.from(notify) : [undefined];
-  if (
-    !Array.isArray(notify) ||
-    !list.every((id) => Number.isSafeInteger(id) && (id as number) > 0)
-  ) {
-    return notifyRefusal(
-      "notify is a list of agent ids (positive whole numbers).",
-      "invalid_value",
-      0,
-    );
-  }
+  const notIds = () =>
+    notifyRefusal("notify is a list of agent ids (positive whole numbers).", "invalid_value", 0);
+  if (!Array.isArray(notify)) return notIds();
+  // Copied once, then checked: the ids looked up are the ids checked.
+  const list: unknown[] = Array.from(notify);
+  if (!list.every((id) => Number.isSafeInteger(id) && (id as number) > 0)) return notIds();
   const ids = [...new Set(list as number[])];
   if (ids.length > NOTIFY_CAP) {
     return notifyRefusal(`a note notifies at most ${NOTIFY_CAP} agents.`, "too_many", 0);
@@ -268,11 +273,11 @@ function notifyIds(notify: unknown): number[] | Refusal {
 }
 
 /** Each agent's work email, one GET per id, in order; a refusal at the first that does not resolve. */
-async function recipients(http: HttpClient, ids: number[], deadline?: number): Promise<Recipients> {
+async function recipients(view: GetHttp, ids: number[], deadline?: number): Promise<Recipients> {
   const emails: string[] = [];
   let attempts = 0;
   for (const id of ids) {
-    const found = await getAgent(http, id, deadline);
+    const found = await getAgent(view, id, deadline);
     attempts += found.attempts;
     if (!found.ok) {
       return notifyRefusal(
@@ -293,7 +298,11 @@ async function recipients(http: HttpClient, ids: number[], deadline?: number): P
   return { ok: true, emails, attempts };
 }
 
-async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResult<Conversation>> {
+async function noteWrite(
+  http: HttpClient,
+  view: GetHttp,
+  input: NoteInput,
+): Promise<WriteResult<Conversation>> {
   let id: number;
   let deadline: number | undefined;
   let body: unknown;
@@ -304,6 +313,9 @@ async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResul
   } catch {
     return notSent(UNREADABLE);
   }
+  // A deadline of another type (a cast's Symbol or BigInt) would throw in the
+  // client's arithmetic: refused here, so the entry resolves.
+  if (deadline !== undefined && typeof deadline !== "number") return notSent(UNREADABLE);
   if (typeof body !== "string") {
     return fieldRefusal([
       { field: "body", code: "invalid_value", message: "A note body is a string." },
@@ -314,7 +326,7 @@ async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResul
   if (!(Number.isSafeInteger(id) && id > 0)) {
     return notSent("Not sent: ticket id is not a valid value.");
   }
-  const resolved = await recipients(http, ids, deadline);
+  const resolved = await recipients(view, ids, deadline);
   if (!resolved.ok) return resolved;
   // The closed key set: a note from a write entry is private, always, and
   // notifies only the addresses resolved here.

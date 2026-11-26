@@ -221,23 +221,51 @@ describe("notify: a recipient that cannot be resolved refuses the whole write", 
     expect(result.attempts).toBe(calls().length);
   });
 
-  const records: [string, object][] = [
-    ["a null email", agentRecord(5, { email: null })],
-    ["no email", { id: 5, contact: { active: true, name: "Agent 5" } }],
-    ["an empty email", agentRecord(5, { email: "" })],
-    ["an email with no @", agentRecord(5, { email: "agent5.example.test" })],
-    ["an email with two addresses", agentRecord(5, { email: "a@example.test,b@example.test" })],
-    ["an email with a space", agentRecord(5, { email: "agent 5@example.test" })],
-    ["an email with a line break", agentRecord(5, { email: "agent5@example.test\nBcc: x" })],
-    ["an email with no domain dot", agentRecord(5, { email: "agent5@localhost" })],
-    ["a deactivated agent", { ...agentRecord(5), deactivated: true }],
-    ["an inactive contact", agentRecord(5, { active: false })],
-    ["the active flag missing", { id: 5, contact: { email: email(5), name: "Agent 5" } }],
-    ["the active flag not a boolean", agentRecord(5, { active: "true" })],
-    ["deactivated not a boolean", { ...agentRecord(5), deactivated: "false" }],
+  const records: [string, object, string][] = [
+    ["a null email", agentRecord(5, { email: null }), "no_email"],
+    ["no email", { id: 5, contact: { active: true, name: "Agent 5" } }, "no_email"],
+    ["an empty email", agentRecord(5, { email: "" }), "no_email"],
+    ["an email with no @", agentRecord(5, { email: "agent5.example.test" }), "no_email"],
+    [
+      "an email with two addresses",
+      agentRecord(5, { email: "a@example.test,b@example.test" }),
+      "no_email",
+    ],
+    ["an email with a space", agentRecord(5, { email: "agent 5@example.test" }), "no_email"],
+    [
+      "an email with a line break",
+      agentRecord(5, { email: "agent5@example.test\nBcc: x" }),
+      "no_email",
+    ],
+    [
+      "an email with a C1 control",
+      agentRecord(5, { email: "agent5\u0085@example.test" }),
+      "no_email",
+    ],
+    [
+      "an email with a zero-width space",
+      agentRecord(5, { email: "agent5\u200b@example.test" }),
+      "no_email",
+    ],
+    [
+      "an email with a bidi override",
+      agentRecord(5, { email: "agent5@\u202eexample.test" }),
+      "no_email",
+    ],
+    ["an email with a colon", agentRecord(5, { email: "agent5@example.test:25" }), "no_email"],
+    ["an email with no domain dot", agentRecord(5, { email: "agent5@localhost" }), "no_email"],
+    ["a deactivated agent", { ...agentRecord(5), deactivated: true }, "inactive"],
+    ["an inactive contact", agentRecord(5, { active: false }), "inactive"],
+    [
+      "the active flag missing",
+      { id: 5, contact: { email: email(5), name: "Agent 5" } },
+      "inactive",
+    ],
+    ["the active flag not a boolean", agentRecord(5, { active: "true" }), "inactive"],
+    ["deactivated not a boolean", { ...agentRecord(5), deactivated: "false" }, "inactive"],
   ];
 
-  it.each(records)("%s", async (_, record) => {
+  it.each(records)("%s", async (_, record, cause) => {
     replyAgent(3);
     replyAgent(5, record);
     onNote().reply(201, NOTE, { headers: JSON_TYPE });
@@ -246,7 +274,7 @@ describe("notify: a recipient that cannot be resolved refuses the whole write", 
 
     const error = failure(result);
     expect(error).toMatchObject({ code: "validation", http_status: null });
-    expect(error.errors).toEqual([expect.objectContaining({ field: "notify" })]);
+    expect(error.errors).toEqual([expect.objectContaining({ field: "notify", code: cause })]);
     expect(posts()).toBe(0);
     expect(gets()).toBe(2);
     expect(result.attempts).toBe(2);
@@ -314,16 +342,42 @@ describe("notify: ids refused before any request", () => {
     expect(calls()).toHaveLength(0);
   });
 
-  it("reads the list once: a list that changes after the call sends what it held at the call", async () => {
+  it("reads each id once: a list whose reads differ notifies what the first read held", async () => {
     replyAgent(3);
     onNote().reply(201, NOTE, { headers: JSON_TYPE });
-    const ids = [3];
+    let reads = 0;
+    const ids = new Proxy([3], {
+      get(target, key, receiver) {
+        if (key === "0") {
+          reads += 1;
+          return reads === 1 ? 3 : 0;
+        }
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
 
-    const call = entries().add_note.note(note(ids));
-    ids.push(99);
-    const result = await settle(call);
+    const result = await settle(entries().add_note.note(note(ids)));
 
     expect(result).toMatchObject({ ok: true, attempts: 2 });
+    expect(reads).toBe(1);
+    expect(gets()).toBe(1);
     expect(postedBody().notify_emails).toEqual([email(3)]);
+  });
+
+  it.each([
+    ["a symbol", Symbol("deadline")],
+    ["a BigInt", 1n],
+    ["a string", "soon"],
+  ])("a deadline that is %s resolves to a refusal with nothing sent", async (_, deadline) => {
+    replyAgent(3);
+    onNote().reply(201, NOTE, { headers: JSON_TYPE });
+
+    const result = await settle(
+      entries().add_note.note({ id: 42, body: "x", notify: [3], deadline } as unknown as NoteInput),
+    );
+
+    expect(failure(result)).toMatchObject({ code: "validation", http_status: null });
+    expect(result.attempts).toBe(0);
+    expect(calls()).toHaveLength(0);
   });
 });
