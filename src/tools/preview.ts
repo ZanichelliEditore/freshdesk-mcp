@@ -23,7 +23,8 @@
 //     15 minutes by as much. A monotonic clock was tried and dropped: it does
 //     not count time the machine sleeps, so a preview would outlive a closed
 //     laptop lid.
-//   - Valid 15 minutes from the mint time, the end included; a mint time
+//   - Valid 15 minutes from the mint time, the end included (`expires_at`,
+//     given with the id at mint); a mint time
 //     ahead of the clock is refused. The tickets are not read
 //     again at confirm (OD-15). With no server state the check cannot tell
 //     which tickets a confirm already wrote: a repeat confirm within the
@@ -68,7 +69,8 @@ export interface PreviewItem {
   fields: Readonly<Record<string, unknown>>;
 }
 
-export type MintResult = { ok: true; preview_id: string } | { ok: false; error: FreshdeskError };
+export type MintResult =
+  { ok: true; preview_id: string; expires_at: string } | { ok: false; error: FreshdeskError };
 export type CheckResult = { ok: true; items: PreviewItem[] } | { ok: false; error: FreshdeskError };
 
 interface Entry {
@@ -83,7 +85,11 @@ export function mintPreviewId(tool: string, items: readonly PreviewItem[]): Mint
   const time = Date.now();
   const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const tags = read.entries.map((entry) => tag(tool, time, nonce, entry)).join("");
-  return { ok: true, preview_id: `${time}.${nonce}.${tags}` };
+  return {
+    ok: true,
+    preview_id: `${time}.${nonce}.${tags}`,
+    expires_at: new Date(time + PREVIEW_TTL_MS).toISOString(),
+  };
 }
 
 /**

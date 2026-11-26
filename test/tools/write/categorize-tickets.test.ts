@@ -10,7 +10,11 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
-import { PREVIEW_CAP } from "../../../src/tools/preview.js";
+import { mintPreviewId, PREVIEW_CAP } from "../../../src/tools/preview.js";
+import {
+  type CategorizeChange,
+  categorizeTickets,
+} from "../../../src/tools/toolsets/write/categorize-tickets.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../../fixtures/schema.js";
 import {
@@ -186,6 +190,10 @@ describe("categorize_tickets: the preview", () => {
       { field: "Shelf", current: "North > Bottom", new: "South > Middle" },
     ]);
     expect(preview.api_calls_used).toBe(3);
+    const minted = Number(preview.preview_id!.split(".")[0]);
+    expect((preview as unknown as { expires_at: string }).expires_at).toBe(
+      new Date(minted + 15 * 60 * 1000).toISOString(),
+    );
   });
 
   it("a cold schema is loaded first and counted", async () => {
@@ -232,6 +240,17 @@ describe("categorize_tickets: the preview", () => {
     );
     // "product" is one field's API name and another's label; each key is listed once.
     expect(error.errors?.map((item) => item.code)).toEqual(["unknown_field", "ambiguous_field"]);
+    expect(sent()).toEqual([]);
+  });
+
+  it("one field named twice for a ticket (label and API name) is duplicate_field, nothing sent", async () => {
+    const session = await warm();
+    const error = failure(
+      await callTool(session, TOOL, {
+        items: [{ ticket_id: 4242, fields: { Type: "Question", ticket_type: "Incident" } }],
+      }),
+    );
+    expect(error.errors?.map((item) => item.code)).toEqual(["duplicate_field"]);
     expect(sent()).toEqual([]);
   });
 
@@ -329,6 +348,16 @@ describe("categorize_tickets: the preview", () => {
       { ticket_id: 4244, code: "not_read" },
     ]);
     expect(preview.preview_id).toEqual(expect.any(String));
+    mock.clearCallHistory();
+    const refused = failure(
+      await callTool(session, TOOL, {
+        items: [ITEMS[1]],
+        confirm: true,
+        preview_id: preview.preview_id,
+      }),
+    );
+    expect(refused.code).toBe("validation");
+    expect(sent()).toEqual([]);
   });
 
   it("nothing read: no preview_id", async () => {
@@ -436,7 +465,35 @@ describe("categorize_tickets: the confirm", () => {
     ) as unknown as Applied;
     expect(applied.results.map((row) => row.result)).toEqual(["written", "refused", "written"]);
     expect(applied.results[1]!.error?.code).toBe("not_found");
+    expect(applied.results[1]).not.toHaveProperty("may_have_been_applied");
     expect(applied).toMatchObject({ written: 2, refused: 1, not_attempted: 0 });
+    expect(applied.note).toBeUndefined();
+  });
+
+  it("a PUT sent and answered 5xx, or cut by a network failure, is refused and may_have_been_applied", async () => {
+    const session = await warm();
+    const id = await previewed(session);
+    reply(ticketPath(4242), { message: "down" }, "PUT", 503);
+    mock
+      .get(ORIGIN)
+      .intercept({ path: ticketPath(4243), method: "PUT" })
+      .replyWithError(new Error("connection reset"));
+    reply(ticketPath(4244), ticketOf(4244), "PUT");
+    const applied = output(
+      await callTool(session, TOOL, { items: ITEMS, confirm: true, preview_id: id }),
+    ) as unknown as Applied;
+    // Not retried: one PUT each, as the core sends a write that may have landed once.
+    expect(sent()).toEqual(IDS.map((ticket) => `PUT ${ticketPath(ticket)}`));
+    expect(applied.results.map((row) => [row.result, row.error?.code])).toEqual([
+      ["refused", "server"],
+      ["refused", "network"],
+      ["written", undefined],
+    ]);
+    expect(
+      applied.results.map((row) => (row as Record<string, unknown>).may_have_been_applied),
+    ).toEqual([true, true, undefined]);
+    expect(applied).toMatchObject({ written: 1, refused: 2, not_attempted: 0 });
+    expect(applied.note).toContain("may have been applied");
   });
 
   it("a value the core refuses is refused per ticket, its field error kept, nothing sent for it", async () => {
@@ -501,6 +558,23 @@ describe("categorize_tickets: the confirm", () => {
       "not_attempted",
       "not_attempted",
     ]);
+    expect(applied.note).toContain("preview_id");
+    mock.clearCallHistory();
+
+    // The limiter's window over, the same preview_id writes only the tickets not attempted.
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    vi.setSystemTime(Date.now() + 61_000);
+    reply(ticketPath(4243), ticketOf(4243), "PUT");
+    reply(ticketPath(4244), ticketOf(4244), "PUT");
+    const again = output(
+      await callTool(session, TOOL, {
+        items: [ITEMS[1], ITEMS[2]],
+        confirm: true,
+        preview_id: id,
+      }),
+    ) as unknown as Applied;
+    expect(sent()).toEqual([`PUT ${ticketPath(4243)}`, `PUT ${ticketPath(4244)}`]);
+    expect(again.written).toBe(2);
   });
 
   it("writes the fields as previewed: the PUT body is the previewed change, for each ticket", async () => {
@@ -520,5 +594,49 @@ describe("categorize_tickets: the confirm", () => {
         { custom_fields: { cf_shelf: "North", cf_tier: "Top", cf_hobby: "Chess" } },
       ],
     ]);
+  });
+});
+
+// docs/improvements.md 70be151, f64d743: the confirm writes the items the
+// check gave back, never the call's items read again. Through MCP the items
+// are freshly parsed JSON, so this calls the handler with a getter directly.
+describe("categorize_tickets: the confirm writes only the checked values", () => {
+  it("a value that reads differently after the check is written as checked; an extra key never", async () => {
+    const minted = mintPreviewId(TOOL, [{ ticket_id: 4242, fields: { Type: "Question" } }]);
+    if (!minted.ok) throw new Error("mint refused");
+    let reads = 0;
+    const fields = {};
+    Object.defineProperty(fields, "Type", {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "Question" : "Incident";
+      },
+    });
+    const received: CategorizeChange[] = [];
+    const tool = categorizeTickets({
+      update: async (change) => {
+        received.push(change);
+        return { ok: true, value: ticketOf(change.id), attempts: 1 };
+      },
+    });
+    const schema = { fields: [], agents: {}, groups: {} };
+    const context = { schema: { get: async () => ({ ok: true, schema, attempts: 0 }) } };
+    const result = await tool.handler(
+      {
+        items: [{ ticket_id: 4242, fields, private: false } as never],
+        confirm: true,
+        preview_id: minted.preview_id,
+      },
+      context as never,
+    );
+    const readsAtWrite = reads;
+    expect(result.ok).toBe(true);
+    expect(received).toHaveLength(1);
+    expect(received[0]!.id).toBe(4242);
+    expect(received[0]!.fields).toEqual({ Type: "Question" });
+    expect(received[0]!.fields).not.toBe(fields);
+    expect(Object.keys(received[0]!)).not.toContain("private");
+    expect(readsAtWrite).toBe(1);
   });
 });

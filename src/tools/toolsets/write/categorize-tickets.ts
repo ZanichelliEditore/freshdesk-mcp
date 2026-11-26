@@ -14,7 +14,8 @@
 //     preview mirrors it (`writable`) so a table the user approves never
 //     shows a change the core would refuse as `field_not_writable`: status,
 //     priority, group, agent and every other default field are refused,
-//     nothing sent. Values are not checked at the preview: the core checks
+//     nothing sent; so is a field named twice for one ticket (two keys, one
+//     field), which the core would refuse. Values are not checked at the preview: the core checks
 //     them at the confirm, and a bad one refuses that ticket only.
 //   - Items: 1 to PREVIEW_CAP (50), each ticket once, each with at least one
 //     field, checked before any request (the schema's load included); over
@@ -37,7 +38,10 @@
 //     read once; never the call's items again. Then one PUT per ticket, in
 //     the confirm's order, each through the entry. A result per ticket:
 //     `written`; `refused` with the error (Freshdesk's answer, or the core's
-//     field errors); `not_attempted`. A write refused `rate_limited` (the
+//     field errors), marked `may_have_been_applied` when the PUT was sent and
+//     came back `network` or `server` (a timeout, a 5xx, an answer of another
+//     shape: the core does not retry those since they may have landed);
+//     `not_attempted`. A write refused `rate_limited` (the
 //     deadline's 10 s rule, the limiter, or Freshdesk's 429, none of which
 //     applies it) cuts the run: that ticket and every one after it are not
 //     attempted (OD-13, owner 2026-11-25), and a later confirm with the same
@@ -55,13 +59,7 @@ import type { FieldError, FreshdeskError } from "../../../client/errors.js";
 import { getTicket, type Ticket } from "../../../client/resources/tickets.js";
 import type { Schema } from "../../../schema/index.js";
 import { fieldValue, plainName, untrusted } from "../../format.js";
-import {
-  checkPreviewId,
-  mintPreviewId,
-  PREVIEW_CAP,
-  PREVIEW_TTL_MS,
-  type PreviewItem,
-} from "../../preview.js";
+import { checkPreviewId, mintPreviewId, PREVIEW_CAP, type PreviewItem } from "../../preview.js";
 import type { Tool } from "../index.js";
 
 const TOOL = "categorize_tickets";
@@ -197,8 +195,15 @@ async function preview(items: readonly Item[], context: Context, deadline: numbe
     const fields: [string, Field][] = [];
     for (const key of Object.keys(one.fields)) {
       const found = findField(schema, key);
-      if (found.ok) fields.push([key, found.field]);
-      else problems.set(key, found.problem);
+      if (!found.ok) problems.set(key, found.problem);
+      else if (fields.some(([, field]) => field.name === found.field.name)) {
+        // The core refuses a field given twice (`ticketInput`): never in an approved table.
+        problems.set(key, {
+          field: key,
+          code: "duplicate_field",
+          message: `Field ${plainName(found.field.label)} is given more than once for one ticket.`,
+        });
+      } else fields.push([key, found.field]);
     }
     return fields;
   });
@@ -247,15 +252,13 @@ async function preview(items: readonly Item[], context: Context, deadline: numbe
   }
 
   let previewId: string | null = null;
+  let expires: string | null = null;
   if (read.length > 0) {
     const minted = mintPreviewId(TOOL, read);
     if (!minted.ok) return minted;
     previewId = minted.preview_id;
+    expires = minted.expires_at;
   }
-  const expires =
-    previewId === null
-      ? null
-      : new Date(Number(previewId.split(".")[0]) + PREVIEW_TTL_MS).toISOString();
   return {
     ok: true as const,
     value: {
@@ -294,6 +297,7 @@ async function apply(
   let calls = loaded.attempts;
   const results: Record<string, unknown>[] = [];
   const counts = { written: 0, refused: 0, not_attempted: 0 };
+  let unknowns = 0;
   let cut = false;
   // Only the checked items: never the call's items again.
   for (const one of checked.items) {
@@ -317,9 +321,29 @@ async function apply(
       results.push({ ticket_id: one.ticket_id, result: "not_attempted" });
       counts.not_attempted += 1;
     } else {
-      results.push({ ticket_id: one.ticket_id, result: "refused", error: shown(result.error) });
+      // Sent, then a 5xx, a timeout or an answer of another shape: Freshdesk may have applied it.
+      const unknown =
+        result.attempts > 0 && (result.error.code === "network" || result.error.code === "server");
+      results.push({
+        ticket_id: one.ticket_id,
+        result: "refused",
+        ...(unknown ? { may_have_been_applied: true } : {}),
+        error: shown(result.error),
+      });
       counts.refused += 1;
+      if (unknown) unknowns += 1;
     }
+  }
+  const notes: string[] = [];
+  if (counts.not_attempted > 0) {
+    notes.push(
+      `${counts.not_attempted} tickets were not attempted (the call's time or the API budget ran out); nothing was written to them. To apply them, call again with confirm: true, the same preview_id and only those tickets, each with the same fields, within 15 minutes of the preview.`,
+    );
+  }
+  if (unknowns > 0) {
+    notes.push(
+      `${unknowns} refused tickets carry may_have_been_applied: the change was sent and Freshdesk did not answer clearly, so it may have been applied. Check those tickets with get_ticket before sending them again.`,
+    );
   }
   return {
     ok: true as const,
@@ -327,11 +351,7 @@ async function apply(
       results,
       ...counts,
       api_calls_used: calls,
-      ...(counts.not_attempted > 0
-        ? {
-            note: `${counts.not_attempted} tickets were not attempted (the call's time or the API budget ran out); nothing was written to them. To apply them, call again with confirm: true, the same preview_id and only those tickets, each with the same fields, within 15 minutes of the preview.`,
-          }
-        : {}),
+      ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
     },
   };
 }
@@ -343,7 +363,7 @@ export function categorizeTickets(entry: CategorizeTicketsEntry): Tool<typeof in
       `Set category fields on up to ${PREVIEW_CAP} tickets: the ticket type and custom fields (product, sub-product, issue type and the like), given per ticket in items as {ticket_id, fields}, each field by API name or label, each value by its choice name (a nested field as "A > B > C").`,
       "Status, priority, group, agent and every other default field are refused, and nothing is sent: use update_ticket for those.",
       "Two steps. Without confirm it changes nothing: it reads each ticket and returns a preview, the current and new value of each field, and a preview_id. Show that table to the user; only after they approve, call again with confirm: true, the preview_id and the previewed items (any of them, each with exactly its previewed fields), within 15 minutes. A ticket added or a field changed refuses the whole confirm: preview again.",
-      "The confirm writes one ticket at a time and returns a result per ticket: written, refused (with the error; a value that is not a valid choice refuses that ticket only), or not attempted when the call's time (30 s) or the API budget ran out. To apply the tickets not attempted, call again with confirm: true, the same preview_id and only those tickets.",
+      "The confirm writes one ticket at a time and returns a result per ticket: written, refused (with the error; a value that is not a valid choice refuses that ticket only; one marked may_have_been_applied was sent without a clear answer, so check it before sending it again), or not attempted when the call's time (30 s) or the API budget ran out. To apply the tickets not attempted, call again with confirm: true, the same preview_id and only those tickets.",
       "Freshdesk automations may act on each change, as for an agent's edit.",
     ].join(" "),
     input,
