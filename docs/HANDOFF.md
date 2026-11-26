@@ -4,32 +4,23 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T13:19:41+01:00`
-- **Describes commit:** `7c5bdca` (T-080: done; handoff to T-081),
-  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45818863560
-  (workflow `quality`, ran on `7c5bdca`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T13:32:42+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-080 `done (2026-11-26)`: `postReply` and
-  `postForward` in `src/core/resources.ts`, commits `8457bed` (resources
-  and tests) and `de31ba3` (review fixes). See
-  `docs/tasks/T-080-send-resources.md` "Done".
+- **Current task:** T-081 `done (2026-11-26)`: `src/core/recipients.ts`
+  (`onAllowList`, `checkRecipients`, `RECIPIENT_CAP`), commits `644cb6c`
+  (matcher and table test) and `4902607` (review fixes). See
+  `docs/tasks/T-081-recipient-allow-list.md` "Done".
 
-- **Next action:** `/pickup` T-081 (recipient allow-list matching in the
-  core; depends on T-079 only). T-081 and T-083 may go in either order;
-  T-082 waits on both.
+- **Next action:** `/pickup` T-083 (`send_id` in the core and the "Not
+  sent" result; depends on T-079 only). T-082 waits on T-083.
 
-- **Read before anything else:** `docs/tasks/T-081-recipient-allow-list.md`;
-  the RFC `docs/rfc/active/2026-11-26-send-safety-core.md` (OD-22, OD-23);
-  the parked "@com" entry in `docs/improvements.md` (`95d2c58`, `eff63e8`).
-
-- **Owner decisions recorded (2026-11-26, via the orchestrator):**
-  - T-079's scoped-round finding 10, the single-tag `send_id` format, is
-    accepted as a format fix, not a new mechanism (closes T-079's open
-    doubt).
-  - OD-24's body-rule gap (variation selectors, Hangul fillers) stays
-    parked (`docs/improvements.md`, `49736b7`).
+- **Read before anything else:** `docs/tasks/T-083-confirm-result.md`; the RFC
+  `docs/rfc/active/2026-11-26-send-safety-core.md` (OD-20, OD-32, OD-33);
+  for T-082 later: `checkRecipients` returns frozen copies as
+  `recipients`, and the entry must send and bind those, never the caller's
+  lists (`docs/improvements.md`, `4902607`).
 
 - **T-076 (owner, open):** `todo (2026-11-25)` in PLAN. Left: the
   overnight check that no time trigger acted on the `mcp-test` tickets,
@@ -37,26 +28,29 @@
   rule acted" in T-076's "Done". T-087 waits on T-076 `done`.
 
 - **Reviews:**
-  - Full round, R1 = `8457bed`, range `9dfdc62..8457bed`: code-reviewer
-    clean, 3 low and 1 info: tickets.ts header stale (fixed); per-name
-    lint cases cannot differ by name (dismissed: the task asks for one
-    case per name); no fractional answer id case (added); schema in a GET
-    module (info, follows `conversation`). security-reviewer 2 low: the
-    loose answer passed echoed addresses up (fixed: `z.object` keeps `id`
-    alone, OD-27); `id` 0 or negative accepted (fixed: `.positive()`).
-    compliance-reviewer: Wireframes `none`, nothing to check.
-  - Scoped round, range `8457bed..de31ba3`: code-reviewer no blocking,
-    2 parkable (parked in `docs/improvements.md`, `de31ba3`) and 1 check
-    asked (no other user of `sentConversation`: grep found none);
-    security-reviewer clean, nothing parkable; compliance-reviewer:
-    Wireframes `none`. All quotes of base, HEAD, stat and trailer matched.
+  - Full round, R1 = `644cb6c`, range `66536f3..644cb6c`: code-reviewer
+    no high or medium; low "never throws" overclaimed (fixed), low list
+    read twice / no copy returned (fixed), info two address grammars in
+    the core (parked). security-reviewer 3 low and 1 info: can throw
+    (fixed); list read twice, cap bypassable by a Proxy (fixed); `%` and
+    `!` in the local part (parked, owner/`/rfc`); domain label syntax
+    (info, parked). compliance-reviewer: Wireframes `none`.
+  - Scoped round, range `644cb6c..4902607`: code-reviewer no blocking,
+    3 parkable (revoked Proxy throws, a weakened cap test, T-082 must send
+    `result.recipients`); security-reviewer no blocking, 2 parkable
+    (revoked Proxy throws, copy before cap); compliance-reviewer: `none`.
+    All parked in `docs/improvements.md`. All quotes of base, HEAD, stat
+    and trailer matched.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
+  - Owner: refuse `%` and `!` in an allow-listed local part (percent hack,
+    bang paths)? OD-23 is silent; a change goes through `/rfc`.
+  - An apostrophe is allowed in a local part: OD-23's "quotes" read as
+    `"` only.
   - Reply and forward answer shapes are documented, not measured (A1,
-    A2): a real answer without a positive `id` would read `server`, "may
-    have been applied" (T-087 checks).
+    A2; T-087 checks).
   - OD-34's "no release accepting `send` before T-087" has no acceptance
     line (parked since the M3 plan review).
   - A1 to A6 and the four CC field names unverified (T-087).
@@ -73,5 +67,5 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 50 passed
-  (50)", "Tests 4140 passed (4140)"; `tools/checks` "Ran 138 tests", OK.
+- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 51 passed
+  (51)", "Tests 4246 passed (4246)"; `tools/checks` "Ran 138 tests", OK.

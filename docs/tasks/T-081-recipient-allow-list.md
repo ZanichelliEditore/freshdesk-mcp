@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-079
 - **Created:** 2026-11-26
 
@@ -41,18 +41,35 @@ No split point: one pure module and its table test.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `644cb6c`: `src/core/recipients.ts` (`onAllowList`, `checkRecipients`,
+  `RECIPIENT_CAP`), `test/core/recipients.test.ts` (the acceptance table:
+  "onAllowList: an `@domain` entry (OD-23)", "a full-address entry",
+  "the list itself (OD-23, fail closed)", "checkRecipients: per field, by
+  position (OD-22)", "the cap, all fields together (OD-22)"),
+  `docs/architecture/overview.md`.
+- `4902607`: review fixes: each list copied once and the frozen copies
+  returned as `recipients`
+  (`test/core/recipients.test.ts::reads each list once…`, `::returns frozen
+  copies…`); no throw on a non-list allow-list, unreadable fields or a
+  throwing list (`::refuses fields that are not an object…`, `::refuses
+  everything with an allow-list that is not a list…`, `::refuses, without
+  throwing, a list that throws when read`).
+- `make quality` exit 0: Vitest 51 files, 4246 tests; `tools/checks` 138.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- `%` and `!` pass in a local part (`x%evil.test@example.com` matches
+  `@example.com`); OD-23 does not name them. Refusing them changes core
+  rules: owner's call, `/rfc` first (`docs/improvements.md`, `644cb6c`).
+- An apostrophe is allowed in a local part (`o'brien@`): read OD-23's
+  "quotes" as `"` only.
+- A revoked Proxy as `fields` still throws (fails closed); parked
+  (`docs/improvements.md`, `4902607`).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+low
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).
