@@ -394,9 +394,10 @@ describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
     expect(Object.isFrozen(tools)).toBe(true);
   });
 
-  it("the real wiring gives the write tools, each complete enough to register", () => {
+  it("the real wiring gives the write tools, each complete enough to register", async () => {
     const server = serverFor({ write: writeTools(fakeEntries()) }, { toolsets: ["write"] });
-    expect(server).toBeDefined();
+    const tools = await listTools(await open(server));
+    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket"]);
   });
 });
 

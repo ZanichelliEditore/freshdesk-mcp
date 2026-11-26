@@ -20,7 +20,9 @@
 //     lists, or more than MAX_TAGS in one list, is refused before any
 //     request. A current tag list that is not a list of strings is refused
 //     (`server`), nothing sent: the tool never overwrites tags it could not
-//     read. An absent `tags` key is no tags.
+//     read. An absent `tags` key is no tags. Not atomic: Freshdesk has no
+//     conditional PUT, so a tag someone else changes between the GET and the
+//     PUT is overwritten; the description says so.
 //   - A call that asks for nothing (no field, no tag) is refused before any
 //     request, the schema load included. A tag merge that changes nothing is
 //     not sent; with no field either, no PUT at all: `changed: false` (the
@@ -99,7 +101,7 @@ export function updateTicket(entry: UpdateTicketEntry): Tool<typeof input> {
   return {
     name: "update_ticket",
     description: [
-      "Change one ticket: status, priority, type, group, agent and custom fields, in fields, by API name or label, each value by name or id (agents and groups as list_agents and list_groups give them); and tags, added with tags_add and removed with tags_remove, merged into the ticket's current tags.",
+      "Change one ticket: status, priority, type, group, agent and custom fields, in fields, by API name or label, each value by name or id (agents and groups as list_agents and list_groups give them); and tags, added with tags_add and removed with tags_remove, merged into the ticket's current tags (read first, then the whole list is written, so a tag someone else changes in between may be overwritten).",
       "No other field can be set: requester, subject, description and the rest are refused, and nothing is sent.",
       "Setting the status to Resolved or Closed may make Freshdesk email the requester and send a satisfaction survey.",
       "Freshdesk automations may act on the change, as for an agent's edit.",

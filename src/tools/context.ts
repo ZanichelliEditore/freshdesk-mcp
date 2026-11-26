@@ -14,9 +14,10 @@
 //     WeakMap keyed by the context, and `toolsetsOf(context)` gives
 //     `createServer` (src/server.ts) the registry's toolsets plus `write`
 //     when the context has it. No context, no entries: a context built
-//     without `write` has no write tools by construction. Not claimed: a
-//     module that may import this one can call `toolsetsOf` too (the core
-//     tools' place lists it, for the `AppContext` type).
+//     without `write` has no write tools by construction. No module under
+//     src/tools/ can call `toolsetsOf`: every place in
+//     eslint.tool-imports.json lists this module as a type import only, the
+//     write tools' place not at all (test/lint-rules.test.ts).
 //   - One schema service on that view, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a

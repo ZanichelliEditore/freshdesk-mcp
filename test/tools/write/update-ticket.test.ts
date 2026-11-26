@@ -334,11 +334,35 @@ describe("update_ticket: tags", () => {
     expect(sent()).toEqual([]);
   });
 
-  it(`refuses more than ${MAX_TAGS} tags in a list, before any request`, async () => {
+  it.each(["tags_add", "tags_remove"])(
+    `refuses more than ${MAX_TAGS} tags in %s, before any request`,
+    async (list) => {
+      const session = await warm();
+      const many = Array.from({ length: MAX_TAGS + 1 }, (_, i) => `tag${i}`);
+
+      const result = await callTool(session, TOOL, { ticket_id: ID, [list]: many });
+
+      expect(result.isError).toBe(true);
+      expect(sent()).toEqual([]);
+    },
+  );
+
+  it(`accepts exactly ${MAX_TAGS} tags in a list`, async () => {
     const session = await warm();
-    const many = Array.from({ length: MAX_TAGS + 1 }, (_, i) => `tag${i}`);
+    const many = Array.from({ length: MAX_TAGS }, (_, i) => `tag${i}`);
+    reply(TICKET, { ...rawTicket, tags: [] });
+    reply(TICKET, rawTicket, "PUT");
 
     const result = await callTool(session, TOOL, { ticket_id: ID, tags_add: many });
+
+    expect(output(result)).toMatchObject({ changed: true, api_calls_used: 2 });
+    expect(putBody()).toEqual({ tags: many });
+  });
+
+  it.each([["   "], [""]])("refuses a blank tag %j, before any request", async (tag) => {
+    const session = await warm();
+
+    const result = await callTool(session, TOOL, { ticket_id: ID, tags_add: ["kite", tag] });
 
     expect(result.isError).toBe(true);
     expect(sent()).toEqual([]);

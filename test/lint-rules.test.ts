@@ -398,14 +398,35 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     expect(await verdict(type(spec), filePath)).toEqual([]);
   });
 
+  it.each([[T2, "../../../client/resources/agents.js"]])(
+    "allows in %s a value import of %s",
+    async (filePath, spec) => {
+      expect(await verdict(value(spec), filePath)).toEqual([]);
+    },
+  );
+
+  // T-071 review: context.ts exports `toolsetsOf`, which holds the write
+  // tools; a tool takes the context as a type only, so no tool can call it.
   it.each([
+    [T0, "./context.js"],
+    [T1, "../context.js"],
     [T2, "../../context.js"],
-    [T2, "../../../client/resources/agents.js"],
-  ])("allows in %s a value import of %s", async (filePath, spec) => {
-    expect(await verdict(value(spec), filePath)).toEqual([]);
+  ])(
+    "refuses in %s a value import of %s (toolsetsOf, createContext): type only",
+    async (filePath, spec) => {
+      expect(await verdict('import { toolsetsOf } from "' + spec + '";', filePath)).toEqual([
+        "type-only",
+      ]);
+      expect(await verdict(type(spec), filePath)).toEqual([]);
+    },
+  );
+
+  it("refuses in src/tools/toolsets/write/x.ts any import of the context, value or type", async () => {
+    expect(await verdict(value("../../context.js"), T3)).toEqual(["list"]);
+    expect(await verdict(type("../../context.js"), T3)).toEqual(["list"]);
   });
 
-  it("puts every file under src/tools in context.ts or in T0, T1 or T2, none ignored", async () => {
+  it("puts every file under src/tools in context.ts or in a place (T0 to T3), none ignored", async () => {
     const root = join(import.meta.dirname, "..", "src", "tools");
     const files = readdirSync(root, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())

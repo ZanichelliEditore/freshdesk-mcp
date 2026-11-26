@@ -7,7 +7,6 @@
     "T0": {
       "files": ["src/tools/*.ts"],
       "value": [
-        "./context.js",
         "./format.js",
         "./list.js",
         "./budget.js",
@@ -25,12 +24,17 @@
         "../client/resources/solutions.js",
         "../client/resources/canned.js"
       ],
-      "type": ["../schema/index.js", "../config.js", "../client/resources/ticket-fields.js"]
+      "type": [
+        "./context.js",
+        "../schema/index.js",
+        "../config.js",
+        "../client/resources/ticket-fields.js"
+      ]
     },
     "T1": {
       "files": ["src/tools/toolsets/*.ts"],
-      "value": ["./core/index.js", "../context.js", "../format.js", "../../client/errors.js"],
-      "type": ["../../config.js"]
+      "value": ["./core/index.js", "../format.js", "../../client/errors.js"],
+      "type": ["../context.js", "../../config.js"]
     },
     "T2": {
       "files": ["src/tools/toolsets/core/*.ts"],
@@ -48,7 +52,6 @@
         "./count-tickets.js",
         "./export-tickets.js",
         "node:fs/promises",
-        "../../context.js",
         "../../format.js",
         "../../list.js",
         "../../budget.js",
@@ -65,7 +68,7 @@
         "../../../client/resources/solutions.js",
         "../../../client/resources/canned.js"
       ],
-      "type": ["../index.js", "../../../schema/index.js", "../../../config.js"]
+      "type": ["../index.js", "../../context.js", "../../../schema/index.js", "../../../config.js"]
     },
     "T3": {
       "files": ["src/tools/toolsets/write/*.ts"],
