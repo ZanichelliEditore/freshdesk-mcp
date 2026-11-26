@@ -326,21 +326,40 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
   // RFC 2026-11-25-write-safety-core, invariant 1 (T-064): the core holds the
   // one client; only src/tools/context.ts, which builds the context, imports it.
   it("lists no src/core path for any place", () => {
-    // Each entry resolved from its place's directory (a glob's fixed part):
+    // An entry resolved from its place's directory (a glob's fixed part):
     // `./core/index.js` in src/tools/toolsets/ is the toolset, not src/core.
+    // A non-relative entry (zod, node:path) is not a path: skipped.
+    const resolveAt = (glob: string, spec: string) =>
+      spec.startsWith(".") ? posix.join(glob.slice(0, glob.lastIndexOf("/")), spec) : null;
+    // The directory is cut at the last `/`, right only for a glob whose `*`
+    // are in its last segment: a `**` would put `../core/` elsewhere.
+    const starStar = (glob: string) => glob.includes("**");
+    // Bare entries apply at every depth, so none may be a path at all.
+    const pathLike = (spec: string) => /^[./]/.test(spec);
+    const inCore = (path: string) => path === "src/core" || path.startsWith("src/core/");
+
+    expect(places.flatMap((p) => p.files).filter(starStar)).toEqual([]);
+    expect(bare.filter(pathLike)).toEqual([]);
     const resolved = places.flatMap((p) =>
       p.files.flatMap((glob) =>
-        [...p.value, ...(p.type ?? [])].map((spec) =>
-          posix.join(glob.slice(0, glob.lastIndexOf("/")), spec),
-        ),
+        [...p.value, ...(p.type ?? [])].flatMap((spec) => resolveAt(glob, spec) ?? []),
       ),
     );
     expect(resolved.length).toBeGreaterThan(0);
-    const inCore = (path: string) => path === "src/core" || path.startsWith("src/core/");
     expect(resolved.filter(inCore)).toEqual([]);
     expect([...bare, ...resolved].filter((spec) => spec.includes("src/core"))).toEqual([]);
-    // The check can fail: an entry for the core, from any place, is caught.
-    expect(inCore(posix.join("src/tools/toolsets/core", "../../../core/notify.js"))).toBe(true);
+
+    // The checks can fail: an entry for the core from a place's glob, a `**`
+    // place glob, a relative bare entry; and a non-relative entry is skipped.
+    expect(resolveAt("src/tools/toolsets/core/*.ts", "../../../core/notify.js")).toBe(
+      "src/core/notify.js",
+    );
+    expect(inCore(resolveAt("src/tools/toolsets/core/*.ts", "../../../core/notify.js")!)).toBe(
+      true,
+    );
+    expect(starStar("src/tools/**/*.ts")).toBe(true);
+    expect(["../core/notify.js", "./x.js", "/abs.js"].filter(pathLike)).toHaveLength(3);
+    expect(resolveAt("src/tools/*.ts", "node:path")).toBeNull();
   });
 
   it.each([
@@ -421,7 +440,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
 
   it("exempts src/tools/context.ts", async () => {
     const code = [
-      'import { HttpClient } from "../client/http.js";',
+      'import { createWritePath } from "../core/write-path.js";',
       'import { ticketOutput } from "../schema/output.js";',
       'import { SchemaService } from "../schema/index.js";',
     ].join("\n");
@@ -430,7 +449,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
 
   it("does not reach outside src/tools", async () => {
     const code = [
-      'import { HttpClient } from "./client/http.js";',
+      'import type { HttpClient } from "./client/http.js";',
       'import { SchemaService } from "./schema/index.js";',
       'void import("./config.js");',
       "void process.env.FRESHDESK_API_KEY;",
@@ -545,5 +564,351 @@ describe("eslint: only src/core/** imports src/core/resources", () => {
   it("lints scripts/**: no file under it is ignored", async () => {
     expect(await eslint.isPathIgnored("scripts/smoke/write.ts")).toBe(false);
     expect(await eslint.isPathIgnored("scripts/smoke/smoke.ts")).toBe(false);
+  });
+});
+
+// T-077 (RFC 2026-11-25-write-safety-core, invariants 1 to 3): outside
+// src/core/** nothing builds an HttpClient or a RateLimiter, imports
+// ticketInput or (src/tools/context.ts apart) reaches createWritePath, and no
+// core module re-exports anything past those rules. In src/tools/** the
+// allow-list refuses the imports ("list"); the syntax rules apply there too.
+describe("eslint: the client, the limiter, ticketInput and createWritePath stay in the core", () => {
+  const IMPORTS = "@typescript-eslint/no-restricted-imports";
+  const SYNTAX = "no-restricted-syntax";
+  const FENCES = {
+    CLIENT:
+      "Only src/core/** may build an HttpClient or a RateLimiter (RFC 2026-11-25-write-safety-core, invariant 1): import them as types only.",
+    TICKET_INPUT:
+      "Only src/core/** may import ticketInput (RFC 2026-11-25-write-safety-core, invariant 2): the core's table is the one source of an allow set.",
+    WRITE_PATH:
+      "Outside src/core/**, only src/tools/context.ts may import or call createWritePath (RFC 2026-11-25-write-safety-core, invariant 3): it builds the write side from the team file.",
+    REEXPORT:
+      "No re-export in src/core/** (RFC 2026-11-25-write-safety-core): a core module must not pass the client, src/core/resources or ticketInput on past the lint fence.",
+  } as const;
+
+  /** Each message as `rule: FENCE`, `rule: list` for a tool's allow-list, else as it is. */
+  async function messages(code: string, filePath: string): Promise<string[]> {
+    const [result] = await eslint.lintText(code, { filePath });
+    return result.messages
+      .filter((m) => m.ruleId === null || BANS.has(m.ruleId))
+      .map((m) => {
+        const fence = Object.entries(FENCES).find(([, text]) => m.message.endsWith(text));
+        if (fence) return `${m.ruleId}: ${fence[0]}`;
+        if (/Not on the import allow-list /.test(m.message)) return `${m.ruleId}: list`;
+        return `${m.ruleId ?? "fatal"}: ${m.message}`;
+      });
+  }
+  /** The specifier that reaches `target` (a path from the repo root) from `file`. */
+  function specFrom(file: string, target: string): string {
+    const spec = posix.relative(posix.dirname(file), target);
+    return spec.startsWith(".") ? spec : `./${spec}`;
+  }
+  /** Other spellings of a specifier that must not pass. */
+  const spellings = (spec: string) => [
+    spec,
+    spec.replace(/\.js$/, ""),
+    spec.replace(/\.js$/, ".ts"),
+    `${spec}/`,
+    spec.replace(/[^/]+$/, (name) => `./${name[0].toUpperCase()}${name.slice(1)}`),
+  ];
+  /** Every file under src/ and scripts/ outside src/core/, from the repo root. */
+  function filesOutsideCore(): string[] {
+    const root = join(import.meta.dirname, "..");
+    return ["src", "scripts"]
+      .flatMap((dir) =>
+        readdirSync(join(root, dir), { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+          .map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/")),
+      )
+      .filter((file) => !file.startsWith("src/core/"));
+  }
+  const inTools = (file: string) =>
+    file.startsWith("src/tools/") && file !== "src/tools/context.ts";
+
+  describe("HttpClient and RateLimiter", () => {
+    const HTTP = "src/client/http.js";
+    const LIMITER = "src/client/rate-limit.js";
+    const EXEMPT = ["src/client/http.ts", "src/client/rate-limit.ts", "scripts/smoke/smoke.ts"];
+    const outside = [
+      "src/server.ts",
+      "src/cli.ts",
+      "src/client/x.ts",
+      "src/client/resources/x.ts",
+      "src/schema/x.ts",
+      "src/tools/context.ts",
+      "scripts/x.ts",
+      "scripts/smoke/core.ts",
+    ];
+    const cases = outside.flatMap((file) =>
+      (
+        [
+          ["HttpClient", HTTP],
+          ["RateLimiter", LIMITER],
+        ] as const
+      ).flatMap(([name, target]) =>
+        spellings(specFrom(file, target)).map((spec) => [file, name, spec] as const),
+      ),
+    );
+
+    it.each(cases)("refuses in %s a value import of %s from %s", async (file, name, spec) => {
+      const from = JSON.stringify(spec);
+      for (const code of [
+        `import { ${name} } from ${from};`,
+        `import { ${name} as Renamed } from ${from};`,
+        `import { type Other, ${name} } from ${from};`,
+        `import * as all from ${from};`,
+        `export { ${name} } from ${from};`,
+        `export * from ${from};`,
+      ]) {
+        expect(await messages(code, file), code).toEqual([`${IMPORTS}: CLIENT`]);
+      }
+    });
+
+    it.each(cases)("allows in %s a type-only import of %s from %s", async (file, name, spec) => {
+      const from = JSON.stringify(spec);
+      for (const code of [
+        `import type { ${name} } from ${from};`,
+        `import { type ${name} } from ${from};`,
+        `import type * as all from ${from};`,
+        `import { other } from ${from};`,
+      ]) {
+        expect(await messages(code, file), code).toEqual([]);
+      }
+    });
+
+    it.each(
+      [...outside, "src/tools/x.ts", "src/tools/toolsets/core/x.ts"].flatMap((file) =>
+        ["new HttpClient({});", "new RateLimiter({});", "new all.HttpClient({});"].map(
+          (code) => [file, code] as const,
+        ),
+      ),
+    )("refuses in %s: %s", async (file, code) => {
+      expect(await messages(code, file)).toEqual([`${SYNTAX}: CLIENT`]);
+    });
+
+    it.each(EXEMPT)("exempts %s", async (file) => {
+      const code = [
+        `import { HttpClient } from ${JSON.stringify(specFrom(file, HTTP))};`,
+        `import { RateLimiter } from ${JSON.stringify(specFrom(file, LIMITER))};`,
+        "new HttpClient({ limiter: new RateLimiter({}) });",
+      ].join("\n");
+      expect(await messages(code, file)).toEqual([]);
+    });
+
+    it("exempts exactly those files: every other file under src/ and scripts/ is refused", async () => {
+      const files = [
+        ...filesOutsideCore(),
+        "src/client/http2.ts",
+        "src/client/rate-limit2.ts",
+        "scripts/smoke/smoke2.ts",
+        "scripts/smoke.ts",
+      ];
+      expect(files).toEqual(expect.arrayContaining(EXEMPT));
+      const exempt: string[] = [];
+      for (const file of files) {
+        const code = [
+          `import { HttpClient } from ${JSON.stringify(specFrom(file, HTTP))};`,
+          "new HttpClient({});",
+        ].join("\n");
+        const found = await messages(code, file);
+        if (found.length === 0) exempt.push(file);
+        else
+          expect(found, file).toEqual([
+            `${IMPORTS}: ${inTools(file) ? "list" : "CLIENT"}`,
+            `${SYNTAX}: CLIENT`,
+          ]);
+      }
+      expect(exempt.sort()).toEqual([...EXEMPT].sort());
+    });
+
+    it.each(["src/core/write-path.ts", "src/core/x.ts", "test/client/http.test.ts"])(
+      "leaves %s alone",
+      async (file) => {
+        const code = [
+          `import { HttpClient } from ${JSON.stringify(specFrom(file, HTTP))};`,
+          `import * as limits from ${JSON.stringify(specFrom(file, LIMITER))};`,
+          "new HttpClient({ limiter: new limits.RateLimiter({}) });",
+        ].join("\n");
+        expect(await messages(code, file)).toEqual([]);
+      },
+    );
+  });
+
+  describe("ticketInput", () => {
+    const INPUT = "src/schema/input.js";
+    const outside = [
+      "src/server.ts",
+      "src/schema/index.ts",
+      "src/schema/x.ts",
+      "src/client/resources/x.ts",
+      "src/tools/context.ts",
+      "scripts/x.ts",
+      "scripts/smoke/smoke.ts",
+    ];
+    const cases = outside.flatMap((file) =>
+      spellings(specFrom(file, INPUT)).map((spec) => [file, spec] as const),
+    );
+
+    it.each(cases)("refuses in %s an import of ticketInput from %s", async (file, spec) => {
+      const from = JSON.stringify(spec);
+      for (const code of [
+        `import { ticketInput } from ${from};`,
+        `import { ticketInput as build } from ${from};`,
+        `import * as input from ${from};`,
+        `export { ticketInput } from ${from};`,
+        `export * from ${from};`,
+      ]) {
+        expect(await messages(code, file), code).toEqual([`${IMPORTS}: TICKET_INPUT`]);
+      }
+    });
+
+    it.each(cases)("allows in %s the module's other names from %s", async (file, spec) => {
+      const from = JSON.stringify(spec);
+      expect(await messages(`import { type FieldSet, other } from ${from};`, file)).toEqual([]);
+    });
+
+    it.each([
+      ["src/tools/x.ts", "list"],
+      ["src/tools/toolsets/core/x.ts", "list"],
+    ])("refuses in %s (the allow-list) an import of ticketInput", async (file, verdict) => {
+      const code = `import { ticketInput } from ${JSON.stringify(specFrom(file, INPUT))};`;
+      expect(await messages(code, file)).toEqual([`${IMPORTS}: ${verdict}`]);
+    });
+
+    it.each([
+      "src/schema/input.ts",
+      "src/core/write-path.ts",
+      "src/core/x.ts",
+      "test/schema/x.test.ts",
+    ])("leaves %s alone", async (file) => {
+      const from = JSON.stringify(specFrom(file, INPUT));
+      for (const code of [`import { ticketInput } from ${from};`, `import * as i from ${from};`]) {
+        expect(await messages(code, file), code).toEqual([]);
+      }
+    });
+  });
+
+  describe("re-exports in src/core/**", () => {
+    const core = ["src/core/write-path.ts", "src/core/x.ts", "src/core/sub/x.ts"];
+
+    it.each(
+      core.flatMap((file) =>
+        [
+          'export { HttpClient } from "../client/http.js";',
+          'export { ticketInput as build } from "../schema/input.js";',
+          'export * from "./resources.js";',
+          'export * as resources from "./resources.js";',
+          'export type { X } from "./x.js";',
+          'import { ticketInput } from "../schema/input.js";\nexport { ticketInput };',
+          "const a = 1;\nexport { a as b };",
+          "const a = 1;\nexport type { a };",
+        ].map((code) => [file, code] as const),
+      ),
+    )("refuses in %s: %s", async (file, code) => {
+      expect(await messages(code, file)).toEqual([`${SYNTAX}: REEXPORT`]);
+    });
+
+    it.each(
+      [
+        "export function f() {}",
+        "export const c = 1;",
+        "export class C {}",
+        "export interface I { a: 1 }",
+        "export type T = 1;",
+        "export default 1;",
+      ].map((code) => ["src/core/x.ts", code] as const),
+    )("allows in %s a declaration: %s", async (file, code) => {
+      expect(await messages(code, file)).toEqual([]);
+    });
+
+    it("leaves re-exports outside src/core/** to the other rules", async () => {
+      expect(await messages('export { x } from "./format.js";', "src/server.ts")).toEqual([]);
+      expect(
+        await messages('export * from "../../format.js";', "src/tools/toolsets/core/x.ts"),
+      ).toEqual([]);
+    });
+  });
+
+  describe("createWritePath", () => {
+    const WRITE_PATH = "src/core/write-path.js";
+    const outside = [
+      "src/server.ts",
+      "src/cli.ts",
+      "src/client/x.ts",
+      "src/schema/x.ts",
+      "src/tools/other.ts",
+      "scripts/x.ts",
+      "scripts/smoke/smoke.ts",
+    ];
+    const cases = outside
+      .filter((file) => !inTools(file))
+      .flatMap((file) =>
+        spellings(specFrom(file, WRITE_PATH)).map((spec) => [file, spec] as const),
+      );
+
+    it.each(cases)("refuses in %s an import of createWritePath from %s", async (file, spec) => {
+      const from = JSON.stringify(spec);
+      for (const code of [
+        `import { createWritePath } from ${from};`,
+        `import { createWritePath as build } from ${from};`,
+        `import * as writePath from ${from};`,
+        `export { createWritePath } from ${from};`,
+      ]) {
+        expect(await messages(code, file), code).toEqual([`${IMPORTS}: WRITE_PATH`]);
+      }
+    });
+
+    it.each(cases)("allows in %s a type import from %s", async (file, spec) => {
+      const code = `import type { WritePath } from ${JSON.stringify(spec)};`;
+      expect(await messages(code, file)).toEqual([]);
+    });
+
+    it.each(
+      outside.flatMap((file) =>
+        ["createWritePath({});", "writePath.createWritePath({});"].map(
+          (code) => [file, code] as const,
+        ),
+      ),
+    )("refuses in %s a call: %s", async (file, code) => {
+      expect(await messages(code, file)).toEqual([`${SYNTAX}: WRITE_PATH`]);
+    });
+
+    it("refuses an import in a tool (the allow-list)", async () => {
+      const file = "src/tools/other.ts";
+      const code = `import { createWritePath } from ${JSON.stringify(specFrom(file, WRITE_PATH))};`;
+      expect(await messages(code, file)).toEqual([`${IMPORTS}: list`]);
+    });
+
+    it("lets every file but src/tools/context.ts outside src/core/** be refused", async () => {
+      const importers: string[] = [];
+      for (const file of filesOutsideCore()) {
+        const code = [
+          `import { createWritePath } from ${JSON.stringify(specFrom(file, WRITE_PATH))};`,
+          "createWritePath({});",
+        ].join("\n");
+        const found = await messages(code, file);
+        if (found.length === 0) importers.push(file);
+        else
+          expect(found, file).toEqual([
+            `${IMPORTS}: ${inTools(file) ? "list" : "WRITE_PATH"}`,
+            `${SYNTAX}: WRITE_PATH`,
+          ]);
+      }
+      expect(importers).toEqual(["src/tools/context.ts"]);
+    });
+
+    it.each(["src/tools/context.ts", "src/core/x.ts", "test/core/entries.test.ts"])(
+      "leaves %s alone",
+      async (file) => {
+        const from = JSON.stringify(specFrom(file, WRITE_PATH));
+        const code = [
+          `import { createWritePath } from ${from};`,
+          `import * as writePath from ${from};`,
+          "createWritePath({});",
+          "writePath.createWritePath({});",
+        ].join("\n");
+        expect(await messages(code, file)).toEqual([]);
+      },
+    );
   });
 });
