@@ -38,10 +38,17 @@
 //     of the " > " path). A validated choice, and a status, priority, source,
 //     agent or group name (a string or a number; any other value is wrapped),
 //     goes through `plainName`. Any other type is wrapped.
+//   - An error a write or send tool returns goes through `withoutAddresses`
+//     (owner, 2026-11-26; RFC 2026-11-26-send-safety-core, OD-27): every
+//     word of its message and field errors holding an at sign (`@`,
+//     fullwidth `＠`, or its HTML entity `&#64;`, `&#x40;`, `&commat;`)
+//     becomes `[address]`. Words are split on whitespace and each tested
+//     once.
 //
 // Every pass over the text is linear in its length: no regex here can
 // backtrack over a long run (a tag strip stops at the last `>`).
 
+import type { FreshdeskError } from "../client/errors.js";
 import type { TicketField } from "../client/resources/ticket-fields.js";
 
 export const OPEN = "<ticket_content>";
@@ -215,4 +222,28 @@ export function fieldValue(field: TicketField, value: unknown, options?: CutOpti
     }
   }
   return untrusted(value, options);
+}
+
+/** An at sign, plain, fullwidth or as an HTML entity. */
+const AT = /@|\uFF20|&#0*64;?|&#x0*40;?|&commat;/i;
+/** Every word holding an at sign replaced: the text split on whitespace, each word tested once. */
+const hide = (text: string) =>
+  text
+    .split(/(\s+)/)
+    .map((word) => (AT.test(word) ? "[address]" : word))
+    .join("");
+
+/** The error with every word holding an at sign replaced, in its message and its field errors. */
+export function withoutAddresses(error: FreshdeskError): FreshdeskError {
+  if (error.errors === undefined) return { ...error, message: hide(error.message) };
+  return {
+    ...error,
+    message: hide(error.message),
+    errors: error.errors.map((item) => ({
+      ...item,
+      ...(item.field === undefined ? {} : { field: hide(item.field) }),
+      ...(item.code === undefined ? {} : { code: hide(item.code) }),
+      message: hide(item.message),
+    })),
+  };
 }

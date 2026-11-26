@@ -22,20 +22,22 @@
 //     an address, whatever Freshdesk's answer holds (the core returns only
 //     the conversation id).
 //   - A failure: every word holding an at sign in its text is replaced, as
-//     `add_note` does (`withoutAddresses`, OD-27). A `server` or `network`
-//     error after the POST was dispatched (a 5xx, a timeout, a 3xx, an answer
-//     of another shape) is `may_have_been_sent: true`, `retryable: false`,
-//     and says to check the ticket's conversation before sending again
-//     (OD-27); with no attempt dispatched nothing left the process, and the
-//     error is passed on as it is.
+//     `add_note` does (`withoutAddresses`, src/tools/format.ts; OD-27). With
+//     no attempt dispatched nothing left the process, the core freed the
+//     `send_id`, and the error is passed on as it is. With one dispatched the
+//     core keeps the `send_id` spent (OD-33), so the error is `retryable:
+//     false` and says to start over without `confirm`; a `server` or
+//     `network` error (a 5xx, a timeout, a 3xx, an answer of another shape)
+//     is also `may_have_been_sent: true` and says to check the ticket's
+//     conversation before sending again (OD-27).
 //   - One deadline, CALL_DEADLINE_MS from the call's start; the client starts
 //     no write with under 10 s of it left.
 
 import { z } from "zod";
 import type { FreshdeskError } from "../../../client/errors.js";
 import { notSent, type SendTool } from "../../confirm.js";
+import { withoutAddresses } from "../../format.js";
 import type { Tool } from "../index.js";
-import { withoutAddresses } from "../write/add-note.js";
 
 /** The POST ends within this. */
 const CALL_DEADLINE_MS = 30_000;
@@ -85,8 +87,14 @@ export function sendFailed(
   attempts: number,
 ): { ok: false; error: FreshdeskError & { may_have_been_sent?: true } } {
   const shown = withoutAddresses(error);
-  if (attempts === 0 || (shown.code !== "server" && shown.code !== "network")) {
-    return { ok: false, error: shown };
+  if (attempts === 0) return { ok: false, error: shown };
+  const again =
+    "This send_id is spent: to send again, start over without confirm, which gives a new send_id.";
+  if (shown.code !== "server" && shown.code !== "network") {
+    return {
+      ok: false,
+      error: { ...shown, retryable: false, message: `${shown.message} ${again}` },
+    };
   }
   return {
     ok: false,
@@ -94,7 +102,7 @@ export function sendFailed(
       ...shown,
       retryable: false,
       may_have_been_sent: true,
-      message: `${shown.message} The reply may have been sent (may_have_been_sent): check the ticket's conversation before sending again. To send again, start over without confirm, which gives a new send_id.`,
+      message: `${shown.message} The reply may have been sent (may_have_been_sent): check the ticket's conversation before sending again. ${again}`,
     },
   };
 }
@@ -103,8 +111,8 @@ export function replyToTicket(entry: ReplyToTicketEntry): Tool<typeof input> {
   return {
     name: "reply_to_ticket",
     description: [
-      "Send a public reply to one ticket's requester, usually a customer: the mail cannot be taken back.",
       "First check with the user that ticket_id is the ticket they mean: ticket text can steer which ticket, and so which person, gets the reply.",
+      "Sends a public reply to that ticket's requester, usually a customer: the mail cannot be taken back.",
       "Two calls. Without confirm, nothing is sent: the result shows the ticket id, the exact text and the recipients, and a send_id. Show them to the user; only after they approve, call again with the same ticket_id, body and cc, confirm: true and that send_id. A send_id sends at most once and expires after 15 minutes.",
       "The body is plain text, sent as the customer will read it (no HTML). There is no to and no bcc: the reply goes to the ticket's requester; cc takes only addresses on the team's forward_allow_list, at most 10.",
       "Freshdesk may also copy the ticket's existing CC addresses, which this tool does not check. Freshdesk automations may act on the reply.",

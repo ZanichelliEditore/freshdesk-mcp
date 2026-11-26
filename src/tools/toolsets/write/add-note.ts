@@ -20,9 +20,8 @@
 //     the POST, retries included).
 //   - No email ever reaches the output: a refusal's `errors[]` (Freshdesk's
 //     field errors on a 400 may quote an address) has every word holding an
-//     at sign (`@`, fullwidth `＠`, or its HTML entity `&#64;`, `&#x40;`,
-//     `&commat;`) replaced with `[address]` before it is returned. Words are
-//     split on whitespace and each tested once: linear, no backtracking.
+//     at sign replaced with `[address]` before it is returned
+//     (`withoutAddresses`, src/tools/format.ts).
 //   - A POST answered `server` or `network` (a 5xx, a timeout, an answer of
 //     another shape) may have been applied: the error says the note may have
 //     been written and to check the ticket before calling again.
@@ -36,6 +35,7 @@
 import { z } from "zod";
 import type { FreshdeskError } from "../../../client/errors.js";
 import type { Conversation } from "../../../client/resources/tickets.js";
+import { withoutAddresses } from "../../format.js";
 import type { Tool } from "../index.js";
 
 /** The lookups and the POST end within this, together. */
@@ -64,15 +64,6 @@ const input = z.strictObject({
   notify_agent_ids: z.array(z.number().int().positive()).optional(),
 });
 
-/** An at sign, plain, fullwidth or as an HTML entity. */
-const AT = /@|\uFF20|&#0*64;?|&#x0*40;?|&commat;/i;
-/** Every word holding an at sign replaced: the text split on whitespace, each word tested once. */
-const hide = (text: string) =>
-  text
-    .split(/(\s+)/)
-    .map((word) => (AT.test(word) ? "[address]" : word))
-    .join("");
-
 /** A note Freshdesk answered as public: an error naming the note, to be checked (owner, 2026-11-26). */
 export function publicNote(noteId: number, after = ""): { ok: false; error: FreshdeskError } {
   return {
@@ -96,21 +87,6 @@ export function noteFailed(error: FreshdeskError): { ok: false; error: Freshdesk
       ...shown,
       message: `${shown.message} The note may have been written, and the agents emailed: check the ticket's notes before calling again.`,
     },
-  };
-}
-
-/** The error with every address in its field errors replaced. */
-export function withoutAddresses(error: FreshdeskError): FreshdeskError {
-  if (error.errors === undefined) return { ...error, message: hide(error.message) };
-  return {
-    ...error,
-    message: hide(error.message),
-    errors: error.errors.map((item) => ({
-      ...item,
-      ...(item.field === undefined ? {} : { field: hide(item.field) }),
-      ...(item.code === undefined ? {} : { code: hide(item.code) }),
-      message: hide(item.message),
-    })),
   };
 }
 

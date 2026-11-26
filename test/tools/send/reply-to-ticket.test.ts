@@ -332,6 +332,23 @@ describe("reply_to_ticket: a failure after the send", () => {
     expect(sent()).toEqual([`POST ${REPLY}`]);
   });
 
+  it("a network error after the POST left is may_have_been_sent, sent once", async () => {
+    const s = await session();
+    const sendId = await mint(s);
+    mock
+      .get(ORIGIN)
+      .intercept({ path: REPLY, method: "POST" })
+      .replyWithError(new Error("socket hang up"));
+
+    const error = failure(
+      await callTool(s, TOOL, { ticket_id: ID, body: BODY, confirm: true, send_id: sendId }),
+    );
+
+    expect(error).toMatchObject({ code: "network", retryable: false, may_have_been_sent: true });
+    expect(error.message).toMatch(/start over without confirm/);
+    expect(sent()).toEqual([`POST ${REPLY}`]);
+  });
+
   it("an answer of another shape (a 2xx with no id) is may_have_been_sent", async () => {
     const s = await session();
     const sendId = await mint(s);
@@ -366,8 +383,11 @@ describe("reply_to_ticket: a failure after the send", () => {
     });
 
     const error = failure(result);
-    expect(error).toMatchObject({ code: "validation", http_status: 400 });
+    expect(error).toMatchObject({ code: "validation", http_status: 400, retryable: false });
     expect(error.may_have_been_sent).toBeUndefined();
+    expect(error.message).toMatch(
+      /This send_id is spent: to send again, start over without confirm/,
+    );
     expect(error.errors?.[0]?.message).toContain("is not a valid email");
     expect(text(result)).not.toMatch(/@/);
   });
@@ -393,6 +413,20 @@ describe("reply_to_ticket: sendFailed", () => {
       retryable: false,
       may_have_been_sent: true,
     });
+  });
+
+  it("a 429 after a dispatch (retries used up) is not retryable with this send_id: it is spent", () => {
+    const limited = {
+      code: "rate_limited" as const,
+      http_status: 429,
+      message: "Freshdesk's rate limit was reached.",
+      retryable: true,
+      retry_after_s: 30,
+    };
+    const result = sendFailed(limited, 2);
+    expect(result.error).toMatchObject({ code: "rate_limited", retryable: false });
+    expect(result.error.may_have_been_sent).toBeUndefined();
+    expect(result.error.message).toMatch(/This send_id is spent/);
   });
 
   it("replaces an address in the message of a failure", async () => {
@@ -430,7 +464,9 @@ describe("reply_to_ticket: registration", () => {
   it("its description asks to check the ticket first, names the existing CCs and says never always allow", async () => {
     const tools = await listTools(await session());
     const description = tools.find((item) => item.name === TOOL)!.description;
-    expect(description).toMatch(/First check with the user that ticket_id is the ticket they mean/);
+    expect(
+      description.startsWith("First check with the user that ticket_id is the ticket they mean"),
+    ).toBe(true);
     expect(description).toContain(
       "Freshdesk may also copy the ticket's existing CC addresses, which this tool does not check.",
     );

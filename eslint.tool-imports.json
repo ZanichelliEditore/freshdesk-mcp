@@ -85,7 +85,7 @@
     },
     "T4": {
       "files": ["src/tools/toolsets/send/*.ts"],
-      "value": ["./reply-to-ticket.js", "../../confirm.js", "../write/add-note.js"],
+      "value": ["./reply-to-ticket.js", "../../confirm.js", "../../format.js"],
       "type": ["../index.js", "../../../client/errors.js"]
     }
   }

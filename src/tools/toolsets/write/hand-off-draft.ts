@@ -50,9 +50,9 @@ import { z } from "zod";
 import type { FieldError, FreshdeskError } from "../../../client/errors.js";
 import type { Conversation, Ticket } from "../../../client/resources/tickets.js";
 import type { Schema } from "../../../schema/index.js";
-import { plainName } from "../../format.js";
+import { plainName, withoutAddresses } from "../../format.js";
 import type { Tool } from "../index.js";
-import { noteFailed, publicNote, withoutAddresses } from "./add-note.js";
+import { noteFailed, publicNote } from "./add-note.js";
 
 /** The lookups, the POST and the PUT end within this, together. */
 const CALL_DEADLINE_MS = 30_000;
