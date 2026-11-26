@@ -388,8 +388,11 @@ Two levels:
   - reads: a manual `smoke` script, read-only, run by hand;
   - writes and sends: only on **test tickets** created for the purpose on
     the production account: tagged `mcp-test`, requester an internal
-    mailbox, assigned to a test group. Automations, SLA notifications and
-    surveys are set to skip the tag before M2 starts (admin task, owner).
+    mailbox, assigned to a test group. No automation rule is edited to
+    skip the tag (the owner cannot edit them; RFC
+    `2026-11-25-write-safety-core`): instead §13's M2 row requires the
+    activity log to show no automation rule or time trigger acted on
+    test tickets (settled by the owner, 2026-11-26).
     The smoke script refuses to write to a ticket without the tag;
     forwards go only to the builders' own addresses.
 - Release: **public npm** (owner, 2026-11-20) as
