@@ -5,7 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T12:41:44+01:00`
-- **Describes commit:** filled by the stamp commit.
+- **Describes commit:** `6461738` (the M3 plan handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45813178960
+  (workflow `quality`, ran on `6461738`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** `/decompose M3` (plan session, owner's go 2026-11-26,
   run by a session under the orchestrator) `done (2026-11-26)`. Commits
