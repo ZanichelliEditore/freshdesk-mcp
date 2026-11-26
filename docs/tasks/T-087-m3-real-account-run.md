@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-086, T-076 `done`
 - **Created:** 2026-11-26
 
@@ -55,7 +55,36 @@ Each prints yes/no and counts only. A run that sent ends `smoke send <case>: ok,
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+Runs by the owner on 2026-11-26, four `mcp-test` tickets made by the
+owner in the UI (none spam, group set, no ticket-level CC but the A4
+ticket's one). Ids, addresses and mail text in `docs/private/account-facts.md`
+"T-087 test tickets" and "T-087 runs". Each run printed `ok, requests 2`
+(one GET, one POST answered 201), step 1 `not sent yes, send_id yes`.
+
+- C5 reply: yes (2026-11-26).
+- C4 forward: yes (2026-11-26).
+- Public note (OD-26): yes (2026-11-26), `answered private no`.
+- Mail reached only the expected internal mailboxes: yes (2026-11-26).
+  Reply: the requester only. Forward: the one `TO` only. Public note: no
+  mailbox. A4 reply: the requester and the ticket's CC, as designed.
+- No automation rule acted: yes, from the activity log after the reply,
+  the forward, the public note and the A4 reply (owner, 2026-11-26).
+- A1: yes, `POST /tickets/{id}/reply` answered 201.
+- A2: yes, `POST /tickets/{id}/forward` answered 201.
+- A3: yes, `POST /tickets/{id}/notes` answered 201 and the note stayed
+  public.
+- A4: yes. The ticket-level CC mailbox received a reply sent with an
+  empty `cc`: Freshdesk copies ticket CCs on a reply. This is the case
+  OD-21 guards against, so its consequence is as stated, not smaller.
+- A5: yes for the description. The forward quotes it under the agent's
+  signature. Not checked: conversation and private notes, because the
+  ticket had neither. Reply and status: no status change seen (Open
+  after the reply; Open was the UI form's default, not read back before
+  the run).
+- A6: yes. The GET with `include=requester` carried all four CC fields
+  as lists, and the tags, `spam` and the requester's email (all four
+  tickets).
+- No account value in this file. `make quality` green on this tree.
 
 ## Dead ends
 none
