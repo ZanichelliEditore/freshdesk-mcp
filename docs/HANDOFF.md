@@ -4,88 +4,79 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T09:17:13+01:00`
-- **Describes commit:** `a4eba1d` (the T-068 handoff commit), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45782119824
-  (workflow `quality`, ran on `a4eba1d`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T09:47:04+01:00`
+- **Describes commit:** `PENDING` (the T-077 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** `PENDING`.
 
-- **Current task:** T-068 (write entry points, built only when `write` is
-  enabled) `done (2026-11-26)`. Commits `0a98b15` (implementation),
-  `254bcae` (review fixes), then this handoff commit. Tests:
-  `test/core/entries.test.ts` (new), `test/core/resources.test.ts` (the
-  non-object snapshot and the unserialisable body); details in the task
+- **Current task:** T-077 (lint fence: the client, the limiter and
+  `ticketInput` stay in the core) `done (2026-11-26)`. Commits `c54585d`
+  (implementation), `da16547` (full-round fixes), `f0edde0` (owner-approved
+  fix), then this handoff commit. Tests: `test/lint-rules.test.ts`, describe
+  "the client, the limiter, ticketInput and createWritePath stay in the
+  core", and "lists no src/core path for any place"; details in the task
   file's "Done". No split was needed.
 
-- **Next action:** `/pickup` T-077 (lint fence: the client, the limiter and
-  `ticketInput` stay in the core). It is the first `todo` row; its
-  dependency T-068 is `done`. Its acceptance now includes the `0a98b15`
-  `createWritePath` fence (plan amendment below).
+- **Next action:** `/pickup` T-069 (notify recipients by agent id). It is
+  the first `todo` row; its dependency T-068 is `done`.
 
-- **Plan amended (2026-11-26):** `/decompose M2` amendment, commit
-  `070410f`: SPEC §13's M2 wording settled; T-077 takes `0a98b15`, T-068's
-  BigInt line reworded (`254bcae`), T-074 adds the note-only case; T-076
-  depends on T-075 only.
-
-- **Owner actions:**
-  - Done 2026-11-26: the time-trigger check (no automation rule or time
-    trigger acted on the `mcp-test` ticket left overnight; SPEC §13's M2
-    wording settled as the RFC wrote it), and the choice-name check (every
-    `/ticket_fields` agent and group choice name matches a list name
-    exactly; `docs/improvements.md` `b80b69a`).
-  - Remaining, in T-076: create the `mcp-test` tickets and run
-    `make smoke-write`. No write to the real account before T-075 is
-    `done`.
-
-- **Read before anything else:** `docs/tasks/T-077-core-lint-fence.md`;
-  `docs/improvements.md` entries `0a98b15` and `254bcae` (T-068's parked
-  items).
+- **Read before anything else:** `docs/tasks/T-069-notify-agents.md`;
+  `docs/improvements.md` entry `85f48fd` (the `getAgent` email item parked
+  for T-069).
 
 - **Reviews:**
-  - Full round, R1 = `0a98b15`, range `fb92725..0a98b15`. Scoped round,
-    range `0a98b15..254bcae`.
-  - `code-reviewer`, full: quotes correct (one no-op Bash call, admitted).
-    Low: empty change sent (fixed: refused, `254bcae`); note body not
-    checked as a string (fixed); tags checked then copied in a second read
-    (fixed: copied once, regression test "sends the list it checked, read
-    once…"); type-only test inside the loop with filler asserts (moved);
-    refusal messages not pinned (pinned); overview pointed the lint fence at
-    T-068 (now T-077). Info: `notSent` export fine; entries built and
-    dropped by `context.ts` until T-071.
-  - `security-reviewer`, full: quotes correct. Medium (latent):
-    `createWritePath` trusts its caller's `toolsets`; parked for T-077/T-071
-    (`0a98b15` entry). Low: tags double read, note body type (both fixed,
-    `254bcae`). Info: value checks use the tool's schema; parked.
+  - Full round, R1 = `c54585d`, range `8a579a9..c54585d`. Scoped round,
+    range `c54585d..da16547`. Owner-approved fix, range
+    `da16547..f0edde0`.
+  - All reviewers quoted base, HEAD, stat line and trailer correctly in
+    every round.
+  - `code-reviewer`, full: exempt modules could re-export the other class
+    (fixed, `da16547`); absolute place entries unchecked (fixed); checks
+    that could only pass (negative cases added); no exact sweep for
+    `ticketInput` (added); `ticketInput` message wording and the test header
+    (fixed).
+  - `security-reviewer`, full: literal dynamic `import()` bypassed three
+    fences (Medium, fixed); `SmokeClient` importable (fixed); an exempt
+    module could export an alias (fixed); absolute or `file:` place entries
+    unchecked (fixed); the `toolsets` claim (now said to hold by
+    inspection).
   - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round: `code-reviewer`'s first run misquoted the stat line
-    (`4 files,`): red gate "stale diff file", re-dispatched; its rerun quoted
-    correctly. `security-reviewer` and the rerun: no finding falsifying an
-    acceptance line or opening a fail-open path. Parked (`254bcae` entry):
-    the BigInt-note acceptance parenthetical, the note refusal's "ticket
-    fields" wording, an unpinned message, an empty note body, no cap on the
-    tag list.
+  - Scoped round: `code-reviewer` and `security-reviewer` both found that
+    `context.ts` could pass `createWritePath` on under a name set at the
+    import, or as a namespace: a fail-open path. Fixing it changed a
+    mechanism again, so the session stopped and reported (rule 9). **Owner's
+    decision (2026-11-26, via the orchestrator):** apply the fix (blanket
+    export-list ban on `context.ts`, tests for both snippets, true header
+    and overview claims) without a third full round; `security-reviewer`
+    only, scoped to the fix. It found no fail-open path and no falsified
+    acceptance line (`f0edde0`).
+  - Parked: `docs/improvements.md` entry `f0edde0` (`export default` /
+    `export =` in an exempt module, template-literal `import()`,
+    percent-encoded `file:` entry, mixed type list comment, double message
+    in tools).
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - A ticket change that sets nothing is now refused in the core; T-071's
-    tool should skip an empty change rather than call the entry (T-074's
-    case is in its acceptance since 2026-11-26).
+  - That `context.ts` passes the team file's `toolsets` to
+    `createWritePath` holds by inspection, not by lint (T-071 wires the
+    entries from it).
+  - From T-068: a ticket change that sets nothing is refused in the core;
+    T-071's tool should skip an empty change rather than call the entry.
   - From T-067: the `getAgent` active rule comes from Freshdesk's
-    documentation, not measured; `make quality` real-time tests timed out
-    under machine load on 2026-11-26 (not seen this session).
-  - From T-041/T-065: default fields keyed by `/ticket_fields` API name,
-    to confirm at T-076 (choice-key spelling closed 2026-11-26: the names
-    match exactly).
+    documentation, not measured; real-time tests timed out under machine
+    load on 2026-11-26 (not seen this session).
+  - From T-041/T-065: default fields keyed by `/ticket_fields` API name, to
+    confirm at T-076.
   - From T-040, unchecked: whether `agent-native-setup update` would revert
     the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** none.
+- **Dead ends:** name-based selectors for `context.ts`'s exports
+  (`da16547`): a name set at the import passed; replaced by refusing the
+  export list (`f0edde0`).
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `254bcae`'s tree. Vitest
-  "Tests 3086 passed (3086)"; `tools/checks` "Ran 138 tests", OK; lint,
+- **Checkpoint:** `make quality` exit 0 on `f0edde0`'s tree. Vitest
+  "Tests 3649 passed (3649)"; `tools/checks` "Ran 138 tests", OK; lint,
   format, typecheck, build and both gitleaks scans passed.

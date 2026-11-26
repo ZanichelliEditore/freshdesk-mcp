@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-068
 - **Created:** 2026-11-26
 
@@ -43,18 +43,39 @@ Split from T-068 at planning, 2026-11-26 (`/decompose M2` amendment, owner's dec
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `c54585d`: `eslint.config.mjs` `coreFences` (`coreResources`, `client`,
+  `ticketInput`, `writePath`) and `fenceBlock`; the `src/core/**` re-export
+  block; `docs/architecture/overview.md`. Tests in `test/lint-rules.test.ts`,
+  describe "the client, the limiter, ticketInput and createWritePath stay in
+  the core": "HttpClient and RateLimiter" (value, aliased, `import *`,
+  re-export refused; type-only passes; "exempts exactly those files" walks
+  every file under `src/` and `scripts/`), "ticketInput", "re-exports in
+  src/core/**", "createWritePath" ("lets every file but
+  src/tools/context.ts outside src/core/** be refused"); "lists no src/core
+  path for any place" made exact (`087d6ba`).
+- `da16547` (full-round fixes): literal dynamic `import()` refused by the
+  client, ticketInput and writePath fences; `SmokeClient` fenced; the exempt
+  modules have no re-export or value export list ("exports of the modules a
+  fence exempts"); ticketInput's exemption swept ("exempts exactly
+  src/schema/input.ts…"); raw place entries and negative cases in "lists no
+  src/core path".
+- `f0edde0` (owner-approved fix, 2026-11-26): `src/tools/context.ts` has no
+  value export list or `export *` ("refuses in src/tools/context.ts a
+  re-export", the aliased and namespace cases included).
+- No split was needed.
 
 ## Dead ends
-none
+- Name-based selectors for `context.ts`'s exports
+  (`ExportSpecifier[local.name="createWritePath"]`, `da16547`): a name set
+  at the import (`import { createWritePath as cwp }; export { cwp }`) passed.
+  Replaced by refusing the export list itself (`f0edde0`).
 
 ## Open doubts
-none
+- That `context.ts` passes the team file's `toolsets` to `createWritePath`
+  holds by inspection, not by lint.
+- Parked review items: `docs/improvements.md` entry `f0edde0`
+  (`export default` / `export =` in an exempt module, a template-literal
+  `import()`, a percent-encoded `file:` place entry).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
-
-## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+ok
