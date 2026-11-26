@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T15:40:36+01:00`
-- **Describes commit:** `<hash>` (T-086: done; handoff to T-087), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled by the stamp>`.
+- **Describes commit:** `171d6e5` (T-086: done; handoff to T-087), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45841679140
+  (workflow `quality`, ran on `171d6e5`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-086 `done (2026-11-26)`: `make smoke-send`. See
   `docs/tasks/T-086-smoke-send.md` "Done". Commits `6709f63` (script,
