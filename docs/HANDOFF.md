@@ -4,7 +4,7 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T11:24:26+01:00`
+- **Written:** `2026-11-26T11:24:26+01:00`; amended `2026-11-26T11:31:27+01:00`
 - **Describes commit:** `c80cc91` (the T-074 handoff commit), pushed to
   `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
   https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45801185680
@@ -20,12 +20,16 @@
   wiring". No version bump or tag: OD-16 now allows a release, which stays
   the owner's go. MockAgent only, no real Freshdesk call.
 
-- **Next action:** `/decompose` sizing T-078 (`proposed`, below) before
-  T-075.
+- **Next action:** `/pickup` T-078 (`todo (2026-11-26)`), then T-075.
 
-- **Read before anything else:** `docs/tasks/PLAN.md` row T-078;
-  `docs/improvements.md` entries `3a2ba75` and `3b3bec6` (T-078's source);
-  entry `ae54d0a` (owner question below).
+- **Plan amend (2026-11-26):** commit `AMEND_HASH`, "M2 plan amend: T-078
+  sized": T-078 `todo` before T-075 (T-075 depends on it), task file
+  `docs/tasks/T-078-categorize-confirm-binding.md`; improvements `3a2ba75`,
+  `3b3bec6` taken; owner decision on `ae54d0a` recorded.
+
+- **Read before anything else:** `docs/tasks/PLAN.md` row T-078 and
+  `docs/tasks/T-078-categorize-confirm-binding.md`;
+  `docs/improvements.md` entries `3a2ba75` and `3b3bec6` (T-078's source).
 
 - **Reviews:**
   - Full round, R1 = `ae54d0a`, range `2c649fc..ae54d0a`. Scoped round,
@@ -49,17 +53,16 @@
     `d8f274e`): six test-strength items, the dropped top-level message.
     Dismissed: errors[] unwrapped (the registry's `sentError` wraps them).
 
-- **Proposed plan changes:** T-078 "categorize_tickets: confirm bound to
-  the API field name the preview resolved; `may_have_been_applied` as its
-  own result state and count", `proposed`, from improvements
-  `3a2ba75`/`3b3bec6`, owner-approved 2026-11-26; to size at `/decompose`.
+- **Proposed plan changes:** none (T-078 sized `todo`, 2026-11-26).
 
 - **Open doubts:**
   - Owner question: a mistyped agent or group value in `hand_off_draft` is
     found only at the PUT, after the note is posted and the agents emailed
     (the error names the `note_id` and says the assignment was not
     applied). Accept, or have the core's `hand_off_draft` entry check the
-    assignment before the note (a core change, `/rfc` first)?
+    assignment before the note (a core change, `/rfc` first)? Closed
+    (owner, 2026-11-26): accepted as a documented limit, may be revisited
+    after T-076 (T-074's task file, improvements `ae54d0a`).
   - `categorize_tickets` checks values only at the confirm (tools cannot
     import `ticketInput`); a bad choice refuses that ticket then.
   - T-072's acceptance "a `private` input is `validation`" is the MCP SDK's

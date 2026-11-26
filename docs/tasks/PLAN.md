@@ -22,8 +22,8 @@ Ordered task list. One task = one session (SPEC.md
 **Sizing calibration:** tasks that overflowed: 0 · tasks split after the
 fact: 0 · sessions that ran two tasks: 0 · split points set at planning and
 taken: 0 · split points set at planning and not needed: 6 (T-007, T-001, T-013, T-047, T-050, T-063) ·
-split points set at planning, pending: 17 (T-017, T-019, T-022, T-023, T-026,
-T-030, T-031, T-032, T-037, T-043, T-049, T-066, T-064, T-068, T-071, T-073, T-077). A
+split points set at planning, pending: 18 (T-017, T-019, T-022, T-023, T-026,
+T-030, T-031, T-032, T-037, T-043, T-049, T-066, T-064, T-068, T-071, T-073, T-077, T-078). A
 raised row split at planning (not after the fact): T-064 into T-064, T-068
 and T-069 (`/decompose M2`, 2026-11-25); T-068 into T-068 and T-077 when the
 items parked for T-068 were taken (`/decompose M2` amendment, 2026-11-26). T-051 sized with no split point (one
@@ -326,6 +326,20 @@ T-069; `c928102` (`hand_off_draft`'s two writes) by T-074; `84dd7aa`
 Still parked: `6e7674f`'s shared refusal shape, `84dd7aa`'s
 `.claude/worktrees/` gitignore.
 
+On 2026-11-26 a `/decompose M2` amendment scoped to one row, run by a
+planning session under the owner's delegation to the orchestrator, with
+the `planner`'s proposal: T-078 sized `todo` and placed before T-075,
+which now depends on it. Design: the preview mints over the API names it
+resolved, the confirm resolves its keys again and must match them, so a
+relabel inside the 15 minutes refuses instead of writing another field;
+`may_have_been_applied` becomes its own result state and count. Takes
+`docs/improvements.md` `3a2ba75` and `3b3bec6` (its 2xx-other-shape and
+3xx tests too); not taken: `3b3bec6`'s re-confirm (server state, OD-15),
+`ae54d0a`'s shared field-key helper (two callers). Recorded the same day
+(owner, via the orchestrator): `hand_off_draft` keeps checking agent and
+group only at the assignment, a documented limit, may be revisited after
+T-076 (T-074's task file, improvements `ae54d0a`).
+
 **Owner actions for M2:** the time-trigger check and the §13 wording:
 settled (2026-11-26; no automation rule or time trigger acted on the
 `mcp-test` ticket left overnight). The `/ticket_fields` choice-name check:
@@ -369,9 +383,9 @@ files they govern:
 | T-072 | Tool: `add_note` | build | T-069, T-071 | `test/tools/write/add-note.test.ts` (MockAgent): one POST with `private: true` and the resolved emails; a `private` or `notify_emails` input is `validation` with 0 dispatches; an unresolved agent refuses the note; listed only with `write`; `make quality` green. | done (2026-11-26) |
 | T-073 | Tool: `categorize_tickets` | build | T-070, T-071 | `test/tools/write/categorize-tickets.test.ts` (MockAgent): a preview sends GETs only and returns current → new and a `preview_id`; confirm with that id sends one PUT per ticket and a per-ticket result; confirm with a ticket added or a field changed is refused with 0 PUTs; cap + 1 items refused with nothing sent; a preview cut by the call's deadline or budget lists the tickets not read as not previewed, and its `preview_id` covers only those read; status, group or agent in fields `field_not_writable`; a deadline or budget cut reports the rest as not attempted, and a second confirm with the same `preview_id` for those tickets only writes them; `make quality` green. Split point: the preview path first, the confirm path second. | done (2026-11-26) |
 | T-074 | Tool: `hand_off_draft` | build | T-072, T-041 | `test/tools/write/hand-off-draft.test.ts` (MockAgent): one POST (private, body starting with the `DRAFT REPLY` header, notify emails) then one PUT (group/agent); a note refused sends no PUT; a PUT failing after the note returns a result naming the written note and the failed assignment, no retry; a field outside group/agent `field_not_writable`; with nothing to assign (no agent and no group) it posts the note only and sends no PUT, because the core refuses an empty ticket change; `make quality` green. | done (2026-11-26) |
-| T-075 | Smoke write script through the core, `mcp-test` tickets only | build | T-071, T-072, T-073, T-074 | `test/smoke-write.test.ts` (MockAgent): an untagged or spam ticket gets one GET and nothing else; a tagged ticket's write reaches MockAgent only through the core's entries: `scripts/smoke/write.ts` and every `scripts/` module it imports take from `src/core/` only the entry builder, import no `HttpClient` and set no `method` (asserted on their source), and the entries are built from the team `loadConfig` loads, never from a literal toolsets list; a failed tag check (5xx, 404, timeout) or a ticket whose `tags` or `spam` field is missing refuses with nothing written; output holds no id, subject, body, domain or key; a failed write prints its code only and exits non-zero; `make help` lists `smoke-write`; `make quality` green. | todo (2026-11-25) |
+| T-078 | `categorize_tickets`: confirm bound to the API field name the preview resolved; `may_have_been_applied` as its own result state and count | build | T-073 | `test/tools/write/categorize-tickets.test.ts` (MockAgent; regression tests written first and shown failing on `34188f2`'s `src/`): the preview mints its `preview_id` over each field's API name, and the confirm resolves its keys against the schema loaded at confirm and checks those API names; with the schema changed between preview and confirm, a label now on another custom field, a label now naming two fields, and a field removed each refuse the whole confirm as `validation` with 0 PUTs; a confirm naming a field by API name where the preview used its label writes, and the entry receives API-name keys; a PUT sent and answered 5xx, network, a 2xx of another shape or a 3xx gives `result: "may_have_been_applied"` with its error, counted in `may_have_been_applied` and not in `refused`, and `written + refused + may_have_been_applied + not_attempted` equals the confirmed items; the header, description and `docs/tool-catalogue.md` say both; `src/core/**` and `src/tools/preview.ts` unchanged; `make quality` green. Split point: the result state and count first, the confirm binding second. Sized 2026-11-26 (`/decompose M2` amendment): takes `3a2ba75` and `3b3bec6` (not its re-confirm item). | todo (2026-11-26) |
+| T-075 | Smoke write script through the core, `mcp-test` tickets only | build | T-071, T-072, T-073, T-074, T-078 | `test/smoke-write.test.ts` (MockAgent): an untagged or spam ticket gets one GET and nothing else; a tagged ticket's write reaches MockAgent only through the core's entries: `scripts/smoke/write.ts` and every `scripts/` module it imports take from `src/core/` only the entry builder, import no `HttpClient` and set no `method` (asserted on their source), and the entries are built from the team `loadConfig` loads, never from a literal toolsets list; a failed tag check (5xx, 404, timeout) or a ticket whose `tags` or `spam` field is missing refuses with nothing written; output holds no id, subject, body, domain or key; a failed write prints its code only and exits non-zero; `make help` lists `smoke-write`; `make quality` green. | todo (2026-11-25) |
 | T-076 | M2 acceptance on `mcp-test` tickets (owner action) | spike | T-075 (the time-trigger check and SPEC §13's M2 wording settled 2026-11-26) | SPEC §13's M2 row holds the settled wording (2026-11-26); "Done" lists one yes line per use case (C1, C4, C5, C6, C8) from the owner's `make smoke-write` runs and one line "no automation rule acted" from the activity log, with dates; no account value in any tracked file (commit hook passes); `make quality` green. | todo (2026-11-25) |
-| T-078 | `categorize_tickets`: confirm bound to the API field name the preview resolved; `may_have_been_applied` as its own result state and count | build | T-073 | To size at `/decompose` (from `docs/improvements.md` `3a2ba75` and `3b3bec6`; owner-approved 2026-11-26). | proposed |
 
 ## Wireframes
 

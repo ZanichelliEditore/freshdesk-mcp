@@ -64,6 +64,11 @@ No split point.
 - `make quality` exit 0 on `d8f274e`: Vitest 3970 passed, `tools/checks` 138
   OK. No version bump or tag (OD-16 allows one now; the release is the
   owner's go).
+- Owner decision (2026-11-26, via the orchestrator), closing the open doubt
+  below: `hand_off_draft` keeps checking agent and group only at the
+  assignment. A mistyped name posts the note and returns an error with the
+  `note_id`, saying to finish with `update_ticket`. Accepted as a documented
+  limit; may be revisited after T-076 (improvements `ae54d0a`).
 
 ## Dead ends
 - A MockAgent 429 or 5xx on every attempt for the PUT, or a 5xx for the
@@ -78,6 +83,7 @@ No split point.
   The error names the `note_id` and says the assignment was not applied.
   Owner question: accept, or let the core's `hand_off_draft` entry check the
   assignment before the note (a change to the core, through `/rfc`)?
+  Closed (owner, 2026-11-26): accepted as a documented limit, see "Done".
 - `fields: {agent: null}` clears the agent in the hand-off PUT (tested); a
   hand-off that only unassigns is allowed.
 
