@@ -384,7 +384,7 @@ async function apply(
   }
   if (counts.may_have_been_applied > 0) {
     notes.push(
-      `${counts.may_have_been_applied} tickets are may_have_been_applied: the change was sent and Freshdesk did not answer clearly, so it may have been applied. Check those tickets with get_ticket before sending them again.`,
+      `${counts.may_have_been_applied} tickets may have been applied (may_have_been_applied): the change was sent and Freshdesk did not answer clearly, so it may have been applied. Check those tickets with get_ticket before sending them again.`,
     );
   }
   return {

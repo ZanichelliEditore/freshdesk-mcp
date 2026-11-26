@@ -4,86 +4,67 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T11:24:26+01:00`; amended `2026-11-26T11:31:27+01:00`
-- **Describes commit:** `c80cc91` (the T-074 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45801185680
-  (workflow `quality`, ran on `c80cc91`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T11:43:07+01:00`
+- **Describes commit:** `HANDOFF_HASH` (the T-078 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** recorded by the stamp commit.
 
-- **Current task:** T-074 (`hand_off_draft`) `done (2026-11-26)`. Commits
-  `ae54d0a` (implementation, `add_note`'s public-note error), `d8f274e`
-  (full-round fixes), then this handoff commit. Tests:
-  `test/tools/write/hand-off-draft.test.ts` (38 cases),
-  `test/tools/write/add-note.test.ts` "a note Freshdesk answers as public"
-  and "a POST whose outcome is unknown", `test/server.test.ts` "the write
-  wiring". No version bump or tag: OD-16 now allows a release, which stays
-  the owner's go. MockAgent only, no real Freshdesk call.
+- **Current task:** T-078 (`categorize_tickets` confirm binding,
+  `may_have_been_applied`) `done (2026-11-26)`. Commits `edca65b` (result
+  state and count, the split point), `072dd91` (confirm bound to the API
+  name), then this handoff commit (review fixes). Tests:
+  `test/tools/write/categorize-tickets.test.ts` (36 cases), describe "the
+  confirm is bound to the API names the preview resolved" and the two
+  `may_have_been_applied` cases. `src/core/**` and `src/tools/preview.ts`
+  unchanged. No version bump or release. MockAgent only.
 
-- **Next action:** `/pickup` T-078 (`todo (2026-11-26)`), then T-075.
+- **Owner decision (2026-11-26, via the orchestrator):** a second confirm of
+  a `may_have_been_applied` ticket is not refused: it would need server
+  state against OD-15, and it is the same case as the repeat confirms
+  already accepted. `docs/improvements.md` `3b3bec6` marked DECIDED.
 
-- **Plan amend (2026-11-26):** commit `6daa45e`, "M2 plan amend: T-078
-  sized": T-078 `todo` before T-075 (T-075 depends on it), task file
-  `docs/tasks/T-078-categorize-confirm-binding.md`; improvements `3a2ba75`,
-  `3b3bec6` taken; owner decision on `ae54d0a` recorded.
+- **Next action:** `/pickup` T-075 (`todo`, its dependencies now done).
 
-- **Read before anything else:** `docs/tasks/PLAN.md` row T-078 and
-  `docs/tasks/T-078-categorize-confirm-binding.md`;
-  `docs/improvements.md` entries `3a2ba75` and `3b3bec6` (T-078's source).
+- **Read before anything else:** `docs/tasks/PLAN.md` row T-075 and its
+  task file `docs/tasks/T-075-smoke-write.md`.
 
 - **Reviews:**
-  - Full round, R1 = `ae54d0a`, range `2c649fc..ae54d0a`. Scoped round,
-    range `ae54d0a..d8f274e`. All four quotes of every reviewer checked
-    against the diff files: correct.
-  - `code-reviewer`, full: medium, assignment error kept `retryable: true`
-    after the note (fixed: `retryable: false`, points at `update_ticket`);
-    medium, a 5xx/network PUT said "failed" though it may have landed
-    (fixed: "may or may not have been applied"); medium, values checked
-    only after the note (not fixed: `ticketInput` is lint-fenced out of
-    `src/tools/` by T-077; owner question, improvements `ae54d0a`); low,
-    missing tests for ambiguous key, dedupe, `agent: null` (added); low,
-    problems over 10 dropped silently (fixed); low, duplicated key lookup
-    (parked); low, "not retried" wording (fixed).
-  - `security-reviewer`, full: no safety-core bypass. Medium, same as
-    code's first (fixed); low, a 5xx/network note POST gave no "may have
-    been written" hint (fixed in both tools, `noteFailed`); info, header
-    comment overclaimed (fixed).
-  - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round: nothing blocking from all three. Parked (improvements
-    `d8f274e`): six test-strength items, the dropped top-level message.
-    Dismissed: errors[] unwrapped (the registry's `sentError` wraps them).
+  - Full round, R1 = `072dd91`, range `a4d54b9..072dd91`. All four quotes
+    of every reviewer checked against the diff file: correct.
+  - `code-reviewer`: clean, 4 low/info. Relabel test did not pin which check
+    refused (fixed: asserts no `errors`, the tag check); confirm refusal
+    after a cold schema load reports no `api_calls_used` (open doubt,
+    parked `072dd91`); CHANGELOG overclaimed "added" (fixed); note wording
+    "tickets are may_have_been_applied" (fixed).
+  - `security-reviewer`: no finding blocking; no core bypass, no fail-open,
+    read-once guarantee holds. Low, cold-cache schema load before the id
+    check (same as code's, parked `072dd91`); info, tags do not cover a
+    field's type or choices (pre-existing, parked `072dd91`).
+  - `compliance-reviewer`: wireframes `none`.
+  - Scoped round: not run. The fixes change no mechanism (one test
+    assertion, CHANGELOG and note wording), so rule 9's scoped round does
+    not apply.
 
-- **Proposed plan changes:** none (T-078 sized `todo`, 2026-11-26).
+- **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - Owner question: a mistyped agent or group value in `hand_off_draft` is
-    found only at the PUT, after the note is posted and the agents emailed
-    (the error names the `note_id` and says the assignment was not
-    applied). Accept, or have the core's `hand_off_draft` entry check the
-    assignment before the note (a core change, `/rfc` first)? Closed
-    (owner, 2026-11-26): accepted as a documented limit, may be revisited
-    after T-076 (T-074's task file, improvements `ae54d0a`).
-  - `categorize_tickets` checks values only at the confirm (tools cannot
-    import `ticketInput`); a bad choice refuses that ticket then.
-  - T-072's acceptance "a `private` input is `validation`" is the MCP SDK's
-    "Input validation error" text, not a `FreshdeskError` JSON; the same
-    holds for T-073's extra item key and T-074's `private`/`body` inputs.
-  - From T-067: the `getAgent` active rule comes from Freshdesk's
-    documentation, not measured.
-  - From T-077: that `context.ts` passes the team file's `toolsets` to
-    `createWritePath` holds by inspection, not by lint.
-  - From T-041/T-065: default fields keyed by `/ticket_fields` API name, to
-    confirm at T-076.
-  - From T-040, unchecked: whether `agent-native-setup update` would revert
-    the safety-core value in `.claude/commands/decompose.md` step 4.
-  - `.claude/worktrees/` is not gitignored (parked).
+  - A bogus or expired `preview_id` with a cold schema cache costs about 3
+    read-only GETs before it is refused (the keys must resolve before the
+    tags can be checked); parked `072dd91`.
+  - Carried: `categorize_tickets` checks values only at the confirm (tools
+    cannot import `ticketInput`); T-072/T-073/T-074 strict-input errors are
+    the MCP SDK's text, not a `FreshdeskError` JSON; the `getAgent` active
+    rule is from documentation, not measured (T-067); `context.ts` passing
+    the team's `toolsets` to `createWritePath` holds by inspection (T-077);
+    default fields keyed by `/ticket_fields` API name, to confirm at T-076;
+    whether `agent-native-setup update` would revert the safety-core value
+    in `.claude/commands/decompose.md` step 4 (T-040); `.claude/worktrees/`
+    is not gitignored (parked).
 
-- **Dead ends:** MockAgent 429/5xx-on-every-attempt tests took 3 s or more
-  (client retries and pacing), near Vitest's 5 s timeout; replaced by a
-  fake-entry handler test and a 401 schema load.
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `d8f274e`'s tree. Vitest
-  "Tests 3970 passed (3970)", 49 files; `tools/checks` "Ran 138 tests", OK;
-  lint, format, typecheck, build and both gitleaks scans passed.
+- **Checkpoint:** `make quality` exit 0 on the handoff tree. Vitest "Test
+  Files 49 passed (49)", "Tests 3977 passed (3977)"; `tools/checks` "Ran
+  138 tests", OK; lint, format, typecheck, build and both gitleaks scans
+  passed.

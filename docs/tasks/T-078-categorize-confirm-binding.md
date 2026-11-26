@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** doing (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-073
 - **Created:** 2026-11-26
 
@@ -91,20 +91,40 @@ the first commit and propose the binding as its own row.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `edca65b`: result state and count `may_have_been_applied` (split point,
+  its own commit). Tests in `test/tools/write/categorize-tickets.test.ts`:
+  "a PUT sent and answered 5xx, or cut by a network failure, is
+  may_have_been_applied, not refused", "a PUT answered 2xx with a body of
+  another shape, or 3xx, is may_have_been_applied"; `countsAddUp` (sum and
+  rows per state) in the write, 404 and deadline-cut tests.
+- `072dd91`: confirm bound to the API name. Tests in the same file, describe
+  "the confirm is bound to the API names the preview resolved": API-name
+  confirm after a label preview writes; the entry receives API-name keys;
+  relabel to another field, label on two fields, field removed each refuse
+  as `validation` with nothing written; two keys on one field and a
+  not-writable field refuse. "the confirm writes only the checked values"
+  now mints over `ticket_type`.
+- Regression tests shown failing before each change (5, then 7 failing;
+  binding code as at `34188f2`, `src/core/**` and `src/tools/preview.ts`
+  unchanged since `34188f2`).
+- Review fixes (handoff commit): relabel test pins the tag check
+  (`errors` undefined), CHANGELOG wording on an added field, the note's
+  wording.
+- Owner decision (2026-11-26): a second confirm of a `may_have_been_applied`
+  ticket is not refused (OD-15); improvements `3b3bec6` marked DECIDED.
 
 ## Dead ends
 none
 
 ## Open doubts
 - A bogus `preview_id` with a cold schema cache now costs the schema load
-  (about 3 GETs) before it is refused: the id cannot be checked before the
-  keys are resolved. Planner's note; raise it if the owner should weigh in.
+  (about 3 read-only GETs) before it is refused, and the refusal reports no
+  `api_calls_used`: the id cannot be checked before the keys are resolved.
+  A form check first would need a `src/tools/preview.ts` export (parked,
+  improvements `072dd91`).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

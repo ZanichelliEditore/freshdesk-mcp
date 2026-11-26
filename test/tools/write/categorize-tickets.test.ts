@@ -810,7 +810,9 @@ describe("categorize_tickets: the confirm is bound to the API names the preview 
       expect(result.error.code).toBe("validation");
       expect(result.error.message).toContain("Not applied");
       expect(result.error.message).toContain("preview");
-      if (code !== undefined) expect(result.error.errors?.map((one) => one.code)).toEqual([code]);
+      // Resolved fine, then refused by the preview_id's tags (no field errors), or by resolve.
+      if (code === undefined) expect(result.error.errors).toBeUndefined();
+      else expect(result.error.errors?.map((one) => one.code)).toEqual([code]);
       expect(received).toEqual([]);
     },
   );

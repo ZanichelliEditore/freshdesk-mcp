@@ -22,9 +22,10 @@ and stay 0.x until milestone M4, then 1.0.0.
   A ticket whose change was sent without a clear answer (a timeout, a 5xx,
   a 3xx, an answer of another shape) is reported `may_have_been_applied`,
   with its own count, apart from `refused`. A confirm writes only the
-  fields the approved preview resolved, by API name: a field relabelled,
-  added or removed since the preview refuses the whole confirm (preview
-  again); a confirm may name a field by label or by API name.
+  fields the approved preview resolved, by API name: a field relabelled or
+  removed since the preview, or one added under a label the confirm uses,
+  refuses the whole confirm (preview again); a confirm may name a field by
+  label or by API name.
 - **Added:** `hand_off_draft` in `write`: a draft reply handed to another
   agent in one call, as a private note headed `DRAFT REPLY`, then the ticket
   assigned to an agent and/or a group, the agents named by id notified. With
