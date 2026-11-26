@@ -11,6 +11,9 @@ and stay 0.x until milestone M4, then 1.0.0.
   and tags added or removed. Not for release before the rest of `write`
   (`add_note`, `categorize_tickets`, `hand_off_draft`) is in (PLAN OD-16).
   `send` is still refused.
+- **Added:** `add_note` in `write`: a private note on a ticket, always
+  private, notifying agents named by id (looked up with `list_agents`). It
+  returns the note's id and the agent ids notified, never an email address.
 
 ## 0.3.1 (2026-11-25)
 

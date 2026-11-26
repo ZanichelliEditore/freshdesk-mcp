@@ -42,7 +42,7 @@ A line here is a name and a purpose, not an input design.
 | `export_tickets` | `core` | active | write | Tickets, Conversations | JSONL or CSV file of a period's tickets in the export directory |
 | `update_ticket` | `write` | active | write | Tickets | status, priority, type, group, agent, tags and custom fields by label |
 | `categorize_tickets` | `write` | active | write | Tickets | bulk set of category fields, preview then confirm |
-| `add_note` | `write` | active | write | Conversations (notes) | private note by default, optional agent notification |
+| `add_note` | `write` | active | write | Conversations (notes) | private note only (no `private` input), optional notification of agents named by id |
 | `hand_off_draft` | `write` | active | write | Conversations (notes), Tickets | draft reply as a private note, assign and notify |
 | `reply_to_ticket` | `send` | active | write | Conversations (reply) | public reply to the requester, `confirm` required |
 | `forward_ticket` | `send` | active | write | Tickets (forward) | forward outside Freshdesk to allow-listed recipients, `confirm` required |
