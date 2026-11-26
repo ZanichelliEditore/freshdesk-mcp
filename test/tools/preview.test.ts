@@ -16,17 +16,19 @@ const ITEMS: PreviewItem[] = [
   { ticket_id: 7, fields: { Category: "Access", Product: ["web", "app"] } },
   { ticket_id: 4242, fields: { Category: null, Urgent: true, Score: 3 } },
 ];
-/** The mint time: milliseconds on the process's monotonic clock. */
-const T0 = 5_000_000;
-/** Sets the monotonic clock (`performance.now()`) the module reads. */
+/** The mint time: milliseconds since the epoch on the wall clock. */
+const T0 = Date.parse("2026-11-26T10:00:00.000Z");
+/** Sets the wall clock (`Date.now()`) the module reads. */
 function setClock(ms: number): void {
-  vi.spyOn(performance, "now").mockReturnValue(ms);
+  vi.setSystemTime(ms);
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
   setClock(T0);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -231,20 +233,8 @@ describe("checkPreviewId: what is refused (validation, http_status null, id not 
     refusedWithoutQuoting(id, [ITEMS[0]!]);
   });
 
-  it("the mint time is the monotonic clock's whole millisecond; the wall clock does not count", () => {
-    setClock(T0 + 0.9);
-    const id = minted();
-    expect(id.split(".")[0]).toBe(String(T0));
-    // A wall clock set back (or forward) changes nothing.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2020-01-01T00:00:00.000Z"));
-    setClock(T0 + PREVIEW_TTL_MS);
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
-    vi.setSystemTime(new Date("2040-01-01T00:00:00.000Z"));
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
-    setClock(T0 + PREVIEW_TTL_MS + 0.5);
-    refusedWithoutQuoting(id, ITEMS);
-    vi.useRealTimers();
+  it("the mint time is the wall clock's millisecond (Date.now())", () => {
+    expect(minted().split(".")[0]).toBe(String(T0));
   });
 
   it("PREVIEW_TTL_MS is 15 minutes", () => {

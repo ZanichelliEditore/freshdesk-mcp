@@ -18,9 +18,11 @@
 //     `timingSafeEqual`); the id's other tags are not looked at. A ticket
 //     added, a field changed, dropped or added, another tool's id, an edited
 //     id or another process's id matches no tag and is refused.
-//   - The mint time is this process's monotonic clock (`performance.now()`,
-//     whole milliseconds since the process began): the key dies with the
-//     process too, and a wall clock set back cannot stretch the 15 minutes.
+//   - The mint time is the wall clock (`Date.now()`). Accepted limitation
+//     (owner, 2026-11-26): a wall clock set back after the mint stretches the
+//     15 minutes by as much. A monotonic clock was tried and dropped: it does
+//     not count time the machine sleeps, so a preview would outlive a closed
+//     laptop lid.
 //   - Valid 15 minutes from the mint time, the end included; a mint time
 //     ahead of the clock is refused. The tickets are not read
 //     again at confirm (OD-15). With no server state the check cannot tell
@@ -72,7 +74,7 @@ interface Entry {
 export function mintPreviewId(tool: string, items: readonly PreviewItem[]): MintResult {
   const read = readItems(items, false);
   if (!read.ok) return read;
-  const time = Math.floor(performance.now());
+  const time = Date.now();
   const nonce = randomBytes(NONCE_BYTES).toString("base64url");
   const tags = read.entries.map((entry) => tag(tool, time, nonce, entry)).join("");
   return { ok: true, preview_id: `${time}.${nonce}.${tags}` };
@@ -117,7 +119,7 @@ export function checkPreviewId(
       );
     }
   }
-  const age = performance.now() - time;
+  const age = Date.now() - time;
   if (age < 0) return refuse("the preview_id's mint time is ahead of this server's clock", true);
   if (age > PREVIEW_TTL_MS) return refuse("the preview_id is older than 15 minutes", true);
   return { ok: true };
