@@ -300,7 +300,10 @@ describe("reply_to_ticket: inputs it refuses, with nothing sent", () => {
   it.each([
     ["an empty body", { ticket_id: ID, body: "" }],
     ["a whitespace-only body", { ticket_id: ID, body: " \n " }],
-    ["a body with a zero-width character", { ticket_id: ID, body: "Hel​lo" }],
+    [
+      "a body with a zero-width character",
+      { ticket_id: ID, body: `Hel${String.fromCodePoint(0x200b)}lo` },
+    ],
     ["a ticket id of 0", { ticket_id: 0, body: BODY }],
   ])("refuses %s, 0 dispatches", async (_, args) => {
     const s = await session();

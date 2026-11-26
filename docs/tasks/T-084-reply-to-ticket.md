@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-082, T-083
 - **Created:** 2026-11-26
 
@@ -47,18 +47,21 @@ Split point: the wiring (`server.ts`, `context.ts`, `send/index.ts`) first, the 
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `1ef27e0` build: `src/tools/toolsets/send/index.ts` (`sendTools`, `SEND_FACTORIES`), `src/tools/toolsets/send/reply-to-ticket.ts` (`replyToTicket`, `sendFailed`); `src/tools/context.ts` builds `send` from the write path's `sends` (one `WeakMap` of built toolsets); `src/server.ts` and `src/tools/toolsets/index.ts` comments; T4 place in `eslint.tool-imports.json`; README "Sending mail (`send`)", tool catalogue, overview, CHANGELOG.
+- `4cc147b` review fixes: `withoutAddresses` moved to `src/tools/format.ts` (shared by `add_note`, `hand_off_draft`, `reply_to_ticket`; T4 lists `../../format.js`, not `../write/add-note.js`); the description opens with the ticket check; any failure after a dispatch is `retryable: false` and says the `send_id` is spent; a network error after the POST tested end to end. Handoff commit: the zero-width test case written with `String.fromCodePoint` (the literal had been folded in).
+- Tests: `test/tools/send/reply-to-ticket.test.ts` (32: two calls, mismatched confirms, `to`/`bcc`/`bcc_emails`/`from_email` refused, no address in the sent result, 5xx, network and other-shape `may_have_been_sent`, a 400 scrubbed, registration and description); `test/server.test.ts` ("the real registry ... takes", "with send alone", "the send wiring"); `test/lint-rules.test.ts` (T4 refusals).
+- Decisions (main session, high confidence): `may_have_been_sent` is a boolean key on the error (`server`/`network` with attempts > 0), the code unchanged; the "Not sent" result carries `api_calls_used: 0`; `cc` absent and `confirm` absent are passed to the core as own keys holding `undefined` (in `SEND_KEYS`, read as absent); README's `toolsets` line now names `write` and `send` (it said `write` was refused, untrue since T-071) and the CHANGELOG line "`send` is still refused" removed.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- `may_have_been_sent`'s exact shape (a key on the error) is this tool's choice; T-085 and T-088 should reuse `sendFailed`'s rule.
+- A 408 or 409 after dispatch is `validation`, reported "send_id spent" but not `may_have_been_sent` (OD-27's list); the RFC says such a 4xx is not proof nothing was sent.
+- Parked from the scoped round: `docs/improvements.md`, `4cc147b`.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

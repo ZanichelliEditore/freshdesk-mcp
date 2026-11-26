@@ -4,81 +4,75 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T14:27:27+01:00`
-- **Describes commit:** `4efcc70` (T-082: done; handoff to T-084),
-  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45829585087
-  (workflow `quality`, ran on `4efcc70`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T14:45:52+01:00`
+- **Describes commit:** filled by the stamp commit. **CI:** filled by the
+  stamp commit.
 
-- **Current task:** T-082 `done (2026-11-26)`: the send entries in
-  `src/core/write-path.ts` (`sends`: `reply_to_ticket`, `forward_ticket`,
-  `add_public_note`), `forwardAllowList` wired in `src/tools/context.ts`;
-  commits `a6ee82e` (owner's OD-33 text amendment), `d8b6828` (build, tests
-  first), `464bec0` (review fixes). See `docs/tasks/T-082-send-entries.md`
-  "Done".
+- **Current task:** T-084 `done (2026-11-26)`: `reply_to_ticket` in
+  `src/tools/toolsets/send/reply-to-ticket.ts`, the `send` wiring in
+  `src/tools/toolsets/send/index.ts`, built by `src/tools/context.ts` from
+  the write path's `sends`; `send` no longer a `ConfigError`. Commits
+  `1ef27e0` (build), `4cc147b` (review fixes), then this handoff commit.
+  See `docs/tasks/T-084-reply-to-ticket.md` "Done". Started from `b6aa9fb`
+  (owner commit after the T-082 stamp `dd95fdd`, `docs/improvements.md`
+  only: the `kb_write` proposal; not a mismatch).
 
-- **Next action:** `/pickup` T-084 (`reply_to_ticket` tool and the `send`
-  toolset registering; depends on T-082, T-083, both `done`).
+- **Next action:** `/pickup` T-085 (`forward_ticket`; depends on T-084,
+  `done`). T-076 (owner action) stays first in PLAN order and is not a
+  session's to take.
 
-- **Read before anything else:** `docs/tasks/T-084-reply-to-ticket.md`;
-  `src/core/write-path.ts` header, "the send entry points"
-  (`SendInput`, `SendResult`, `SendPreview`: the mint's `preview` is what
-  `src/tools/confirm.ts`'s `notSent` takes); the "for T-084" entries in
-  `docs/improvements.md` (`d8b6828`, `464bec0`): scrub a send failure's
-  `errors[]` as `add_note` does; refuse a NaN or Infinity deadline early if
-  wanted.
+- **Read before anything else:** `docs/tasks/T-085-forward-ticket.md`;
+  `src/tools/toolsets/send/reply-to-ticket.ts` (`sendFailed`: the rule for
+  a failure after dispatch, `may_have_been_sent`, to reuse) and
+  `src/tools/toolsets/send/index.ts` (add the factory); T4 in
+  `eslint.tool-imports.json`; the `4cc147b` entry in `docs/improvements.md`
+  (drop `retry_after_s` on a spent id's `rate_limited`).
 
-- **Owner decisions recorded (2026-11-26, via the orchestrator):** OD-33's
-  "already used" message is now "this send_id was already used, and the
-  earlier call may have sent; check the ticket before sending again" (RFC
-  "Amendments", text only); its `docs/improvements.md` entry is DECIDED.
-
-- **T-076 (owner, open):** `todo (2026-11-25)` in PLAN. Left: the
-  overnight check that no time trigger acted on the `mcp-test` tickets,
-  **due 2026-11-27**; then one dated yes line per case and "no automation
-  rule acted" in T-076's "Done". T-087 waits on T-076 `done`.
+- **Owner, open:** T-076 `todo (2026-11-25)`: the overnight check that no
+  time trigger acted on the `mcp-test` tickets, due 2026-11-27. OD-34: no
+  npm release accepting `send` (any tag from `1ef27e0` on) until T-087 is
+  `done`.
 
 - **Reviews:**
-  - Full round, R1 = `d8b6828`, range `099c49f..d8b6828`: code-reviewer
-    sound, no fail-open; low-medium: the body re-check at the confirm not
-    proven before the `send_id` check (fixed); low: `confirm: undefined`
-    with a `send_id`, U+2028/2029, NaN deadline (tested and documented;
-    U+2028 parked for the owner); low: `Object.keys` misses non-enumerable
-    and symbol keys (fixed, `Reflect.ownKeys`); low: "another key" test
-    asserts no cause (fixed); naming the refused key (dismissed: a key may
-    hold an address). security-reviewer: no high or medium; low: body rule
-    leaves Mn/Lo/Co/Cs/Zl/Zp (parked, `/rfc`); low: a 4xx's `errors[]` may
-    name an address (parked for T-084/T-085/T-088); info: allow-list held by
-    reference, safe (dismissed). compliance-reviewer: Wireframes `none`.
-  - Scoped round, range `d8b6828..464bec0`: code-reviewer no blocking, 2
-    parkable; security-reviewer no blocking, 2 parkable; compliance
-    `none`. All parked in `docs/improvements.md`. All quotes of base, HEAD,
-    stat and trailer matched in both rounds.
+  - Full round, R1 = `1ef27e0`, range `b6aa9fb..1ef27e0`: code-reviewer
+    no fail-open; medium: send imported a write module for
+    `withoutAddresses` (fixed: moved to `src/tools/format.ts`); low:
+    description's ticket check was the second sentence (fixed, first, test
+    `startsWith`); low: a 429 or 4xx after dispatch did not say the
+    `send_id` is spent (fixed, all dispatched failures `retryable: false`);
+    low: network `may_have_been_sent` unit-tested only (fixed, MockAgent
+    test); nit: overview blank lines (fixed). security-reviewer: no high or
+    medium, no fail-open; low: `rate_limited` after dispatch (fixed, as
+    above); info: T4 imports write (fixed); info: residual "always allow"
+    risk (stated in the RFC). compliance-reviewer: Wireframes `none`.
+  - Scoped round, range `1ef27e0..4cc147b`: code-reviewer no blocker, 3
+    parkable; security-reviewer no blocker, 2 parkable; compliance `none`.
+    All parked in `docs/improvements.md` (`4cc147b`). The handoff commit's
+    one test change (the zero-width case written with
+    `String.fromCodePoint`, same string) is not reviewed again.
+  - All quotes of base, HEAD, stat and trailer matched in both rounds. The
+    full-round code-reviewer made one read-only `git grep` call (it said
+    so).
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - CRLF, a lone CR and LF each give one `<br>` (the RFC did not say);
-    U+2028/U+2029 not refused nor turned into `<br>` (owner, `/rfc`).
-  - Unknown input keys on a send entry are refused, not dropped (stricter
-    than `add_note`).
-  - Reply and forward answer shapes are documented, not measured (A1, A2;
-    T-087 checks). A1 to A6 and the four CC field names unverified (T-087).
-  - OD-34's "no release accepting `send` before T-087" has no acceptance
-    line (parked since the M3 plan review).
-  - Carried: `categorize_tickets` checks values only at the confirm;
-    T-072/T-073/T-074 strict-input errors are the MCP SDK's text; the
-    `getAgent` active rule is from documentation (T-067); `context.ts`
-    passing the team's `toolsets` to `createWritePath` holds by inspection
-    (T-077); default fields keyed by `/ticket_fields` API name, to confirm
-    at T-076; whether `agent-native-setup update` would revert the
-    safety-core value in `.claude/commands/decompose.md` step 4 (T-040);
-    `.claude/worktrees/` is not gitignored (parked).
+  - `may_have_been_sent` is a boolean key on the error, the code kept;
+    T-085 and T-088 should follow `sendFailed`.
+  - A 408 or 409 after dispatch reports "send_id spent", not
+    `may_have_been_sent` (OD-27's list), though the RFC says such a 4xx is
+    no proof nothing was sent.
+  - Carried from T-082: CRLF/CR/LF each one `<br>`; U+2028/U+2029 neither
+    refused nor `<br>` (owner, `/rfc`); unknown keys on a send entry
+    refused; A1 to A6 and the four CC field names unverified (T-087);
+    OD-34's release rule has no acceptance line; the older carried doubts
+    (T-040, T-067, T-072 to T-074, T-076, T-077) as in `4efcc70`'s HANDOFF.
 
 - **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0. Vitest "Test Files 54 passed
-  (54)", "Tests 4552 passed (4552)"; `tools/checks` "Ran 138 tests", OK.
+- **Checkpoint:** `make quality` exit 0 on the handoff commit's tree.
+  Vitest "Test Files 55 passed (55)", "Tests 4644 passed (4644)";
+  `tools/checks` "Ran 138 tests", OK; build and both gitleaks hooks
+  passed.
