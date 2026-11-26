@@ -93,6 +93,9 @@
 //     Three frozen entries, `reply_to_ticket`, `forward_ticket` and
 //     `add_public_note`, each with one `send`, on the same one client.
 //   - Every call runs every check first, in this order: the input's own keys
+//     (every own key, non-enumerable and symbol keys included; an inherited
+//     key is not refused, and an entry's own fields are checked whatever
+//     their source)
 //     against the entry's closed input set (`SEND_KEYS`: a cast's
 //     `bcc_emails`, `from_email`, `user_id`, `attachments`, `incoming`,
 //     `private`, `notify_emails`, or a reply's `to`, refused, never dropped);
@@ -108,7 +111,9 @@
 //     The body sent is `escapeBody`'s: `&`, `<`, `>`, `"`, `'` escaped, and
 //     each line break (CRLF, a lone CR or LF) one `<br>`. Every other use
 //     (the `send_id`, the mint's result) takes the text before escaping.
-//   - Without `confirm` (absent): `mintSendId` (src/core/send-id.ts) over the
+//   - Without `confirm` (absent, or an own key holding `undefined`; a
+//     `send_id` passed with it is ignored, and a new one minted):
+//     `mintSendId` (src/core/send-id.ts) over the
 //     tool, the ticket, the body before escaping and the checked recipients;
 //     the result is `sent: false` with a `preview` holding those (an empty
 //     `to` for a reply and a public note: the requester is Freshdesk's, never
@@ -493,7 +498,8 @@ function checkSend(
 ): CheckedSend | Refusal {
   if (typeof input !== "object" || input === null) return notSent(UNREADABLE);
   const keys = SEND_KEYS[tool];
-  if (!Object.keys(input).every((key) => keys.includes(key))) {
+  // Every own key, non-enumerable and symbol keys included: none is dropped silently.
+  if (!Reflect.ownKeys(input).every((key) => typeof key === "string" && keys.includes(key))) {
     return notSent("Not sent: the input holds a key this tool does not take.");
   }
   const fields = input as Record<string, unknown>;
@@ -511,7 +517,8 @@ function checkSend(
   }
   let recipients: SendRecipients = { to: [], cc: [] };
   if (tool !== "add_public_note") {
-    const cc = fields.cc === undefined ? [] : fields.cc;
+    const givenCc = fields.cc;
+    const cc = givenCc === undefined ? [] : givenCc;
     // Checked whatever their shape: `checkRecipients` refuses what is not a list of addresses.
     const given: Record<string, unknown> =
       tool === "forward_ticket" ? { to: fields.to, cc } : { cc };

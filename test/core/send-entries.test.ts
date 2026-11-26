@@ -305,6 +305,18 @@ describe("the payloads: closed keys (OD-24, OD-26, OD-29)", () => {
     },
   );
 
+  it("refuses a non-enumerable or a symbol own key too, 0 dispatches", async () => {
+    for (const tool of TOOLS) {
+      const hidden = Object.defineProperty({ ...INPUT[tool] }, "bcc_emails", {
+        value: ["evil@elsewhere.test"],
+        enumerable: false,
+      });
+      refused(await call(sends(), tool, hidden));
+      refused(await call(sends(), tool, { ...INPUT[tool], [Symbol("bcc")]: ["x@example.com"] }));
+    }
+    expect(dispatched()).toBe(0);
+  });
+
   it("takes no key, verifier or verdict from its caller", async () => {
     for (const key of ["key", "verify", "verifier", "verdict", "valid"]) {
       for (const tool of TOOLS) {
@@ -452,7 +464,7 @@ describe("the confirm and the send_id (OD-19, OD-20)", () => {
       toolsets: ["send"],
       forwardAllowList: ALLOW,
     }).sends!;
-    refused(
+    const foreign = refused(
       await settle(
         other.reply_to_ticket.send({
           ...INPUT.reply_to_ticket,
@@ -461,6 +473,7 @@ describe("the confirm and the send_id (OD-19, OD-20)", () => {
         } as never),
       ),
     );
+    expect(foreign.message).toContain("does not match");
     expect(dispatched()).toBe(0);
   });
 
@@ -587,6 +600,31 @@ describe("single use (OD-33)", () => {
     expect(dispatched()).toBe(0);
     expect(await call(entries, "reply_to_ticket", confirm)).toMatchObject({ ok: true, sent: true });
     expect(dispatched()).toBe(1);
+  });
+
+  it("a deadline of NaN: 0 attempts, the id freed, a later confirm sends", async () => {
+    on("reply_to_ticket").reply(201, ANSWER, { headers: JSON_TYPE });
+    const entries = sends();
+    const preview = minted(await call(entries, "reply_to_ticket", INPUT.reply_to_ticket));
+    const confirm = { ...INPUT.reply_to_ticket, confirm: true, send_id: preview.send_id };
+    const nan = await call(entries, "reply_to_ticket", { ...confirm, deadline: Number.NaN });
+    expect(nan).toMatchObject({ ok: false, attempts: 0 });
+    expect(dispatched()).toBe(0);
+    expect(await call(entries, "reply_to_ticket", confirm)).toMatchObject({ ok: true, sent: true });
+    expect(dispatched()).toBe(1);
+  });
+
+  it("a send_id without confirm (absent or undefined) mints a new id and sends nothing", async () => {
+    const entries = sends();
+    const first = minted(await call(entries, "reply_to_ticket", INPUT.reply_to_ticket));
+    for (const input of [
+      { ...INPUT.reply_to_ticket, send_id: first.send_id },
+      { ...INPUT.reply_to_ticket, confirm: undefined, send_id: first.send_id },
+    ]) {
+      const again = minted(await call(entries, "reply_to_ticket", input));
+      expect(again.send_id).not.toBe(first.send_id);
+    }
+    expect(dispatched()).toBe(0);
   });
 
   it("the limiter refusing: 0 attempts, the id freed, a later confirm sends", async () => {
@@ -762,8 +800,8 @@ describe("the body (OD-24)", () => {
     ["empty", ""],
     ["whitespace only", " \t\r\n "],
     ["a control character", "a\u0007b"],
-    ["a zero-width character", "a​b"],
-    ["a bidirectional character", "a‮b"],
+    ["a zero-width character", "a\u200Bb"],
+    ["a bidirectional character", "a\u202Eb"],
     ["a tag character", "a\u{E0041}b"],
     ["a C1 control", "a\u0085b"],
   ])("%s is refused at the mint and the confirm, 0 dispatches", async (_name, body) => {
@@ -772,7 +810,8 @@ describe("the body (OD-24)", () => {
       const error = refused(await call(entries, tool, { ...INPUT[tool], body }));
       expect(error.errors).toEqual([expect.objectContaining({ field: "body" })]);
       const preview = minted(await call(entries, tool, INPUT[tool]));
-      refused(
+      // The body rule refused it, not the send_id check.
+      const again = refused(
         await call(entries, tool, {
           ...INPUT[tool],
           body,
@@ -780,6 +819,7 @@ describe("the body (OD-24)", () => {
           send_id: preview.send_id,
         }),
       );
+      expect(again.errors).toEqual([expect.objectContaining({ field: "body" })]);
     }
     expect(dispatched()).toBe(0);
   });
