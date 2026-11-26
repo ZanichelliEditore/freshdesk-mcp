@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T09:17:13+01:00`
-- **Describes commit:** (filled by the stamp commit). **CI:** (filled by
-  the stamp commit).
+- **Describes commit:** `a4eba1d` (the T-068 handoff commit), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45782119824
+  (workflow `quality`, ran on `a4eba1d`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-068 (write entry points, built only when `write` is
   enabled) `done (2026-11-26)`. Commits `0a98b15` (implementation),
