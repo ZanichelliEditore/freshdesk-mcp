@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-079
 - **Created:** 2026-11-26
 
@@ -43,18 +43,18 @@ No split point: one resource family, the shape of T-067.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `8457bed`: `postReply` and `postForward` in `src/core/resources.ts` through the existing `write()` (body snapshot, `requestWithRetry`); `sentConversation` in `src/client/resources/tickets.ts`. Tests: `test/core/resources.test.ts` "postReply" and "postForward" rows of the `writes` table (body as given to `/reply` and `/forward`; 500/502/503, timeout, malformed 2xx `retryable: false`; 429 retried, four 429s `rate_limited`; bad id `validation`, 0 dispatches); "does not follow or retry a %i" (301, 302, 307) for every row; `test/lint-rules.test.ts` "refuses an import of %s in %s from %s" (each name, nine outside files, `scripts/smoke/send.ts` included).
+- `de31ba3` (review fixes): `sentConversation` keeps a positive whole-number `id` alone, every echoed key dropped (OD-27): `test/core/resources.test.ts` "$name's answer" ("keeps the id alone…", ids 0 and -1 `server`); "a fractional id" case for every row.
+- `make quality` exit 0: Vitest 4140 passed (50 files); `tools/checks` 138 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The reply and forward answer shapes are Freshdesk's documented ones (A1, A2), not measured; a real answer without a positive `id` would be `server`, "may have been applied" (fails safe, wrong report). T-087 checks.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+low
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)
