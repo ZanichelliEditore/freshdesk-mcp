@@ -164,6 +164,42 @@ describe.each(writes)("$name", (write) => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(1000);
   });
 
+  it("gives up after four 429s, as rate_limited with every attempt counted", async () => {
+    on(write, 42)
+      .reply(429, "", { headers: { "retry-after": "1" } })
+      .times(4);
+    on(write, 42).reply(write.status, write.answer, { headers: JSON_TYPE });
+
+    const result = await settle(write.call(42, { status: 2 }));
+
+    expect(failure(result)).toMatchObject({ code: "rate_limited", http_status: 429 });
+    expect(result.attempts).toBe(4);
+    expect(sent()).toHaveLength(4);
+  });
+
+  it("sends the body as it read at the call on every attempt, whatever it answers later", async () => {
+    on(write, 42).reply(429, "", { headers: { "retry-after": "1" } });
+    on(write, 42).reply(write.status, write.answer, { headers: JSON_TYPE });
+    let reads = 0;
+    const body: Record<string, unknown> = {
+      get private() {
+        reads += 1;
+        return reads === 1;
+      },
+    };
+    const call = write.call(42, body);
+    body.extra = "added later";
+
+    const result = await settle(call);
+
+    expect(result).toMatchObject({ ok: true, attempts: 2 });
+    expect(sent().map((c) => JSON.parse(c.body as string))).toEqual([
+      { private: true },
+      { private: true },
+    ]);
+    expect(reads).toBe(1);
+  });
+
   it("returns a 4xx unchanged, not retried", async () => {
     on(write, 42).reply(
       400,

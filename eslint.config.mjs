@@ -161,7 +161,9 @@ const toolImportBlocks = [
 // src/tools/** the allow-list blocks below replace this rule and refuse it as
 // off-list; src/tools/context.ts, exempt from them, gets this one. Placed
 // before them for that reason. Not claimed: an import whose source is not a
-// literal, or a symlink.
+// literal, or a symlink. Broad on purpose: any path with a `core/` segment
+// and ending in `resources` is refused outside src/core/** (a future
+// src/tools/toolsets/core/resources.ts included), which errs closed.
 const coreResources = String.raw`(^|/)core/(.*/)?resources(\.[cm]?[jt]s)?/*$`;
 const noCoreResources =
   "Only src/core/** may import src/core/resources (RFC 2026-11-25-write-safety-core): it sends writes on the full client.";

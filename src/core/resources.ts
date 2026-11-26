@@ -8,6 +8,11 @@
 //     Each sends the body exactly as given: who may call them and with what
 //     body (allow sets, private notes, the closed note keys) is the entry
 //     points' (T-068), not this module's.
+//   - The body is read once, at the call, into a plain JSON snapshot, and that
+//     snapshot is what every attempt sends: a getter, a `toJSON`, a Proxy or a
+//     change to the caller's object during a 429's wait cannot make a retry
+//     send another body than the first (security review, T-067). A body JSON
+//     cannot carry (a BigInt, a cycle) throws, as `HttpClient` does.
 //   - Through `requestWithRetry`, never `request`: a write is retried on a
 //     429 only, and a 5xx or a timeout comes back `retryable: false`, since
 //     it may have been applied (a direct `request` keeps `retryable: true`;
@@ -25,7 +30,9 @@
 // `deadline` (epoch ms, optional) is the caller's: see `requestWithRetry`.
 //
 // Not claimed by the lint rule: an import whose source is not a literal (a
-// template or a computed string), or a symlink to this file.
+// template or a computed string), a symlink to this file, or a re-export of it
+// from another module under src/core/ (which the rule exempts): no module
+// there re-exports it, and T-068's entries must not either.
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../client/errors.js";
@@ -80,7 +87,13 @@ async function write<T>(
       attempts: 0,
     };
   }
-  const result = await http.requestWithRetry({ method, path, params: { id }, body }, deadline);
+  // One snapshot, read once, sent on every attempt: a getter, a `toJSON` or a
+  // later change to the caller's object cannot alter a retry's body.
+  const snapshot: unknown = JSON.parse(JSON.stringify(body));
+  const result = await http.requestWithRetry(
+    { method, path, params: { id }, body: snapshot },
+    deadline,
+  );
   if (!result.ok) return { ok: false, error: result.error, attempts: result.attempts };
   const parsed = answer.safeParse(result.body);
   if (!parsed.success) {
