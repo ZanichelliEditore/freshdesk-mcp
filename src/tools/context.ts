@@ -6,8 +6,17 @@
 //     `limits`, and keeps it. The context holds only its GET-only view:
 //     `http` refuses any method but GET, in the type and at runtime, with
 //     nothing sent. It also gets the team `toolsets`, so its write entries
-//     exist only with `write`; they are not on the context (T-071 hands each
-//     write tool its own).
+//     exist only with `write`.
+//   - The write tools (T-071): with entries, this module builds the `write`
+//     toolset from them through its wiring (src/tools/toolsets/write/
+//     index.ts), which hands each tool its own entry. The tools are not on
+//     the context, which every handler receives: they are kept in a module
+//     WeakMap keyed by the context, and `toolsetsOf(context)` gives
+//     `createServer` (src/server.ts) the registry's toolsets plus `write`
+//     when the context has it. No context, no entries: a context built
+//     without `write` has no write tools by construction. Not claimed: a
+//     module that may import this one can call `toolsetsOf` too (the core
+//     tools' place lists it, for the `AppContext` type).
 //   - One schema service on that view, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
@@ -54,6 +63,8 @@ import type { Config, TeamConfig } from "../config.js";
 import { createWritePath } from "../core/write-path.js";
 import { deepFreeze, type Schema, SchemaService } from "../schema/index.js";
 import { ticketOutput } from "../schema/output.js";
+import { TOOLSETS, type Tool, type Toolsets } from "./toolsets/index.js";
+import { writeTools } from "./toolsets/write/index.js";
 
 export interface AppContext {
   /** The write path's GET-only view (src/core/write-path.ts), never the client. */
@@ -66,17 +77,21 @@ export interface AppContext {
   ticketOutput(schema: Schema, ticket: Record<string, unknown>): Record<string, unknown>;
 }
 
+/** Each context's write tools, built from its own write path's entries. */
+const WRITE_TOOLS = new WeakMap<AppContext, readonly Tool[]>();
+
 export function createContext(config: Config, dispatcher: Dispatcher): AppContext {
   const team = deepFreeze(structuredClone(config.team));
-  const http = createWritePath({
+  const path = createWritePath({
     domain: config.domain,
     apiKey: config.apiKey,
     ...(config.hostOverride === undefined ? {} : { hostOverride: config.hostOverride }),
     dispatcher,
     limits: team.limits,
     toolsets: team.toolsets,
-  }).view;
-  return Object.freeze({
+  });
+  const http = path.view;
+  const context: AppContext = Object.freeze({
     http,
     schema: new SchemaService(http, team.limits.schema_ttl_s),
     team,
@@ -84,4 +99,12 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
     ticketOutput: (schema: Schema, ticket: Record<string, unknown>) =>
       ticketOutput(schema, ticket, team.fields),
   });
+  if (path.entries !== undefined) WRITE_TOOLS.set(context, writeTools(path.entries));
+  return context;
+}
+
+/** The registry's toolsets, plus `write` when this context was built with it. */
+export function toolsetsOf(context: AppContext): Toolsets {
+  const write = WRITE_TOOLS.get(context);
+  return write === undefined ? TOOLSETS : Object.freeze({ ...TOOLSETS, write });
 }

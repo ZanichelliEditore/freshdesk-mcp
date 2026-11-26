@@ -108,6 +108,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
   const T0 = "src/tools/x.ts";
   const T1 = "src/tools/toolsets/x.ts";
   const T2 = "src/tools/toolsets/core/x.ts";
+  const T3 = "src/tools/toolsets/write/x.ts";
   /** Not a listed place: the bare entries only. */
   const TX = "src/tools/core/x.ts";
 
@@ -163,6 +164,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
         [T0, toolImports.places.T0],
         [T1, toolImports.places.T1],
         [T2, toolImports.places.T2],
+        [T3, toolImports.places.T3],
       ] as [string, Place][]
     ).flatMap(([file, place]) => [
       ...[...bare, ...place.value].map(
@@ -317,6 +319,17 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
       expect(await verdict(type(spec), T2)).toEqual(["list"]);
     },
   );
+
+  // T-071: a write tool gets its entry point from the wiring, never from src/core.
+  it.each([
+    "../../../core/write-path.js",
+    "../../../core/resources.js",
+    "../../../schema/input.js",
+    "../../../client/http.js",
+  ])("refuses in src/tools/toolsets/write/x.ts a value or type import of %s", async (spec) => {
+    expect(await verdict(value(spec), T3)).toEqual(["list"]);
+    expect(await verdict(type(spec), T3)).toEqual(["list"]);
+  });
 
   it("refuses a re-export of the client", async () => {
     expect(await verdict('export { HttpClient } from "../../../client/http.js";', T2)).toEqual([

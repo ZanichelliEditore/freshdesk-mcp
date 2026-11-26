@@ -3,6 +3,15 @@
 All notable changes to `@zanichelli/freshdesk-mcp`. Versions follow semver
 and stay 0.x until milestone M4, then 1.0.0.
 
+## Unreleased
+
+- **Added:** the `write` toolset registers when the team file's `toolsets`
+  enables it, with its first tool, `update_ticket`: status (Resolved and
+  Closed included), priority, type, group, agent, custom fields by label,
+  and tags added or removed. Not for release before the rest of `write`
+  (`add_note`, `categorize_tickets`, `hand_off_draft`) is in (PLAN OD-16).
+  `send` is still refused.
+
 ## 0.3.1 (2026-11-25)
 
 - **Fixed:** `export_tickets` resumed with `next_cursor` on a period of 300

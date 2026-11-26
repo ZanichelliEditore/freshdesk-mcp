@@ -66,6 +66,11 @@
         "../../../client/resources/canned.js"
       ],
       "type": ["../index.js", "../../../schema/index.js", "../../../config.js"]
+    },
+    "T3": {
+      "files": ["src/tools/toolsets/write/*.ts"],
+      "value": ["./update-ticket.js", "../../format.js", "../../../client/resources/tickets.js"],
+      "type": ["../index.js", "../../../schema/index.js", "../../../client/errors.js"]
     }
   }
 }

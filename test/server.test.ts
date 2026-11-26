@@ -9,6 +9,7 @@ import { createServer, SERVER_INFO } from "../src/server.js";
 import { createContext } from "../src/tools/context.js";
 import { CLOSE, NAME_CAP, OPEN, untrusted } from "../src/tools/format.js";
 import { DATA_NOT_INSTRUCTIONS, type Tool, type Toolsets } from "../src/tools/toolsets/index.js";
+import { WRITE_FACTORIES, writeTools } from "../src/tools/toolsets/write/index.js";
 import { buildCli, runBuiltCli } from "./support/cli-process.js";
 import { callTool, listTools, open } from "./support/mcp-session.js";
 import { type MockAgent, mockDispatcher } from "./support/mock-dispatcher.js";
@@ -176,13 +177,37 @@ describe("createServer: enabled toolsets come from the team file only", () => {
     expect((error as Error).message).toContain("toolsets");
   });
 
-  it.each(["write", "send"])(
-    "the real registry (no toolsets argument) refuses %s, naming it",
-    (name) => {
-      expect(() => serverFor(undefined, { toolsets: ["core", name] })).toThrow(ConfigError);
-      expect(() => serverFor(undefined, { toolsets: [name] })).toThrow(`"${name}"`);
-    },
-  );
+  it("the real registry (no toolsets argument) still refuses send, naming it", () => {
+    expect(() => serverFor(undefined, { toolsets: ["core", "send"] })).toThrow(ConfigError);
+    expect(() => serverFor(undefined, { toolsets: ["core", "write", "send"] })).toThrow(
+      ConfigError,
+    );
+    expect(() => serverFor(undefined, { toolsets: ["send"] })).toThrow('"send"');
+  });
+
+  // T-071: `write` registers, from the context's own write path.
+  it("the real registry lists update_ticket, destructive, when the team file enables write", async () => {
+    const tools = await listTools(
+      await open(serverFor(undefined, { toolsets: ["core", "write"] })),
+    );
+    const names = tools.map((tool) => tool.name);
+    expect(names).toContain("update_ticket");
+    expect(names).toContain("get_ticket");
+    expect(tools.find((tool) => tool.name === "update_ticket")?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+    });
+  });
+
+  it("with write alone, lists the write tools and no core tool", async () => {
+    const tools = await listTools(await open(serverFor(undefined, { toolsets: ["write"] })));
+    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket"]);
+  });
+
+  it("without write in the team file, update_ticket is absent", async () => {
+    const tools = await listTools(await open(serverFor(undefined, { toolsets: ["core"] })));
+    expect(tools.map((tool) => tool.name)).not.toContain("update_ticket");
+  });
 
   it("a server from the real registry lists core's tools", async () => {
     const tools = await listTools(await open(serverFor(undefined)));
@@ -323,6 +348,55 @@ describe("createServer: tool results", () => {
     expect(result.content).toEqual([
       { type: "text", text: "The tool fake_odd failed with an internal error." },
     ]);
+  });
+});
+
+// T-071 (RFC 2026-11-25-write-safety-core, invariant 2): one wiring module
+// hands each write tool's factory its own entry point, and nothing else.
+describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
+  const refuse = async () => ({
+    ok: false as const,
+    error: { code: "validation" as const, http_status: null, message: "fake", retryable: false },
+    attempts: 0,
+  });
+  /** Entries shaped as the core's, each a distinct frozen object. */
+  function fakeEntries() {
+    return Object.freeze({
+      update_ticket: Object.freeze({ update: refuse }),
+      categorize_tickets: Object.freeze({ update: refuse }),
+      hand_off_draft: Object.freeze({ note: refuse, assign: refuse }),
+      add_note: Object.freeze({ note: refuse }),
+    });
+  }
+
+  it("hands each write factory exactly its own entry point, never the entries object", () => {
+    const entries = fakeEntries();
+    const received = new Map<string, unknown[]>();
+    const spies = Object.fromEntries(
+      Object.entries(WRITE_FACTORIES).map(([name, make]) => [
+        name,
+        (...args: unknown[]) => {
+          received.set(name, args);
+          return (make as (...a: unknown[]) => Tool)(...args);
+        },
+      ]),
+    ) as unknown as typeof WRITE_FACTORIES;
+
+    const tools = writeTools(entries, spies);
+
+    expect([...received.keys()]).toEqual(Object.keys(WRITE_FACTORIES));
+    for (const [name, args] of received) {
+      expect(args).toHaveLength(1);
+      expect(args[0]).toBe(entries[name as keyof typeof entries]);
+      expect(args[0]).not.toBe(entries);
+    }
+    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket"]);
+    expect(Object.isFrozen(tools)).toBe(true);
+  });
+
+  it("the real wiring gives the write tools, each complete enough to register", () => {
+    const server = serverFor({ write: writeTools(fakeEntries()) }, { toolsets: ["write"] });
+    expect(server).toBeDefined();
   });
 });
 

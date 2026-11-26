@@ -22,9 +22,11 @@
 //     `undefined`, a function), gives `isError` with
 //     a fixed message naming the tool only: the thrown value is never read,
 //     so no stack, request body, input text or key can reach the result.
-//   - The toolsets this version has are the keys of `TOOLSETS`; `core`'s
-//     tools are listed in ./core/index.ts. `write` and `send` are not here,
-//     so `createServer` (src/server.ts) refuses a team file that enables them.
+//   - `TOOLSETS` holds the toolsets whose tools are fixed: `core`, its tools
+//     listed in ./core/index.ts. `write` is not here: its tools are built per
+//     context from the write path's entries (./write/index.ts, src/tools/
+//     context.ts `toolsetsOf`). `send` is nowhere yet, so `createServer`
+//     (src/server.ts) refuses a team file that enables it.
 
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { z } from "zod";
