@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T15:25:50+01:00`
-- **Describes commit:** `<hash>` (T-088: done; handoff to T-086), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled at stamp>`.
+- **Describes commit:** `14a5e08` (T-088: done; handoff to T-086), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45839089153
+  (workflow `quality`, ran on `14a5e08`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-088 `done (2026-11-26)`: `add_public_note` in
   `send`. See `docs/tasks/T-088-add-public-note.md` "Done". Commits
