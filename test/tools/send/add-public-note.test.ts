@@ -274,15 +274,27 @@ describe("add_public_note: inputs it refuses, with nothing sent", () => {
 
   it.each([
     ["an empty body", { ...FIRST, body: "" }],
-    ["a whitespace-only body", { ...FIRST, body: " \n " }],
-    ["a body with a zero-width character", { ...FIRST, body: `Hi${String.fromCodePoint(0x200b)}` }],
     ["a ticket id of 0", { ...FIRST, ticket_id: 0 }],
-  ])("refuses %s, 0 dispatches", async (_, args) => {
+  ])("refuses %s at the input, 0 dispatches", async (_, args) => {
     const s = await session();
 
     const result = await callTool(s, TOOL, args);
 
     expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/^Input validation error/);
+    expect(sent()).toEqual([]);
+  });
+
+  it.each([
+    ["a whitespace-only body", { ...FIRST, body: " \n " }],
+    ["a body with a zero-width character", { ...FIRST, body: `Hi${String.fromCodePoint(0x200b)}` }],
+  ])("the core refuses %s as a body error, 0 dispatches", async (_, args) => {
+    const s = await session();
+
+    const error = failure(await callTool(s, TOOL, args));
+
+    expect(error).toMatchObject({ code: "validation", http_status: null });
+    expect(error.errors?.[0]?.field).toBe("body");
     expect(sent()).toEqual([]);
   });
 });
@@ -320,6 +332,7 @@ describe("add_public_note: a failure after the send", () => {
     const error = failure(result);
     expect(error).toMatchObject({ code: "network", retryable: false, may_have_been_sent: true });
     expect(error.message).toMatch(/start over without confirm/);
+    expect(error.message).toMatch(/The public note may have been sent/);
     expect(text(result)).not.toMatch(/@/);
     expect(sent()).toEqual([`POST ${NOTES}`]);
   });
