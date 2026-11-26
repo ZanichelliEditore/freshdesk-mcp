@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-26T10:35:53+01:00`
-- **Describes commit:** the T-071 handoff commit (filled in by the stamp
-  commit). **CI:** filled in by the stamp commit.
+- **Describes commit:** `a82d3c3` (the T-071 handoff commit), pushed to
+  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45793591143
+  (workflow `quality`, ran on `a82d3c3`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-071 (`update_ticket`, the `write` toolset registers)
   `done (2026-11-26)`. Commits `20063be` (implementation), `f22c4a3`
