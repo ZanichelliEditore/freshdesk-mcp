@@ -5,9 +5,12 @@
 // src/** and scripts/** block; test/lint-rules.test.ts).
 //
 //   - `putTicket`: `PUT /tickets/{id}`. `postNote`: `POST /tickets/{id}/notes`.
+//     `postReply`: `POST /tickets/{id}/reply`. `postForward`:
+//     `POST /tickets/{id}/forward` (T-080; RFC 2026-11-26-send-safety-core).
 //     Each sends the body exactly as given: who may call them and with what
-//     body (allow sets, private notes, the closed note keys) is the entry
-//     points' (T-068), not this module's.
+//     body (allow sets, private notes, the closed note keys, the send
+//     recipients, the closed send keys and the escaped body) is the entry
+//     points' (T-068, T-082), not this module's.
 //   - The body is read once, at the call, into a plain JSON snapshot, and that
 //     snapshot is what every attempt sends: a getter, a `toJSON`, a Proxy or a
 //     change to the caller's object during a 429's wait cannot make a retry
@@ -17,17 +20,18 @@
 //     string, a list or `undefined`) are `validation`, `http_status: null`,
 //     with nothing sent: a write resolves, it never rejects (T-068).
 //   - Through `requestWithRetry`, never `request`: a write is retried on a
-//     429 only, and a 5xx or a timeout comes back `retryable: false`, since
-//     it may have been applied (a direct `request` keeps `retryable: true`;
-//     docs/improvements.md, 6e7674f). It is not started with less than 10 s
-//     left before the deadline (T-014).
+//     429 only, and a 5xx, a timeout or a 3xx (never followed) comes back
+//     `retryable: false`, since it may have been applied (a direct `request`
+//     keeps `retryable: true` on a 5xx; docs/improvements.md, 6e7674f). It is
+//     not started with less than 10 s left before the deadline (T-014).
 //   - A ticket id that is not a positive safe integer is `validation`,
 //     `http_status: null`, with nothing sent.
 //   - The answer is checked: a ticket for the PUT, a conversation for the
-//     POST (src/client/resources/tickets.ts' schemas). One in any other shape
-//     is `server` with the answer's real status, not retryable, its message
-//     fixed text that quotes nothing from the body and says the write may
-//     have been applied. An HTTP failure is returned unchanged.
+//     note, a conversation-like record with a whole-number `id` for a reply
+//     or a forward (src/client/resources/tickets.ts' schemas). One in any
+//     other shape is `server` with the answer's real status, not retryable,
+//     its message fixed text that quotes nothing from the body and says the
+//     write may have been applied. An HTTP failure is returned unchanged.
 //
 // `attempts` is the requests sent, retries included, 0 when nothing was.
 // `deadline` (epoch ms, optional) is the caller's: see `requestWithRetry`.
@@ -35,7 +39,7 @@
 // Not claimed by the lint rule: an import whose source is not a literal (a
 // template or a computed string), a symlink to this file, or a re-export of it
 // from another module under src/core/ (which the rule exempts): no module
-// there re-exports it, and T-068's entries must not either.
+// there re-exports it, and T-068's and T-082's entries must not either.
 
 import type { z } from "zod";
 import type { FreshdeskError } from "../client/errors.js";
@@ -43,6 +47,8 @@ import type { HttpClient } from "../client/http.js";
 import {
   type Conversation,
   conversation,
+  type SentConversation,
+  sentConversation,
   type Ticket,
   ticket,
 } from "../client/resources/tickets.js";
@@ -66,6 +72,42 @@ export function postNote(
   deadline?: number,
 ): Promise<WriteResult<Conversation>> {
   return write(http, "POST", "/tickets/{id}/notes", id, body, conversation, "a note", deadline);
+}
+
+export function postReply(
+  http: HttpClient,
+  id: number,
+  body: Record<string, unknown>,
+  deadline?: number,
+): Promise<WriteResult<SentConversation>> {
+  return write(
+    http,
+    "POST",
+    "/tickets/{id}/reply",
+    id,
+    body,
+    sentConversation,
+    "a reply",
+    deadline,
+  );
+}
+
+export function postForward(
+  http: HttpClient,
+  id: number,
+  body: Record<string, unknown>,
+  deadline?: number,
+): Promise<WriteResult<SentConversation>> {
+  return write(
+    http,
+    "POST",
+    "/tickets/{id}/forward",
+    id,
+    body,
+    sentConversation,
+    "a forward",
+    deadline,
+  );
 }
 
 async function write<T>(

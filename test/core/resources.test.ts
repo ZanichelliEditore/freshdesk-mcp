@@ -1,11 +1,18 @@
 // T-067 (RFC 2026-11-25-write-safety-core): the core's write resources.
 // `putTicket` and `postNote` send the body exactly as given, through
 // `requestWithRetry`, so a write is retried on a 429 only and a 5xx comes
-// back not retryable.
+// back not retryable. T-080 (RFC 2026-11-26-send-safety-core): `postReply`
+// and `postForward` are rows of the same table.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient } from "../../src/client/http.js";
 import { RateLimiter } from "../../src/client/rate-limit.js";
-import { postNote, putTicket, type WriteResult } from "../../src/core/resources.js";
+import {
+  postForward,
+  postNote,
+  postReply,
+  putTicket,
+  type WriteResult,
+} from "../../src/core/resources.js";
 import { conversationPages, ticketView } from "../fixtures/tickets.js";
 import { type MockAgent, mockDispatcher } from "../support/mock-dispatcher.js";
 
@@ -15,6 +22,24 @@ const JSON_TYPE = { "content-type": "application/json" };
 /** Put in malformed answers: no error message may quote it. */
 const CANARY = "Canary-Body-Text-4412";
 const NOTE = conversationPages[0]![0]!;
+/** Freshdesk's documented reply answer: no `incoming` or `private` (A1, unverified). */
+const REPLY = {
+  id: 6301,
+  user_id: 5001,
+  body: "<div>On it.</div>",
+  body_text: "On it.",
+  ticket_id: 42,
+  cc_emails: [],
+};
+/** Freshdesk's documented forward answer (A2, unverified). */
+const FORWARD = {
+  id: 6302,
+  user_id: 5001,
+  body: "<div>Please look.</div>",
+  body_text: "Please look.",
+  ticket_id: 42,
+  to_emails: [],
+};
 
 let mock: MockAgent;
 let http: HttpClient;
@@ -89,6 +114,24 @@ const writes: Write[] = [
     status: 201,
     noun: "a note",
   },
+  {
+    name: "postReply",
+    call: (id, body) => postReply(http, id, body),
+    method: "POST",
+    path: (id) => `/api/v2/tickets/${id}/reply`,
+    answer: REPLY,
+    status: 201,
+    noun: "a reply",
+  },
+  {
+    name: "postForward",
+    call: (id, body) => postForward(http, id, body),
+    method: "POST",
+    path: (id) => `/api/v2/tickets/${id}/forward`,
+    answer: FORWARD,
+    status: 201,
+    noun: "a forward",
+  },
 ];
 
 function on(write: Write, id: number) {
@@ -124,6 +167,24 @@ describe.each(writes)("$name", (write) => {
     "does not retry a %i and returns it with retryable: false",
     async (status) => {
       on(write, 42).reply(status, "");
+      on(write, 42).reply(write.status, write.answer, { headers: JSON_TYPE });
+
+      const result = await settle(write.call(42, { status: 2 }));
+
+      expect(failure(result)).toMatchObject({
+        code: "server",
+        http_status: status,
+        retryable: false,
+      });
+      expect(result.attempts).toBe(1);
+      expect(sent()).toHaveLength(1);
+    },
+  );
+
+  it.each([301, 302, 307])(
+    "does not follow or retry a %i and returns it with retryable: false",
+    async (status) => {
+      on(write, 42).reply(status, "", { headers: { location: `${ORIGIN}/elsewhere` } });
       on(write, 42).reply(write.status, write.answer, { headers: JSON_TYPE });
 
       const result = await settle(write.call(42, { status: 2 }));

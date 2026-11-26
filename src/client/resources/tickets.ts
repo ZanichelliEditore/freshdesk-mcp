@@ -69,11 +69,23 @@ export const conversation = z.looseObject({
   private: z.boolean(),
 });
 
+/**
+ * The answer to a reply or a forward (T-080): a conversation-like record,
+ * checked loosely. Freshdesk documents a reply's answer without `incoming` or
+ * `private` (RFC 2026-11-26-send-safety-core, A1 and A2, unverified until
+ * T-087), so only the whole-number `id` (the `conversation_id` a send returns)
+ * is required; unknown keys passed through.
+ */
+export const sentConversation = z.looseObject({
+  id: z.number().int(),
+});
+
 /** Freshdesk returns no page of `GET /tickets` past this one (30,000 tickets at 100 a page). */
 export const MAX_LIST_PAGE = 300;
 
 export type Ticket = z.infer<typeof ticket>;
 export type Conversation = z.infer<typeof conversation>;
+export type SentConversation = z.infer<typeof sentConversation>;
 
 export interface ListTicketsOptions {
   /** 1–100; 100 when not given. */

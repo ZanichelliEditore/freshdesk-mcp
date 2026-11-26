@@ -577,6 +577,25 @@ describe("eslint: only src/core/** imports src/core/resources", () => {
     ]);
   });
 
+  // T-080 (RFC 2026-11-26-send-safety-core): the fence is per module, so the
+  // send resources sit behind it too; one case per name, the future
+  // smoke-send script (T-086) among the files.
+  it.each(
+    ["postReply", "postForward"].flatMap((name) =>
+      [
+        ...outside,
+        ["scripts/smoke/send.ts", "../../src/core/resources.js"] as [string, string],
+      ].map(([file, spec]) => [name, file, spec] as const),
+    ),
+  )("refuses an import of %s in %s from %s", async (name, file, spec) => {
+    expect(await messages(`import { ${name} } from ${JSON.stringify(spec)};`, file)).toEqual([
+      `${RULE}: ${MESSAGE}`,
+    ]);
+    expect(
+      await messages(`const { ${name} } = await import(${JSON.stringify(spec)});`, file),
+    ).toEqual([`no-restricted-syntax: ${MESSAGE}`]);
+  });
+
   it.each([
     ["src/tools/x.ts", "../core/resources.js"],
     ["src/tools/toolsets/core/x.ts", "../../../core/resources.js"],
