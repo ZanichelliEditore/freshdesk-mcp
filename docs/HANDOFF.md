@@ -23,6 +23,8 @@
   `write` is enabled). It is the first `todo` row whose dependencies,
   T-065 and T-067, are `done`.
 
+- **Plan amended (2026-11-26):** `/decompose M2` amendment, commit `PENDING`: T-068 takes `deceac6`; the lint fence parked for T-068 (`4b2a159`, `087d6ba`, `75ca50f`, `85f48fd`) is the new T-077, right after it.
+
 - **Owner actions:**
   - The time-trigger check on `mcp-test` tickets' activity log,
     2026-11-26, then SPEC §13's M2 wording (RFC
