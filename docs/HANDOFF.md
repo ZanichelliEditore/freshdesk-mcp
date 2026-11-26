@@ -24,7 +24,7 @@
   `createWritePath` fence (plan amendment below).
 
 - **Plan amended (2026-11-26):** `/decompose M2` amendment, commit
-  `PENDING`: SPEC §13's M2 wording settled; T-077 takes `0a98b15`, T-068's
+  `070410f`: SPEC §13's M2 wording settled; T-077 takes `0a98b15`, T-068's
   BigInt line reworded (`254bcae`), T-074 adds the note-only case; T-076
   depends on T-075 only.
 
