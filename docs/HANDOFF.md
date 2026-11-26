@@ -4,108 +4,84 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T08:51:48+01:00`
-- **Describes commit:** `8296014` (the T-067 handoff commit), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45778667625
-  (workflow `quality`, ran on `8296014`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T09:17:13+01:00`
+- **Describes commit:** (filled by the stamp commit). **CI:** (filled by
+  the stamp commit).
 
-- **Current task:** T-067 (write resources: PUT ticket, POST note, GET
-  agent by id) `done (2026-11-26)`. Commits `85f48fd` (implementation),
-  `deceac6` (review fixes), then this handoff commit. Tests:
-  `test/core/resources.test.ts`, `test/client/resources/agents.test.ts`
-  "getAgent" (there, not in `test/core/resources.test.ts` as the acceptance
-  line says: see the task file's "Done"), `test/lint-rules.test.ts` "eslint:
-  only src/core/** imports src/core/resources". No split was needed.
+- **Current task:** T-068 (write entry points, built only when `write` is
+  enabled) `done (2026-11-26)`. Commits `0a98b15` (implementation),
+  `254bcae` (review fixes), then this handoff commit. Tests:
+  `test/core/entries.test.ts` (new), `test/core/resources.test.ts` (the
+  non-object snapshot and the unserialisable body); details in the task
+  file's "Done". No split was needed.
 
-- **Next action:** `/pickup` T-068 (write entry points, built only when
-  `write` is enabled). It is the first `todo` row whose dependencies,
-  T-065 and T-067, are `done`.
-
-- **Plan amended (2026-11-26):** `/decompose M2` amendment, commit `6c4d972`: T-068 takes `deceac6`; the lint fence parked for T-068 (`4b2a159`, `087d6ba`, `75ca50f`, `85f48fd`) is the new T-077, right after it.
+- **Next action:** `/pickup` T-077 (lint fence: the client, the limiter and
+  `ticketInput` stay in the core). It is the first `todo` row; its
+  dependency T-068 is `done`. Consider there the parked `0a98b15` item
+  (fence calls to `createWritePath` outside `src/tools/context.ts`): it is
+  not in T-077's acceptance, so taking it is a `/decompose` decision.
 
 - **Owner actions:**
   - The time-trigger check on `mcp-test` tickets' activity log,
     2026-11-26, then SPEC §13's M2 wording (RFC
     `2026-11-25-write-safety-core`). T-076 waits on it. No write to the
     real account before then.
-  - Not blocking (owner decision, orchestrator 2026-11-25): compare the
-    account's `/ticket_fields` agent and group choice keys with `/agents`
-    `contact.name` and `/groups` `name` (do they fold equal?). Values in
-    `docs/private/account-facts.md`. `docs/improvements.md`, `b80b69a`
-    entry.
+  - Not blocking: compare the account's `/ticket_fields` agent and group
+    choice keys with `/agents` `contact.name` and `/groups` `name`
+    (`docs/improvements.md`, `b80b69a` entry; values in
+    `docs/private/account-facts.md`).
 
-- **Owner decisions recorded (orchestrator, 2026-11-25):**
-  - No SPEC line for `incomplete_list` (T-041's per-field code): SPEC
-    §7.3 lists no codes.
-  - The choice-name spelling check above is a non-blocking owner action.
-
-- **Read before anything else:** `docs/tasks/T-068-write-entry-points.md`, RFC `2026-11-25-write-safety-core` Decision,
-  `docs/improvements.md` entries `85f48fd` and `deceac6` (T-068's parked
+- **Read before anything else:** `docs/tasks/T-077-core-lint-fence.md`;
+  `docs/improvements.md` entries `0a98b15` and `254bcae` (T-068's parked
   items).
 
 - **Reviews:**
-  - Full round, R1 = `85f48fd`, range `1977388..85f48fd`. Scoped round,
-    range `85f48fd..deceac6`. All three reviewers quoted base, HEAD, the
-    stat line and the trailer correctly in both rounds.
-  - `code-reviewer`, full (transcript still for 2 minutes once: redo
-    started in the main session, agent left running; its late report
-    agreed with the redo):
-    - Low: `getAgent`'s tests are not in the file the acceptance names.
-      Kept where they are (the resource's test file); recorded in the task
-      file's "Done" and here.
-    - Low: the 429 test checked one retry only. Added "gives up after four
-      429s" (`deceac6`).
-    - Info: the lint regex is broader than the comment said. Comment now
-      says broad on purpose (`deceac6`).
-    - Info: the `6e7674f` improvement (write resources must use
-      `requestWithRetry`) is met. Noted in `docs/improvements.md`.
-  - `security-reviewer`, full: the first run ended on an API error (the
-    machine slept); rerun on the same diff file. It grew slowly for about
-    4 h without a 2-minute stall; a main-session redo was started at about
-    2.5 h and found the same body issue (as Info). Its report:
-    - Medium: the body was passed by reference and serialised per attempt,
-      so a 429 retry could send another body (a getter, `toJSON`, a later
-      change). Fixed: one JSON snapshot in `write()`, regression test
-      "sends the body as it read at the call on every attempt" (failed
-      before the fix), `deceac6`. This changed a mechanism, hence the
-      scoped round.
-    - Low: a re-export of `src/core/resources` from inside `src/core/**`
-      escapes the rule. Named as not claimed in the header and overview;
-      parked for T-068.
-    - Low/Info: `getAgent`'s email is not shape-checked. Parked for T-069.
+  - Full round, R1 = `0a98b15`, range `fb92725..0a98b15`. Scoped round,
+    range `0a98b15..254bcae`.
+  - `code-reviewer`, full: quotes correct (one no-op Bash call, admitted).
+    Low: empty change sent (fixed: refused, `254bcae`); note body not
+    checked as a string (fixed); tags checked then copied in a second read
+    (fixed: copied once, regression test "sends the list it checked, read
+    once…"); type-only test inside the loop with filler asserts (moved);
+    refusal messages not pinned (pinned); overview pointed the lint fence at
+    T-068 (now T-077). Info: `notSent` export fine; entries built and
+    dropped by `context.ts` until T-071.
+  - `security-reviewer`, full: quotes correct. Medium (latent):
+    `createWritePath` trusts its caller's `toolsets`; parked for T-077/T-071
+    (`0a98b15` entry). Low: tags double read, note body type (both fixed,
+    `254bcae`). Info: value checks use the tool's schema; parked.
   - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round: no finding falsifying an acceptance line or opening a
-    fail-open path. Parked (`docs/improvements.md`, `deceac6` entry): a
-    non-object `toJSON` snapshot, a rejected promise T-068 must catch, an
-    untested `toJSON`/Proxy claim, the `undefined`-`toJSON` wording.
+  - Scoped round: `code-reviewer`'s first run misquoted the stat line
+    (`4 files,`): red gate "stale diff file", re-dispatched; its rerun quoted
+    correctly. `security-reviewer` and the rerun: no finding falsifying an
+    acceptance line or opening a fail-open path. Parked (`254bcae` entry):
+    the BigInt-note acceptance parenthetical, the note refusal's "ticket
+    fields" wording, an unpinned message, an empty note body, no cap on the
+    tag list.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - The `getAgent` active rule comes from Freshdesk's documentation
-    (`contact.active`, plus `deactivated` when present), not measured on
-    the account; T-076's first real run or a GET-only probe should confirm.
-  - `make quality` timed out on real-time tests under machine load on
-    2026-11-26 (twice, different tests each time), green on the third run
-    with no change; they pass alone. Watch for it on a busy machine.
-  - From T-041: the choice-key vs list-name spelling (owner action above);
-    an agent or group with no choices takes no id.
-  - From T-065: default fields keyed by `/ticket_fields` API name; T-076's
-    first real run should confirm.
-  - From T-064/T-065: only `src/tools/**` is fenced off from `HttpClient`
-    and `src/core/**` by lint; `ticketInput`'s set origin unchecked (both
-    parked for T-068).
-  - From T-040, unchecked: whether `agent-native-setup update` would
-    revert the safety-core value in `.claude/commands/decompose.md` step 4.
+  - T-068's acceptance says the BigInt note body is refused "so `write()`'s
+    snapshot throws"; since `254bcae` the string check refuses it first
+    (outcome holds; the snapshot path is tested elsewhere). Owner may want
+    the wording amended.
+  - A ticket change that sets nothing is now refused in the core; T-071's
+    tool and T-074's `hand_off_draft` should skip an empty assignment
+    rather than call the entry.
+  - From T-067: the `getAgent` active rule comes from Freshdesk's
+    documentation, not measured; `make quality` real-time tests timed out
+    under machine load on 2026-11-26 (not seen this session).
+  - From T-041/T-065: choice-key spelling (owner action); default fields
+    keyed by `/ticket_fields` API name, to confirm at T-076.
+  - From T-040, unchecked: whether `agent-native-setup update` would revert
+    the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** WebFetch of Freshdesk's API page (cut before the Agents
-  section); the raw HTML with `curl` had it.
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `deceac6`'s tree. Vitest
-  "Tests 2993 passed (2993)"; `tools/checks` "Ran 138 tests", OK; lint,
+- **Checkpoint:** `make quality` exit 0 on `254bcae`'s tree. Vitest
+  "Tests 3086 passed (3086)"; `tools/checks` "Ran 138 tests", OK; lint,
   format, typecheck, build and both gitleaks scans passed.

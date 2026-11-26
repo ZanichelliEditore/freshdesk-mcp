@@ -176,3 +176,4 @@ stands for. End an entry with the task id it came from.
 - In zod 4, `z.unknown()` inside an object makes the key required: a missing key fails as "expected nonoptional". Use `z.unknown().optional()` for a flag that may be absent. T-067
 - esquery (an eslint selector's attribute regex) ends a regex at its first `/`, escaped or not: write `\x2F` for a slash. T-067
 - A `make quality` run piped into `grep` reports grep's exit code to a background task: append `echo make_exit=$?` to the log to see make's own. T-067
+- `ticketInput`'s output keys come from the schema it is given: a default field forged as a nested field can name a level `requester_id` and put that key at the body's top level past the allow set. A core that takes a caller's schema must re-check the body's top-level keys against the keys its set maps to (`ticketKey`). T-068

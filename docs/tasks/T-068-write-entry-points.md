@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-065, T-067
 - **Created:** 2026-11-25
 
@@ -47,18 +47,48 @@ Amended 2026-11-26 (`/decompose M2` amendment, owner's decision of 2026-11-25 re
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `0a98b15`: `createWritePath` takes `toolsets` and gives `entries` only with
+  `write` (`src/core/write-path.ts`); `write()` in `src/core/resources.ts`
+  refuses a body JSON cannot carry and a non-object snapshot as
+  `validation`, nothing sent; `src/tools/context.ts` passes the team
+  `toolsets` (entries not on the context: T-071).
+- `254bcae`: review fixes (note body a string, tags copied once then
+  checked, an empty change refused).
+- Tests, `test/core/entries.test.ts`: "the entries exist only when write is
+  enabled" (`["core"]`, `["core","send"]`, `["send"]` give no `entries`
+  key); per ticket entry "sends the fields of its own set…", "refuses the
+  default field $name as field_not_writable, sending nothing" (every default
+  field outside the set), "refuses a body key outside its set that a forged
+  schema builds…", "resolves a value JSON cannot carry…" (cf_hobby `10n`:
+  the snapshot throw caught), "refuses a change that sets no field…",
+  "does not send tags given by a cast"; "a note entry has no private input
+  (make typecheck fails on one)" (`@ts-expect-error`); per note entry
+  "sends the body with private: true, and nothing else…", "never sends
+  private: false, user_id, incoming, attachments or notify_emails given by a
+  cast", "resolves a body that is a BigInt, given by a cast, to validation
+  on body, sending nothing" (refused by the string check before the
+  snapshot: see Open doubts); `test/core/resources.test.ts` "refuses a body
+  whose top-level toJSON returns null / a string / a list / undefined…" and
+  "resolves a body holding a BigInt / a cycle / a toJSON that throws…".
+  New tests shown failing on the code before each fix (mutation runs in
+  session).
+- No split was needed.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- The acceptance's BigInt note case says "so `write()`'s snapshot throws";
+  since `254bcae` the note entry's string check refuses it first. The
+  outcome the line asks for holds; the snapshot-throw path is proven by the
+  `cf_hobby: 10n` ticket case and `test/core/resources.test.ts`. Parked
+  (`docs/improvements.md`, `254bcae` entry).
+- `createWritePath` trusts the `toolsets` its caller passes (security,
+  medium, latent): only `context.ts` calls it, by inspection. Parked for
+  T-077 / T-071 (`docs/improvements.md`, `0a98b15` entry).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)
