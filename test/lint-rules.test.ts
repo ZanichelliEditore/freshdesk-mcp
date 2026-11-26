@@ -524,7 +524,16 @@ describe("eslint: only src/core/** imports src/core/resources", () => {
       `export * from ${JSON.stringify(spec)};`,
       `export { x } from ${JSON.stringify(spec)};`,
     ]) {
-      expect(await messages(code, file)).toEqual([`${RULE}: ${MESSAGE}`]);
+      // context.ts may have no export list (T-077): a re-export there is refused twice.
+      const exportList =
+        file === "src/tools/context.ts" && code.startsWith("export")
+          ? [
+              "no-restricted-syntax: No re-export or export list in a module a core fence exempts (RFC 2026-11-25-write-safety-core): it must not pass what it holds on under another name.",
+            ]
+          : [];
+      expect((await messages(code, file)).sort()).toEqual(
+        [`${RULE}: ${MESSAGE}`, ...exportList].sort(),
+      );
     }
   });
 
@@ -634,6 +643,7 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
     "src/client/rate-limit.ts",
     "src/schema/input.ts",
     "scripts/smoke/smoke.ts",
+    "src/tools/context.ts",
   ]);
   const plusExport = (file: string, code: string, verdict: string) =>
     code.startsWith("export") && exportFenced.has(file)
@@ -677,7 +687,9 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
         `export { ${name} } from ${from};`,
         `export * from ${from};`,
       ]) {
-        expect(await messages(code, file), code).toEqual([`${IMPORTS}: CLIENT`]);
+        expect((await messages(code, file)).sort(), code).toEqual(
+          plusExport(file, code, `${IMPORTS}: CLIENT`),
+        );
       }
     });
 
@@ -994,10 +1006,12 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
     it.each([
       'export { createWritePath } from "../core/write-path.js";',
       'import { createWritePath } from "../core/write-path.js";\nexport { createWritePath as build };',
+      'import { createWritePath as cwp } from "../core/write-path.js";\nexport { cwp };',
+      'import * as wp from "../core/write-path.js";\nexport { wp };',
       'export * from "../core/write-path.js";',
       'export * as writePath from "../core/write-path.js";',
     ])("refuses in src/tools/context.ts a re-export: %s", async (code) => {
-      expect(await messages(code, "src/tools/context.ts")).toEqual([`${SYNTAX}: WRITE_PATH`]);
+      expect(await messages(code, "src/tools/context.ts")).toEqual([`${SYNTAX}: EXEMPT_EXPORT`]);
     });
 
     it.each(["src/tools/context.ts", "src/core/x.ts", "test/core/entries.test.ts"])(

@@ -77,9 +77,11 @@ const noGlobalFetchRules = {
 //   import()); that it passes the team file's toolsets holds by inspection.
 //   Type imports of the module's other names pass.
 //
-// An exempt module passes nothing on: the defining modules and smoke.ts have
-// no re-export and no value export list, and context.ts exports no
-// createWritePath under any name and re-exports nothing from write-path.
+// An exempt module passes nothing on through a list: the defining modules,
+// smoke.ts and context.ts have no re-export and no value export list
+// (`export { c }`, `export { x as y }`, `export *`). An exported declaration
+// holding the value (`export const c = createWritePath`, `export default`)
+// is not claimed, below.
 //
 // The client, ticketInput and writePath patterns match a module by its last
 // segment (`http`, `rate-limit`, `input`, `write-path`, with or without an
@@ -181,24 +183,17 @@ const coreFences = {
     ],
   },
 };
-// A module a fence exempts as the one defining what the fence guards, or as
-// the recorded exception, passes nothing on: no re-export, no value export
-// list (`export { x as y }`); a type export list is harmless.
-// src/tools/context.ts, exempt from writePath, exports no `createWritePath`
-// under any name and re-exports nothing from write-path.
+// A module a fence exempts (the one defining what the fence guards, the
+// recorded exception smoke.ts, and src/tools/context.ts, exempt from
+// writePath) has no re-export and no value export list; a type export list
+// is harmless. Matching the export list, not a name, covers a name changed
+// at the import (`import { createWritePath as c }; export { c }`).
 const exemptExports = [
   {
     selector: 'ExportNamedDeclaration[declaration=null][exportKind="value"]',
     message: noExemptExport,
   },
   { selector: "ExportAllDeclaration", message: noExemptExport },
-];
-const contextExports = [
-  { selector: 'ExportSpecifier[local.name="createWritePath"]', message: noWritePath },
-  {
-    selector: `ExportAllDeclaration > Literal.source[value=${esqueryRegex(lastSegment("write-path"))}]`,
-    message: noWritePath,
-  },
 ];
 /** The fence block for `files`: every fence but those in `except`, then `extra` selectors. */
 function fenceBlock(files, { except = [], ignores = [], extra = [] } = {}) {
@@ -225,7 +220,7 @@ const coreFenceBlocks = [
     extra: exemptExports,
   }),
   fenceBlock(["src/schema/input.ts"], { except: ["ticketInput"], extra: exemptExports }),
-  fenceBlock(["src/tools/context.ts"], { except: ["writePath"], extra: contextExports }),
+  fenceBlock(["src/tools/context.ts"], { except: ["writePath"], extra: exemptExports }),
   {
     files: ["src/core/**"],
     rules: {
