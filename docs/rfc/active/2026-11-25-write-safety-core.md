@@ -215,6 +215,15 @@ acceptance (owner, 2026-11-25): the wording above with options (a) and
 (b) stays the open item, settled after the owner's activity-log check on
 2026-11-26 and before M2's first real test.
 
+**Settled (2026-11-26, owner).** The owner read the activity log of the
+`mcp-test` test ticket after it waited overnight: no automation rule or
+time trigger acted (values in `docs/private/account-facts.md`). The
+wording above stands as written; neither (a) nor (b) is needed. SPEC §13's
+M2 row holds it since the `/decompose M2` amendment of 2026-11-26 (commit
+"M2 plan amend: SPEC §13 M2 wording settled"), and T-076 no longer waits
+on it. This is a dated settlement of the item this RFC left open, not a
+change to the decision.
+
 ### Spam marking of created tickets (C8)
 
 Freshdesk's spam filter can mark a newly created ticket as spam, with no
@@ -373,4 +382,5 @@ acceptance line in `docs/tasks/PLAN.md` drops "AGENTS.md rule 1 and SPEC
 point. SPEC changes left for `/decompose M2`: §8.2 and §9's `add_note`
 rows (private only in `write`; public notes in `send`), §8.2's
 `update_ticket` purpose (Resolved and Closed may notify the requester),
-§13's M2 wording (after the 2026-11-26 check).
+§13's M2 wording (after the 2026-11-26 check; done 2026-11-26, see
+"Settled" above).

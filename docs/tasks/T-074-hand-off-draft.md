@@ -13,6 +13,7 @@
 - Note first, then PUT (an assignment with no note hands off nothing; builder's call, `docs/improvements.md` `c928102`).
 - If the PUT fails after the note was written, the result says so with the note's id; no automatic retry, no rollback.
 - Its entry's set: group, agent only.
+- Nothing to assign: the note only, no PUT (the core refuses an empty ticket change since `254bcae`; added by the `/decompose M2` amendment of 2026-11-26).
 
 ## Out of scope
 - Freshdesk's UI reply draft (not in the public API, SPEC §3).
@@ -32,7 +33,7 @@
 `none`
 
 ## Acceptance
-`test/tools/write/hand-off-draft.test.ts` (MockAgent): one POST (private, body starting with the `DRAFT REPLY` header, notify emails) then one PUT (group/agent); a note refused sends no PUT; a PUT failing after the note returns a result naming the written note and the failed assignment, no retry; a field outside group/agent `field_not_writable`; `make quality` green.
+`test/tools/write/hand-off-draft.test.ts` (MockAgent): one POST (private, body starting with the `DRAFT REPLY` header, notify emails) then one PUT (group/agent); a note refused sends no PUT; a PUT failing after the note returns a result naming the written note and the failed assignment, no retry; a field outside group/agent `field_not_writable`; with nothing to assign (no agent and no group) it posts the note only and sends no PUT, because the core refuses an empty ticket change; `make quality` green.
 
 No split point.
 

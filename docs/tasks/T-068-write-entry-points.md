@@ -37,7 +37,7 @@ The core builds one entry point per write tool (`update_ticket`, `categorize_tic
 `none`
 
 ## Acceptance
-`test/core/entries.test.ts` (MockAgent): without `write` in toolsets the core gives no entries object (and `send` gives none either); each ticket entry sends only fields of its own set, a field outside it `field_not_writable` with 0 dispatches; the note entries have no `private` input and send `private: true`; a cast-injected `private: false`, `user_id`, `incoming` or `attachments` never reaches MockAgent's body; a note entry given a `BigInt` body by a cast (so `write()`'s snapshot throws) resolves to `validation`, `http_status: null`, with 0 dispatches, not a rejected promise; `test/core/resources.test.ts`: a body whose top-level `toJSON` returns `null` or a string is `validation` with 0 dispatches; `make quality` green.
+`test/core/entries.test.ts` (MockAgent): without `write` in toolsets the core gives no entries object (and `send` gives none either); each ticket entry sends only fields of its own set, a field outside it `field_not_writable` with 0 dispatches; the note entries have no `private` input and send `private: true`; a cast-injected `private: false`, `user_id`, `incoming` or `attachments` never reaches MockAgent's body; a note entry given a `BigInt` body by a cast is refused as `validation`, `http_status: null`, nothing sent, no rejected promise; `test/core/resources.test.ts`: a body whose top-level `toJSON` returns `null` or a string is `validation` with 0 dispatches; `make quality` green.
 
 Split point: ticket entries first, note entries second.
 
@@ -82,7 +82,8 @@ none
   since `254bcae` the note entry's string check refuses it first. The
   outcome the line asks for holds; the snapshot-throw path is proven by the
   `cf_hobby: 10n` ticket case and `test/core/resources.test.ts`. Parked
-  (`docs/improvements.md`, `254bcae` entry).
+  (`docs/improvements.md`, `254bcae` entry). Settled 2026-11-26: the
+  acceptance amended by `/decompose M2` to name no check.
 - `createWritePath` trusts the `toolsets` its caller passes (security,
   medium, latent): only `context.ts` calls it, by inspection. Parked for
   T-077 / T-071 (`docs/improvements.md`, `0a98b15` entry).

@@ -447,7 +447,7 @@ splits into tasks.
 |---|---|---|
 | M0 | repo, CI, client core (§7.1), rate limiter, schema service, config | tests green in CI |
 | M1 | `core` toolset → technical users via `npx` | C1 listing, C2, C3 (read), C7, C9/C10 reads work against the real account by smoke test |
-| M2 | `write` toolset | C1 apply, C4 internal, C5 update, C6, C8 (new tickets) work on `mcp-test` tickets; automations confirmed to skip the tag first |
+| M2 | `write` toolset | C1 apply, C4 internal, C5 update, C6, C8 (new tickets) work on `mcp-test` tickets; no automation rule acted on `mcp-test` tickets, confirmed by the activity log after each kind of write M2 performs, and no time trigger acted on them while they waited |
 | M3 | `send` toolset | C5 reply, C4 forward, with confirm and allow-list, on `mcp-test` tickets to internal addresses only |
 | M4 | `.mcpb`, Italian operator guide, internal team config | an operator installs on a clean machine without a terminal |
 | M5+ | catalogue toolsets on demand | per toolset |

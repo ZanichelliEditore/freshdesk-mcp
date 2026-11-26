@@ -20,19 +20,23 @@
 
 - **Next action:** `/pickup` T-077 (lint fence: the client, the limiter and
   `ticketInput` stay in the core). It is the first `todo` row; its
-  dependency T-068 is `done`. Consider there the parked `0a98b15` item
-  (fence calls to `createWritePath` outside `src/tools/context.ts`): it is
-  not in T-077's acceptance, so taking it is a `/decompose` decision.
+  dependency T-068 is `done`. Its acceptance now includes the `0a98b15`
+  `createWritePath` fence (plan amendment below).
+
+- **Plan amended (2026-11-26):** `/decompose M2` amendment, commit
+  `PENDING`: SPEC §13's M2 wording settled; T-077 takes `0a98b15`, T-068's
+  BigInt line reworded (`254bcae`), T-074 adds the note-only case; T-076
+  depends on T-075 only.
 
 - **Owner actions:**
-  - The time-trigger check on `mcp-test` tickets' activity log,
-    2026-11-26, then SPEC §13's M2 wording (RFC
-    `2026-11-25-write-safety-core`). T-076 waits on it. No write to the
-    real account before then.
-  - Not blocking: compare the account's `/ticket_fields` agent and group
-    choice keys with `/agents` `contact.name` and `/groups` `name`
-    (`docs/improvements.md`, `b80b69a` entry; values in
-    `docs/private/account-facts.md`).
+  - Done 2026-11-26: the time-trigger check (no automation rule or time
+    trigger acted on the `mcp-test` ticket left overnight; SPEC §13's M2
+    wording settled as the RFC wrote it), and the choice-name check (every
+    `/ticket_fields` agent and group choice name matches a list name
+    exactly; `docs/improvements.md` `b80b69a`).
+  - Remaining, in T-076: create the `mcp-test` tickets and run
+    `make smoke-write`. No write to the real account before T-075 is
+    `done`.
 
 - **Read before anything else:** `docs/tasks/T-077-core-lint-fence.md`;
   `docs/improvements.md` entries `0a98b15` and `254bcae` (T-068's parked
@@ -65,18 +69,15 @@
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - T-068's acceptance says the BigInt note body is refused "so `write()`'s
-    snapshot throws"; since `254bcae` the string check refuses it first
-    (outcome holds; the snapshot path is tested elsewhere). Owner may want
-    the wording amended.
   - A ticket change that sets nothing is now refused in the core; T-071's
-    tool and T-074's `hand_off_draft` should skip an empty assignment
-    rather than call the entry.
+    tool should skip an empty change rather than call the entry (T-074's
+    case is in its acceptance since 2026-11-26).
   - From T-067: the `getAgent` active rule comes from Freshdesk's
     documentation, not measured; `make quality` real-time tests timed out
     under machine load on 2026-11-26 (not seen this session).
-  - From T-041/T-065: choice-key spelling (owner action); default fields
-    keyed by `/ticket_fields` API name, to confirm at T-076.
+  - From T-041/T-065: default fields keyed by `/ticket_fields` API name,
+    to confirm at T-076 (choice-key spelling closed 2026-11-26: the names
+    match exactly).
   - From T-040, unchecked: whether `agent-native-setup update` would revert
     the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
