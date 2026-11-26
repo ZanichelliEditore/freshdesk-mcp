@@ -109,6 +109,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
   const T1 = "src/tools/toolsets/x.ts";
   const T2 = "src/tools/toolsets/core/x.ts";
   const T3 = "src/tools/toolsets/write/x.ts";
+  const T4 = "src/tools/toolsets/send/x.ts";
   /** Not a listed place: the bare entries only. */
   const TX = "src/tools/core/x.ts";
 
@@ -165,6 +166,7 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
         [T1, toolImports.places.T1],
         [T2, toolImports.places.T2],
         [T3, toolImports.places.T3],
+        [T4, toolImports.places.T4],
       ] as [string, Place][]
     ).flatMap(([file, place]) => [
       ...[...bare, ...place.value].map(
@@ -331,6 +333,18 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     expect(await verdict(type(spec), T3)).toEqual(["list"]);
   });
 
+  // T-084: a send tool gets its entry point from the wiring, never from src/core.
+  it.each([
+    "../../../core/write-path.js",
+    "../../../core/send-id.js",
+    "../../../core/recipients.js",
+    "../../../core/resources.js",
+    "../../../client/http.js",
+  ])("refuses in src/tools/toolsets/send/x.ts a value or type import of %s", async (spec) => {
+    expect(await verdict(value(spec), T4)).toEqual(["list"]);
+    expect(await verdict(type(spec), T4)).toEqual(["list"]);
+  });
+
   it("refuses a re-export of the client", async () => {
     expect(await verdict('export { HttpClient } from "../../../client/http.js";', T2)).toEqual([
       "list",
@@ -421,12 +435,12 @@ describe("eslint: a tool imports only its allow-list (src/tools/**)", () => {
     },
   );
 
-  it("refuses in src/tools/toolsets/write/x.ts any import of the context, value or type", async () => {
-    expect(await verdict(value("../../context.js"), T3)).toEqual(["list"]);
-    expect(await verdict(type("../../context.js"), T3)).toEqual(["list"]);
+  it.each([T3, T4])("refuses in %s any import of the context, value or type", async (file) => {
+    expect(await verdict(value("../../context.js"), file)).toEqual(["list"]);
+    expect(await verdict(type("../../context.js"), file)).toEqual(["list"]);
   });
 
-  it("puts every file under src/tools in context.ts or in a place (T0 to T3), none ignored", async () => {
+  it("puts every file under src/tools in context.ts or in a place (T0 to T4), none ignored", async () => {
     const root = join(import.meta.dirname, "..", "src", "tools");
     const files = readdirSync(root, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())
@@ -1123,18 +1137,20 @@ describe("eslint: the client, the limiter, ticketInput and createWritePath stay 
       expect(await messages(code, file)).toEqual([`${SYNTAX}: SEND_ID`]);
     });
 
-    it.each(["src/tools/x.ts", "src/tools/confirm.ts", "src/tools/toolsets/write/x.ts"])(
-      "refuses in %s (the allow-list) any import of it",
-      async (file) => {
-        const from = JSON.stringify(specFrom(file, SEND_ID));
-        for (const code of [
-          `import { mintSendId } from ${from};`,
-          `import type { SendRecipients } from ${from};`,
-        ]) {
-          expect(await messages(code, file), code).toEqual([`${IMPORTS}: list`]);
-        }
-      },
-    );
+    it.each([
+      "src/tools/x.ts",
+      "src/tools/confirm.ts",
+      "src/tools/toolsets/write/x.ts",
+      "src/tools/toolsets/send/x.ts",
+    ])("refuses in %s (the allow-list) any import of it", async (file) => {
+      const from = JSON.stringify(specFrom(file, SEND_ID));
+      for (const code of [
+        `import { mintSendId } from ${from};`,
+        `import type { SendRecipients } from ${from};`,
+      ]) {
+        expect(await messages(code, file), code).toEqual([`${IMPORTS}: list`]);
+      }
+    });
 
     it("exempts no file outside src/core/**", async () => {
       for (const file of filesOutsideCore()) {

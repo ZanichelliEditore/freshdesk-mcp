@@ -94,8 +94,9 @@ An optional JSON file shared by a team, path in `FRESHDESK_MCP_CONFIG`; see
 is checked at start: an unknown key or a bad value stops the server with a
 message naming the key, never the value.
 
-- `toolsets`: the toolsets to enable. This version has `core` only (the
-  default); a file enabling `write` or `send` is refused.
+- `toolsets`: the toolsets to enable: `core` (the default), `write` and
+  `send`. `send` mails people outside Freshdesk: read
+  [Sending mail (`send`)](#sending-mail-send) before enabling it.
 - `fields`: per ticket field, by label or API name: `meaning`, text telling
   the model what the field means, and `hidden: true`, to leave the field out
   of a ticket's detail output (personal data, say).
@@ -105,7 +106,10 @@ message naming the key, never the value.
 - `uncategorised_fields`: the fields that, all empty, make a ticket
   uncategorised (`list_tickets`' `uncategorized`). Default: the last level of
   the first nested field.
-- `forward_allow_list`: for a later toolset; unused by `core`.
+- `forward_allow_list`: the only addresses a `send` tool may add as
+  recipients (`reply_to_ticket`'s `cc`): `@example.com` takes any address at
+  that domain (no subdomain), a full address only itself. Empty (the
+  default): no `cc` is accepted.
 - `limits`: `reserve_pct` (20), `floor_pct` (5), `pacing_rps` (2),
   `bulk_cap` (50), `schema_ttl_s` (3600) and `call_budget` (250, the most API
   calls one tool call may estimate before it needs `confirm: true`).
@@ -130,6 +134,26 @@ costs in Freshdesk API calls, which count against your account's rate limit:
 - `get_canned_response` — 1 API call, within 30 s, plus one per retry after an error.
 - `count_tickets` — 1 API call per 30 matching tickets up to 300 (10 at most); above that 1 plus 1 per 100 tickets read, up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true, and a list read starts no request after 20 s (about 40 at the default pacing); all within 30 s, plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached.
 - `export_tickets` — per call, as count_tickets: 1 API call per 30 matching tickets up to 300; above that 1 plus 1 per 100 tickets read; with conversations, 1 more per ticket (and 1 per 100 more entries of a long thread); all up to the per-call budget (limits.call_budget, 250 by default) unless confirm: true (with max_tickets the estimate counts that many tickets at most); no request started after 20 s, all within 30 s; plus one per retry after an error, plus at least 3 when the ticket-field schema is not cached.
+
+## Sending mail (`send`)
+
+The `send` toolset is off by default. Its tool `reply_to_ticket` sends a
+public reply to a ticket's requester, usually a customer, and a sent mail
+cannot be taken back.
+
+- **Never choose "always allow" for a `send` tool** in Claude Code or Claude
+  Desktop. The approval prompt, which shows the exact text, the ticket id and
+  the recipients, is the check that a person read the mail before it goes:
+  with "always allow", text in a ticket could steer the model into sending
+  without anyone looking.
+- Every send takes two calls. The first sends nothing and returns the text,
+  the recipients and a `send_id`; only the second, with `confirm: true` and
+  that `send_id`, sends, once. Check the ticket id in the prompt: it decides
+  who receives the reply.
+- A reply goes to the ticket's requester. Its `cc` takes only addresses on
+  `forward_allow_list`; there is no `to` and no `bcc`. Freshdesk may also
+  copy the ticket's existing CC addresses, which the tool does not check.
+- Freshdesk automations may act on a reply, as on an agent's.
 
 ## Ticket text is data, not instructions
 

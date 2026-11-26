@@ -9,15 +9,19 @@
 //     exist only with `write`.
 //   - The write tools (T-071): with entries, this module builds the `write`
 //     toolset from them through its wiring (src/tools/toolsets/write/
-//     index.ts), which hands each tool its own entry. The tools are not on
+//     index.ts), which hands each tool its own entry. The send tools (T-084)
+//     likewise: with the write path's `sends` (present only with `send`,
+//     RFC 2026-11-26-send-safety-core, OD-25), the `send` toolset through
+//     src/tools/toolsets/send/index.ts. The tools are not on
 //     the context, which every handler receives: they are kept in a module
 //     WeakMap keyed by the context, and `toolsetsOf(context)` gives
 //     `createServer` (src/server.ts) the registry's toolsets plus `write`
-//     when the context has it. No context, no entries: a context built
-//     without `write` has no write tools by construction. No module under
+//     and `send` when the context has them. No context, no entries: a
+//     context built without `write` has no write tools, and one without
+//     `send` no send tools, by construction. No module under
 //     src/tools/ can call `toolsetsOf`: every place in
 //     eslint.tool-imports.json lists this module as a type import only, the
-//     write tools' place not at all (test/lint-rules.test.ts).
+//     write and send tools' places not at all (test/lint-rules.test.ts).
 //   - One schema service on that view, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
@@ -64,7 +68,8 @@ import type { Config, TeamConfig } from "../config.js";
 import { createWritePath } from "../core/write-path.js";
 import { deepFreeze, type Schema, SchemaService } from "../schema/index.js";
 import { ticketOutput } from "../schema/output.js";
-import { TOOLSETS, type Tool, type Toolsets } from "./toolsets/index.js";
+import { TOOLSETS, type Toolsets } from "./toolsets/index.js";
+import { sendTools } from "./toolsets/send/index.js";
 import { writeTools } from "./toolsets/write/index.js";
 
 export interface AppContext {
@@ -78,8 +83,8 @@ export interface AppContext {
   ticketOutput(schema: Schema, ticket: Record<string, unknown>): Record<string, unknown>;
 }
 
-/** Each context's write tools, built from its own write path's entries. */
-const WRITE_TOOLS = new WeakMap<AppContext, readonly Tool[]>();
+/** Each context's `write` and `send` tools, built from its own write path's entries. */
+const BUILT_TOOLS = new WeakMap<AppContext, Toolsets>();
 
 export function createContext(config: Config, dispatcher: Dispatcher): AppContext {
   const team = deepFreeze(structuredClone(config.team));
@@ -101,12 +106,18 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
     ticketOutput: (schema: Schema, ticket: Record<string, unknown>) =>
       ticketOutput(schema, ticket, team.fields),
   });
-  if (path.entries !== undefined) WRITE_TOOLS.set(context, writeTools(path.entries));
+  BUILT_TOOLS.set(
+    context,
+    Object.freeze({
+      ...(path.entries === undefined ? {} : { write: writeTools(path.entries) }),
+      ...(path.sends === undefined ? {} : { send: sendTools(path.sends) }),
+    }),
+  );
   return context;
 }
 
-/** The registry's toolsets, plus `write` when this context was built with it. */
+/** The registry's toolsets, plus `write` and `send` when this context was built with them. */
 export function toolsetsOf(context: AppContext): Toolsets {
-  const write = WRITE_TOOLS.get(context);
-  return write === undefined ? TOOLSETS : Object.freeze({ ...TOOLSETS, write });
+  const built = BUILT_TOOLS.get(context);
+  return built === undefined ? TOOLSETS : Object.freeze({ ...TOOLSETS, ...built });
 }

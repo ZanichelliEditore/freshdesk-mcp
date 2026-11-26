@@ -44,7 +44,7 @@ A line here is a name and a purpose, not an input design.
 | `categorize_tickets` | `write` | active | write | Tickets | bulk set of category fields, preview then confirm; the confirm writes only the fields the preview resolved, by API name (a field relabelled or removed since refuses it); a result per ticket: written, refused, `may_have_been_applied` (sent without a clear answer) or not attempted, each with its count |
 | `add_note` | `write` | active | write | Conversations (notes) | private note only (no `private` input), optional notification of agents named by id |
 | `hand_off_draft` | `write` | active | write | Conversations (notes), Tickets | draft reply as a private note, assign and notify |
-| `reply_to_ticket` | `send` | active | write | Conversations (reply) | public reply to the requester, `confirm` required |
+| `reply_to_ticket` | `send` | active | write | Conversations (reply) | public reply to the requester, `confirm: true` and the `send_id` of a first call required; `cc` from the allow-list only, no `to` or `bcc` |
 | `forward_ticket` | `send` | active | write | Tickets (forward) | forward outside Freshdesk to allow-listed recipients, `confirm` required |
 
 ## Prepared, not active (SPEC §8.3)

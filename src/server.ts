@@ -3,10 +3,10 @@
 // (owner, 2026-11-23), and this module reads no environment.
 //
 // The toolsets are the registry's (`core`) plus, when the team file enables
-// it, `write`, built by the context from its own write path (`toolsetsOf`,
-// src/tools/context.ts; T-071). A toolset the team file enables but this
-// version does not have (`send`) is a `ConfigError` naming it, thrown before
-// any tool registers.
+// them, `write` and `send`, built by the context from its own write path
+// (`toolsetsOf`, src/tools/context.ts; T-071, T-084). A toolset the team file
+// enables but the toolsets given do not have is a `ConfigError` naming it,
+// thrown before any tool registers.
 // A tool without its annotations or call cost throws a `TypeError` from the
 // registry (src/tools/toolsets/index.ts). The transport is the caller's:
 // `cli.ts` serves stdio, tests the in-memory one.

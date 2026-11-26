@@ -82,6 +82,11 @@
         "../../../client/resources/tickets.js"
       ],
       "type": ["../index.js", "../../../schema/index.js", "../../../client/errors.js"]
+    },
+    "T4": {
+      "files": ["src/tools/toolsets/send/*.ts"],
+      "value": ["./reply-to-ticket.js", "../../confirm.js", "../write/add-note.js"],
+      "type": ["../index.js", "../../../client/errors.js"]
     }
   }
 }

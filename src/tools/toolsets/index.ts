@@ -23,10 +23,9 @@
 //     a fixed message naming the tool only: the thrown value is never read,
 //     so no stack, request body, input text or key can reach the result.
 //   - `TOOLSETS` holds the toolsets whose tools are fixed: `core`, its tools
-//     listed in ./core/index.ts. `write` is not here: its tools are built per
-//     context from the write path's entries (./write/index.ts, src/tools/
-//     context.ts `toolsetsOf`). `send` is nowhere yet, so `createServer`
-//     (src/server.ts) refuses a team file that enables it.
+//     listed in ./core/index.ts. `write` and `send` are not here: their tools
+//     are built per context from the write path's entries (./write/index.ts,
+//     ./send/index.ts, src/tools/context.ts `toolsetsOf`).
 
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { z } from "zod";

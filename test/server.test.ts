@@ -9,6 +9,7 @@ import { createServer, SERVER_INFO } from "../src/server.js";
 import { createContext } from "../src/tools/context.js";
 import { CLOSE, NAME_CAP, OPEN, untrusted } from "../src/tools/format.js";
 import { DATA_NOT_INSTRUCTIONS, type Tool, type Toolsets } from "../src/tools/toolsets/index.js";
+import { SEND_FACTORIES, sendTools } from "../src/tools/toolsets/send/index.js";
 import { WRITE_FACTORIES, writeTools } from "../src/tools/toolsets/write/index.js";
 import { buildCli, runBuiltCli } from "./support/cli-process.js";
 import { callTool, listTools, open } from "./support/mcp-session.js";
@@ -177,12 +178,31 @@ describe("createServer: enabled toolsets come from the team file only", () => {
     expect((error as Error).message).toContain("toolsets");
   });
 
-  it("the real registry (no toolsets argument) still refuses send, naming it", () => {
-    expect(() => serverFor(undefined, { toolsets: ["core", "send"] })).toThrow(ConfigError);
-    expect(() => serverFor(undefined, { toolsets: ["core", "write", "send"] })).toThrow(
-      ConfigError,
-    );
-    expect(() => serverFor(undefined, { toolsets: ["send"] })).toThrow('"send"');
+  // T-084 (RFC 2026-11-26-send-safety-core, OD-25): `send` registers, from
+  // the context's own write path, with or without `write`.
+  it.each([[["core", "send"]], [["send"]], [["core", "write", "send"]]])(
+    "the real registry (no toolsets argument) takes %j: no ConfigError, reply_to_ticket destructive",
+    async (toolsets) => {
+      const tools = await listTools(await open(serverFor(undefined, { toolsets })));
+      expect(tools.find((tool) => tool.name === "reply_to_ticket")?.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      });
+    },
+  );
+
+  it("with send alone, lists the send tools and no core or write tool", async () => {
+    const tools = await listTools(await open(serverFor(undefined, { toolsets: ["send"] })));
+    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket"]);
+  });
+
+  it("without send in the team file, reply_to_ticket is absent", async () => {
+    for (const toolsets of [["core"], ["core", "write"]]) {
+      const tools = await listTools(await open(serverFor(undefined, { toolsets })));
+      expect(tools.map((tool) => tool.name)).not.toContain("reply_to_ticket");
+    }
   });
 
   // T-071: `write` registers, from the context's own write path.
@@ -413,6 +433,56 @@ describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
       "categorize_tickets",
       "hand_off_draft",
     ]);
+  });
+});
+
+// T-084 (RFC 2026-11-26-send-safety-core, OD-18): one wiring module hands
+// each send tool's factory its own entry point, and nothing else.
+describe("the send wiring (src/tools/toolsets/send/index.ts)", () => {
+  const refuse = async () => ({
+    ok: false as const,
+    error: { code: "validation" as const, http_status: null, message: "fake", retryable: false },
+    attempts: 0,
+  });
+  /** Entries shaped as the core's, all three, each a distinct frozen object. */
+  function fakeSends() {
+    return Object.freeze({
+      reply_to_ticket: Object.freeze({ send: refuse }),
+      forward_ticket: Object.freeze({ send: refuse }),
+      add_public_note: Object.freeze({ send: refuse }),
+    });
+  }
+
+  it("hands the reply factory exactly its own entry point, never the entries object", () => {
+    const entries = fakeSends();
+    const received = new Map<string, unknown[]>();
+    const spies = Object.fromEntries(
+      Object.entries(SEND_FACTORIES).map(([name, make]) => [
+        name,
+        (...args: unknown[]) => {
+          received.set(name, args);
+          return (make as (...a: unknown[]) => Tool)(...args);
+        },
+      ]),
+    ) as unknown as typeof SEND_FACTORIES;
+
+    const tools = sendTools(entries, spies);
+
+    expect([...received.keys()]).toEqual(["reply_to_ticket"]);
+    const args = received.get("reply_to_ticket")!;
+    expect(args).toHaveLength(1);
+    expect(args[0]).toBe(entries.reply_to_ticket);
+    expect(args[0]).not.toBe(entries);
+    expect(args[0]).not.toBe(entries.forward_ticket);
+    expect(args[0]).not.toBe(entries.add_public_note);
+    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket"]);
+    expect(Object.isFrozen(tools)).toBe(true);
+  });
+
+  it("the real wiring gives the send tools, each complete enough to register", async () => {
+    const server = serverFor({ send: sendTools(fakeSends()) }, { toolsets: ["send"] });
+    const tools = await listTools(await open(server));
+    expect(tools.map((tool) => tool.name)).toEqual(["reply_to_ticket"]);
   });
 });
 

@@ -5,12 +5,19 @@ and stay 0.x until milestone M4, then 1.0.0.
 
 ## Unreleased
 
+- **Added:** the `send` toolset registers when the team file's `toolsets`
+  enables it, with its first tool, `reply_to_ticket`: a public reply to a
+  ticket's requester, in two calls (the first sends nothing and returns the
+  text, the recipients and a `send_id`; the second, with `confirm: true` and
+  that `send_id`, sends once). `cc` only from `forward_allow_list`, no `to`
+  or `bcc`; Freshdesk may also copy the ticket's existing CCs. Never "always
+  allow" a `send` tool. No release that accepts `send` before T-087 is done
+  (RFC `2026-11-26-send-safety-core`, OD-34).
 - **Added:** the `write` toolset registers when the team file's `toolsets`
   enables it, with its first tool, `update_ticket`: status (Resolved and
   Closed included), priority, type, group, agent, custom fields by label,
   and tags added or removed. Not for release before the rest of `write`
   (`add_note`, `categorize_tickets`, `hand_off_draft`) is in (PLAN OD-16).
-  `send` is still refused.
 - **Added:** `add_note` in `write`: a private note on a ticket, always
   private, notifying agents named by id (looked up with `list_agents`). It
   returns the note's id and the agent ids notified, never an email address.
