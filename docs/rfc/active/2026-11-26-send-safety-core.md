@@ -404,9 +404,11 @@ What the owner rejected: (b) designed only, T-088 left `proposed`.
 - Sent: `{ sent: true, ticket_id, conversation_id }` and
   `api_calls_used`; no address, even when Freshdesk's answer echoes one
   (as `add_note`, `a57ef9b`).
-- A 5xx, a timeout, a network error, a 2xx of another shape or a 3xx
-  after the POST was dispatched: `may_have_been_sent`, `retryable:
-  false`, "check the ticket's conversation before sending again". No
+- A 5xx, a 408 (extended by the owner, 2026-11-26, "Amendments"), a
+  timeout, a network error, a 2xx of another shape or a 3xx after the
+  POST was dispatched: `may_have_been_sent`, `retryable: false`, "check
+  the ticket's conversation before sending again". Any other 4xx after
+  dispatch, a 409 included, is not: the `send_id` is spent (OD-33). No
   retry except 429 (T-014: a 429 was not processed).
 - "Not sent": names the caller's recipients and "the ticket's requester",
   never the requester's address (the server does not read it, OD-21);
@@ -506,10 +508,11 @@ counts an attempt once it is handed to `fetch`): a refusal the core made
 itself, the limiter refusing, or under 10 s left. `http_status: null` is
 not that test: a timeout or a reset after the POST left is a `network`
 error with `http_status: null` and may have been sent. Any result with an
-attempt dispatched keeps the id spent, a network error and a Freshdesk
-4xx included: `src/client/errors.ts` maps every 4xx but 401, 403, 404 and 429
-to `validation`, and a 408 or 409 is not proof that nothing was sent. The
-caller can always mint a new id.
+attempt dispatched keeps the id spent, whatever the status, a network
+error and a Freshdesk 4xx included (`src/client/errors.ts` maps every 4xx
+but 401, 403, 404 and 429 to `validation`): one rule, no release by
+status. A 408 is also `may_have_been_sent` (OD-27, amended 2026-11-26,
+"Amendments"). The caller can always mint a new id.
 
 The set is **never pruned** while the process lives. Pruning by the wall
 clock would reopen OD-20's accepted limitation: with the clock set back
@@ -627,6 +630,33 @@ Given via the orchestrator on 2026-11-26:
   was already used, and the earlier call may have sent; check the ticket
   before sending again". The mechanism is unchanged: the same refusal,
   `validation`, nothing sent by this call.
+- **2026-11-26, owner (via the orchestrator), OD-27 extended to 408
+  only.** OD-27 listed the failures after dispatch reported
+  `may_have_been_sent` (a 5xx, a timeout, a network error, a 2xx of
+  another shape, a 3xx); no Freshdesk 4xx was on it, though OD-33 then
+  said a 408 or 409 is no proof nothing was sent (T-084's open doubt,
+  `docs/tasks/T-084-reply-to-ticket.md` "Open doubts", `82c8242`). A 408
+  is now on the list: a request timeout gives no proof the message was
+  not sent, so the caller is told to check the ticket's conversation
+  before sending again. Per HTTP a 408 from the origin means it did not
+  get the whole request; the doubt is a 408 from an intermediary in front
+  of Freshdesk after the origin got the POST, which nothing here has
+  checked. It is not added to A1 to A6: the rule errs on the safe side
+  either way (a 408 for a mail never sent costs the caller one look at
+  the conversation). A 409 stays off it: a conflict is Freshdesk refusing
+  the request, reported with the `send_id` spent and `retryable: false`,
+  as any other refusal after dispatch. Applies to every send tool: today
+  `reply_to_ticket`, through `sendFailed`
+  (`src/tools/toolsets/send/reply-to-ticket.ts`); the forward and the
+  public note (T-085, T-088) must use the same rule (T-089). The
+  core is unchanged: it already keeps the `send_id` spent on any
+  dispatched attempt, a 408 and a 409 included; `src/client/errors.ts`
+  still maps a 408 to `validation`, not retried. Rejected: no change
+  (the caller would hear only that the `send_id` is spent, not to check
+  the conversation before sending again); 409 as well (a
+  refusal is the server's answer to the request, not an unknown outcome;
+  reporting it `may_have_been_sent` would weaken the signal for the cases
+  that are); every 4xx (the same, for 400, 405, 415 and the rest).
 
 ## Consequences
 

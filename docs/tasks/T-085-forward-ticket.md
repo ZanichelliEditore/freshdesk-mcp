@@ -3,7 +3,7 @@
 - **Type:** build
 - **Phase:** M3
 - **Status:** todo (2026-11-26)
-- **Depends on:** T-084
+- **Depends on:** T-084, T-089
 - **Created:** 2026-11-26
 
 Sized on T-079's likely answer (PLAN, M3: the OD proposals, and the owner's answers of 2026-11-26 to OD-20, OD-21 and OD-26); its acceptance is re-checked when T-079's RFC is accepted.
