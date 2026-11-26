@@ -5,6 +5,12 @@ and stay 0.x until milestone M4, then 1.0.0.
 
 ## Unreleased
 
+- **Added:** `forward_ticket` in `send`: a forward of a ticket to internal
+  addresses, in two calls as `reply_to_ticket`. `to` (at least one) and `cc`
+  only from `forward_allow_list`, at most 10 in all, no `bcc`, never the
+  original attachments; the ticket's content, and possibly its conversation,
+  leaves Freshdesk. A 408 after a send now reads "timed out", and an error
+  after a send's dispatch no longer carries `retry_after_s`.
 - **Added:** the `send` toolset registers when the team file's `toolsets`
   enables it, with its first tool, `reply_to_ticket`: a public reply to a
   ticket's requester, in two calls (the first sends nothing and returns the

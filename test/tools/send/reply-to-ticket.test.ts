@@ -11,10 +11,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
+import { sendFailed } from "../../../src/tools/toolsets/send/outcome.js";
 import {
   type ReplyToTicketEntry,
   replyToTicket,
-  sendFailed,
 } from "../../../src/tools/toolsets/send/reply-to-ticket.js";
 import {
   type CallResult,
@@ -448,12 +448,12 @@ describe("reply_to_ticket: sendFailed", () => {
   };
 
   it("a network error with no attempt dispatched is passed on: nothing left the process", () => {
-    const result = sendFailed(network, 0);
+    const result = sendFailed(network, 0, "reply");
     expect(result.error).toEqual(network);
   });
 
   it("a network error after a dispatch is may_have_been_sent, not retryable", () => {
-    const result = sendFailed(network, 1);
+    const result = sendFailed(network, 1, "reply");
     expect(result.error).toMatchObject({
       code: "network",
       retryable: false,
@@ -469,8 +469,10 @@ describe("reply_to_ticket: sendFailed", () => {
       retryable: true,
       retry_after_s: 30,
     };
-    const result = sendFailed(limited, 2);
+    const result = sendFailed(limited, 2, "reply");
     expect(result.error).toMatchObject({ code: "rate_limited", retryable: false });
+    // retryable: false and a retry_after_s would be a mixed signal (T-085).
+    expect(result.error).not.toHaveProperty("retry_after_s");
     expect(result.error.may_have_been_sent).toBeUndefined();
     expect(result.error.message).toMatch(/This send_id is spent/);
   });
@@ -482,12 +484,18 @@ describe("reply_to_ticket: sendFailed", () => {
       message: "Freshdesk refused the request (HTTP 408).",
       retryable: false,
     };
-    expect(sendFailed(timeout, 0).error).toEqual(timeout);
-    expect(sendFailed(timeout, 1).error).toMatchObject({
+    expect(sendFailed(timeout, 0, "reply").error).toEqual(timeout);
+    const after = sendFailed(timeout, 1, "reply").error;
+    expect(after).toMatchObject({
       http_status: 408,
       retryable: false,
       may_have_been_sent: true,
     });
+    // T-085: a timeout is not a refusal, so the message does not say "refused".
+    expect(after.message).toMatch(
+      /^Freshdesk timed out the request \(HTTP 408\)\. The reply may have been sent/,
+    );
+    expect(after.message).not.toMatch(/refused/);
   });
 
   it("replaces an address in the message of a failure", async () => {

@@ -18,28 +18,17 @@
 //     sends nothing; the tool returns src/tools/confirm.ts's "Not sent"
 //     result, ticket id first. With `confirm: true` and that `send_id`, the
 //     core sends, once (OD-33).
-//   - Sent (OD-27): `ticket_id`, `conversation_id`, `api_calls_used`, never
-//     an address, whatever Freshdesk's answer holds (the core returns only
-//     the conversation id).
-//   - A failure: every word holding an at sign in its text is replaced, as
-//     `add_note` does (`withoutAddresses`, src/tools/format.ts; OD-27). With
-//     no attempt dispatched nothing left the process, the core freed the
-//     `send_id`, and the error is passed on as it is. With one dispatched the
-//     core keeps the `send_id` spent (OD-33), so the error is `retryable:
-//     false` and says to start over without `confirm`; a `server` or
-//     `network` error (a 5xx, a timeout, a 3xx, an answer of another shape)
-//     or a 408 is also `may_have_been_sent: true` and says to check the
-//     ticket's conversation before sending again (OD-27; the 408 by the
-//     owner's amendment of 2026-11-26, T-089). A 409, as any other 4xx, is
-//     Freshdesk's refusal: not `may_have_been_sent`.
+//   - The result, sent, not sent or failed, is ./outcome.ts's, the rule
+//     every send tool shares: no address in it, and a failure after the POST
+//     left says the `send_id` is spent and, for a 5xx, a network error, a 3xx,
+//     an answer of another shape or a 408, that the reply may have been sent
+//     (OD-27, the 408 by the owner's amendment of 2026-11-26, T-089).
 //   - One deadline, CALL_DEADLINE_MS from the call's start; the client starts
 //     no write with under 10 s of it left.
 
 import { z } from "zod";
-import type { FreshdeskError } from "../../../client/errors.js";
-import { notSent, type SendTool } from "../../confirm.js";
-import { withoutAddresses } from "../../format.js";
 import type { Tool } from "../index.js";
+import { type SendResult, sendOutcome } from "./outcome.js";
 
 /** The POST ends within this. */
 const CALL_DEADLINE_MS = 30_000;
@@ -54,25 +43,9 @@ export interface ReplyRequest {
   deadline?: number;
 }
 
-/** What the core's entry returns for a call without `confirm`. */
-export interface ReplyPreview {
-  tool: SendTool;
-  ticket_id: number;
-  body: string;
-  to: readonly string[];
-  cc: readonly string[];
-  send_id: string;
-  expires_at: string;
-}
-
-export type ReplyResult =
-  | { ok: true; sent: false; preview: ReplyPreview; attempts: 0 }
-  | { ok: true; sent: true; ticket_id: number; conversation_id: number; attempts: number }
-  | { ok: false; error: FreshdeskError; attempts: number };
-
 /** The core's `reply_to_ticket` entry (src/core/write-path.ts), by shape. */
 export interface ReplyToTicketEntry {
-  readonly send: (input: ReplyRequest) => Promise<ReplyResult>;
+  readonly send: (input: ReplyRequest) => Promise<SendResult>;
 }
 
 const input = z.strictObject({
@@ -82,34 +55,6 @@ const input = z.strictObject({
   confirm: z.literal(true).optional(),
   send_id: z.string().optional(),
 });
-
-/** A send's failure as the caller sees it: no address, and a dispatched POST's unknown outcome said. */
-export function sendFailed(
-  error: FreshdeskError,
-  attempts: number,
-): { ok: false; error: FreshdeskError & { may_have_been_sent?: true } } {
-  const shown = withoutAddresses(error);
-  if (attempts === 0) return { ok: false, error: shown };
-  const again =
-    "This send_id is spent: to send again, start over without confirm, which gives a new send_id.";
-  const unknownOutcome =
-    shown.code === "server" || shown.code === "network" || shown.http_status === 408;
-  if (!unknownOutcome) {
-    return {
-      ok: false,
-      error: { ...shown, retryable: false, message: `${shown.message} ${again}` },
-    };
-  }
-  return {
-    ok: false,
-    error: {
-      ...shown,
-      retryable: false,
-      may_have_been_sent: true,
-      message: `${shown.message} The reply may have been sent (may_have_been_sent): check the ticket's conversation before sending again. ${again}`,
-    },
-  };
-}
 
 export function replyToTicket(entry: ReplyToTicketEntry): Tool<typeof input> {
   return {
@@ -141,34 +86,7 @@ export function replyToTicket(entry: ReplyToTicketEntry): Tool<typeof input> {
         send_id: args.send_id,
         deadline: Date.now() + CALL_DEADLINE_MS,
       });
-      if (!result.ok) return sendFailed(result.error, result.attempts);
-      if (!result.sent) {
-        const { preview } = result;
-        return {
-          ok: true,
-          value: {
-            ...notSent({
-              tool: preview.tool,
-              ticket_id: preview.ticket_id,
-              body: preview.body,
-              to: preview.to,
-              cc: preview.cc,
-              send_id: preview.send_id,
-              expires_at: preview.expires_at,
-            }),
-            api_calls_used: 0,
-          },
-        };
-      }
-      return {
-        ok: true,
-        value: {
-          sent: true,
-          ticket_id: result.ticket_id,
-          conversation_id: result.conversation_id,
-          api_calls_used: result.attempts,
-        },
-      };
+      return sendOutcome(result, "reply");
     },
   };
 }

@@ -107,9 +107,10 @@ message naming the key, never the value.
   uncategorised (`list_tickets`' `uncategorized`). Default: the last level of
   the first nested field.
 - `forward_allow_list`: the only addresses a `send` tool may add as
-  recipients (`reply_to_ticket`'s `cc`): `@example.com` takes any address at
-  that domain (no subdomain), a full address only itself. Empty (the
-  default): no `cc` is accepted.
+  recipients (`reply_to_ticket`'s `cc`, `forward_ticket`'s `to` and `cc`):
+  `@example.com` takes any address at that domain (no subdomain), a full
+  address only itself. Empty (the default): no `cc` and no forward is
+  accepted.
 - `limits`: `reserve_pct` (20), `floor_pct` (5), `pacing_rps` (2),
   `bulk_cap` (50), `schema_ttl_s` (3600) and `call_budget` (250, the most API
   calls one tool call may estimate before it needs `confirm: true`).
@@ -138,8 +139,8 @@ costs in Freshdesk API calls, which count against your account's rate limit:
 ## Sending mail (`send`)
 
 The `send` toolset is off by default. Its tool `reply_to_ticket` sends a
-public reply to a ticket's requester, usually a customer, and a sent mail
-cannot be taken back.
+public reply to a ticket's requester, usually a customer; `forward_ticket`
+forwards a ticket to internal addresses. A sent mail cannot be taken back.
 
 - **Never choose "always allow" for a `send` tool** in Claude Code or Claude
   Desktop. The approval prompt, which shows the exact text, the ticket id and
@@ -153,6 +154,10 @@ cannot be taken back.
 - A reply goes to the ticket's requester. Its `cc` takes only addresses on
   `forward_allow_list`; there is no `to` and no `bcc`. Freshdesk may also
   copy the ticket's existing CC addresses, which the tool does not check.
+- A forward's `to` (at least one) and `cc` take only addresses on
+  `forward_allow_list`, at most 10 in all, and there is no `bcc`. The
+  ticket's content, and possibly its conversation, leaves Freshdesk; its
+  attachments are never forwarded.
 - Freshdesk automations may act on a reply, as on an agent's.
 
 ## Ticket text is data, not instructions
