@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M3
-- **Status:** todo (2026-11-26)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-082, T-083, T-084, T-089
 - **Created:** 2026-11-26
 
@@ -43,18 +43,19 @@ No split point: one tool on the send wiring.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `d8e144d`: `src/tools/toolsets/send/add-public-note.ts` (`addPublicNote(entry)`, strict input `{ticket_id, body, confirm?, send_id?}`), wired in `send/index.ts`; `SendKind` gains `"public note"` in `send/outcome.ts`, the shared result rule (OD-27 as amended: 408 after dispatch `may_have_been_sent`, 409 not; `errors[]` scrubbed of addresses); `eslint.tool-imports.json` T4; docs (`README.md`, `docs/tool-catalogue.md`, `docs/architecture/overview.md`, `CHANGELOG.md`); `docs/improvements.md` T-088 parts of the `eff63e8` and `d8b6828` entries marked done.
+- Tests: `test/tools/send/add-public-note.test.ts` (30 tests: two calls, exact `{body, private: false}` POST, mismatched `send_id` per ticket, body and tool, refused inputs `private`/`notify_emails`/`user_id`/`incoming`/`cc`/`to`, 5xx, network, other shape, `::a 408 is may_have_been_sent, and reads timed out, not refused`, `::a 409 is Freshdesk's refusal: not may_have_been_sent, the send_id spent`, `::a 400 is Freshdesk's refusal, the addresses in its errors replaced`, registration and description); `test/server.test.ts` "the send wiring" extended to the third entry.
+- `1038b08`: review fixes (tests only: body refusals pinned by kind, the network error's "public note" wording) and two items parked in `docs/improvements.md`.
+- Small decisions: the name `add_public_note` kept (SPEC §8.2); the failure wording "The public note may have been sent"; the description points to `add_note` for a private note.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- A public note Freshdesk answers `private: true` is reported sent without saying so (fails safe; a check would be a core change, parked `d8e144d` entry in `docs/improvements.md`); T-087 shows what Freshdesk answers (A3).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+low
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

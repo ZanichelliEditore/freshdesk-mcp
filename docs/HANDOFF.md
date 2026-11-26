@@ -4,52 +4,48 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T15:14:46+01:00`
-- **Describes commit:** `62fbcae` (T-085: done; handoff to T-088), pushed
-  to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45837320776
-  (workflow `quality`, ran on `62fbcae`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T15:25:50+01:00`
+- **Describes commit:** `<hash>` (T-088: done; handoff to T-086), pushed
+  to `ZanichelliEditore/freshdesk-mcp`. **CI:** `<filled at stamp>`.
 
-- **Current task:** T-085 `done (2026-11-26)`: `forward_ticket` in
-  `send`. See `docs/tasks/T-085-forward-ticket.md` "Done". Commits
-  `e4fea35` (tool, shared `outcome.ts`, tests, docs), `b81f4cb` (review
-  fixes), then this handoff commit. Started from `5ff440b`.
-  Decisions taken in session (small, recorded in the task file): the
-  result rule moved to `src/tools/toolsets/send/outcome.ts`, shared by
-  `reply_to_ticket` and `forward_ticket` (OD-27 as amended: 408 after
-  dispatch `may_have_been_sent`, 409 not); a 408 reads "timed out"; an
-  error after dispatch drops `retry_after_s`.
+- **Current task:** T-088 `done (2026-11-26)`: `add_public_note` in
+  `send`. See `docs/tasks/T-088-add-public-note.md` "Done". Commits
+  `d8e144d` (tool, wiring, `SendKind` `"public note"`, tests, docs),
+  `1038b08` (review fixes, tests only), then this handoff commit. Started
+  from `5640358`. Decisions taken in session (small, recorded in the task
+  file): name `add_public_note` kept; failure wording "The public note may
+  have been sent"; the description points to `add_note` for a private note.
 
-- **Next action:** `/pickup` T-088 (`add_public_note`; depends on T-082,
-  T-083, T-084, T-089, all `done`).
+- **Next action:** `/pickup` T-086 (smoke send script; depends on T-084,
+  T-085, T-088, all `done`).
 
-- **Read before anything else:** `docs/tasks/T-088-add-public-note.md`;
-  `src/tools/toolsets/send/outcome.ts` (`SendKind` has `reply` and
-  `forward` only: add `public note`) and `forward-ticket.ts` as the
-  pattern; `src/tools/toolsets/send/index.ts`; the `d8b6828` entry in
-  `docs/improvements.md` (T-088 part still open).
+- **Read before anything else:** `docs/tasks/T-086-smoke-send.md`; T-075's smoke
+  write script `scripts/smoke/write.ts` and its test as the pattern;
+  `src/core/recipients.ts` (T-081's matcher, reused for the A4 case);
+  `docs/improvements.md` entries naming T-086 (`eff63e8`: a forward needs
+  no requester email; the GET-then-POST CC gap).
 
 - **Owner, open:** T-087 waits only on T-086. OD-34: no npm release
   accepting `send` (any tag from `1ef27e0` on) until T-087 is `done`.
 
-- **Reviews:** full round, R1 = `e4fea35`, range `5ff440b..e4fea35`.
+- **Reviews:** full round, R1 = `d8e144d`, range `5640358..d8e144d`.
   compliance-reviewer: Wireframes `none`, nothing to check.
-  security-reviewer: no findings; info: the description does not say
-  private notes may be forwarded (unchecked, A5; open doubt for T-087).
-  code-reviewer: clean; low, improvements entries `4cc147b`/`775053d`
-  not marked taken (fixed `b81f4cb`); low, no tool-level "exactly 10
-  recipients accepted" test (added `b81f4cb`); info, the forward's Not
-  sent note's missing CC sentence unasserted (added `b81f4cb`); info, the
-  408 message replaced, not prefixed (by design, dismissed). All four
-  quotes matched in all three. Fixes are tests and docs, no mechanism
-  changed: no scoped round.
+  security-reviewer: no findings; info, the SDK's zod "Input validation
+  error" text unchecked for echoing a caller-typed value (parked).
+  code-reviewer: clean; low, body-refusal tests asserted only `isError`
+  (fixed `1038b08`); low, the network-error test did not pin "public note"
+  (fixed `1038b08`); info, an answer `private: true` reported sent (parked,
+  core change); info, stale "not built" docs (grepped, none). All four
+  quotes matched in all three. Fixes are tests only, no mechanism changed:
+  no scoped round.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - Private notes in a forward (A5) unchecked: revisit
-    `forward_ticket`'s description after T-087.
+  - A public note Freshdesk answers `private: true` is reported sent
+    without saying so (fails safe); T-087's A3 shows the answer.
+  - Private notes in a forward (A5) unchecked: revisit `forward_ticket`'s
+    description after T-087.
   - Whether a forward copies the ticket's existing CCs (A2/A5) unchecked;
     T-086 refuses a forward on a ticket with CCs.
   - Carried from T-089: whether anything in front of Freshdesk answers 408
@@ -62,6 +58,6 @@
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `b81f4cb`'s tree plus the
-  improvements marks. Vitest "Test Files 56 passed (56)", "Tests 4697
-  passed (4697)"; `tools/checks` "Ran 138 tests", OK.
+- **Checkpoint:** `make quality` exit 0 on `1038b08`'s tree. Vitest "Test
+  Files 57 passed (57)", "Tests 4732 passed (4732)"; `tools/checks` "Ran
+  138 tests", OK.
