@@ -75,7 +75,9 @@
       "value": [
         "./update-ticket.js",
         "./add-note.js",
+        "./categorize-tickets.js",
         "../../format.js",
+        "../../preview.js",
         "../../../client/resources/tickets.js"
       ],
       "type": ["../index.js", "../../../schema/index.js", "../../../client/errors.js"]

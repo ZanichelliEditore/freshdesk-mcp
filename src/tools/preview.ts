@@ -30,6 +30,12 @@
 //     15 minutes checks again and re-sends identical values.
 //   - The cap, PREVIEW_CAP tickets, is refused at mint and at check, never
 //     truncated; no items and a ticket named twice are refused too.
+//   - A check that passes gives back the items it checked (T-073; docs/
+//     improvements.md 70be151, f64d743): each a fresh `{ ticket_id, fields }`,
+//     `fields` parsed from the very text the tags were checked on. The items
+//     are read once; any other key of a confirm item is not passed on, and a
+//     getter or Proxy cannot answer differently at the write. A confirm writes
+//     these, never the items it was given.
 //   - Every refusal is a `validation` error with `http_status: null`, and no
 //     message quotes the id. The items and the id are model-supplied: a value
 //     of any other shape (a cast, a throwing getter or Proxy included) is
@@ -63,7 +69,7 @@ export interface PreviewItem {
 }
 
 export type MintResult = { ok: true; preview_id: string } | { ok: false; error: FreshdeskError };
-export type CheckResult = { ok: true } | { ok: false; error: FreshdeskError };
+export type CheckResult = { ok: true; items: PreviewItem[] } | { ok: false; error: FreshdeskError };
 
 interface Entry {
   ticketId: number;
@@ -122,7 +128,11 @@ export function checkPreviewId(
   const age = Date.now() - time;
   if (age < 0) return refuse("the preview_id's mint time is ahead of this server's clock", true);
   if (age > PREVIEW_TTL_MS) return refuse("the preview_id is older than 15 minutes", true);
-  return { ok: true };
+  const checked = read.entries.map((entry) => ({
+    ticket_id: entry.ticketId,
+    fields: JSON.parse(entry.fieldsText) as Record<string, unknown>,
+  }));
+  return { ok: true, items: checked };
 }
 
 function tag(tool: string, time: number, nonce: string, entry: Entry): string {
@@ -165,11 +175,11 @@ function readEntries(
     }
     if (seen.has(ticketId as number)) return refuse("a ticket is named twice", confirm);
     seen.add(ticketId as number);
-    if (!isPlainObject(item.fields)) {
-      return refuse("a ticket's fields are not an object", confirm);
-    }
+    // Read once: the object checked is the object canonical reads.
+    const fields = item.fields;
+    if (!isPlainObject(fields)) return refuse("a ticket's fields are not an object", confirm);
     // `canonical` throws a TypeError for a value that is not JSON: refused by readItems.
-    entries.push({ ticketId: ticketId as number, fieldsText: canonical(item.fields) });
+    entries.push({ ticketId: ticketId as number, fieldsText: canonical(fields) });
   }
   return { ok: true, entries };
 }

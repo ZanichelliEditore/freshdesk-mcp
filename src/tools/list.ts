@@ -271,10 +271,13 @@ export function canonical(value: unknown, omit?: string): string {
     const proto: unknown = Object.getPrototypeOf(value);
     if (proto === Object.prototype || proto === null) {
       const record = value as Record<string, unknown>;
-      const parts = Object.keys(record)
-        .sort()
-        .filter((key) => key !== omit && record[key] !== undefined)
-        .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`);
+      const parts: string[] = [];
+      for (const key of Object.keys(record).sort()) {
+        if (key === omit) continue;
+        // Read once: a getter cannot give one value to the check and another to the text.
+        const item = record[key];
+        if (item !== undefined) parts.push(`${JSON.stringify(key)}:${canonical(item)}`);
+      }
       return `{${parts.join(",")}}`;
     }
   }

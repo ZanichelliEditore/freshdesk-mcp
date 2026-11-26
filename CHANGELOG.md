@@ -14,6 +14,11 @@ and stay 0.x until milestone M4, then 1.0.0.
 - **Added:** `add_note` in `write`: a private note on a ticket, always
   private, notifying agents named by id (looked up with `list_agents`). It
   returns the note's id and the agent ids notified, never an email address.
+- **Added:** `categorize_tickets` in `write`: the ticket type and custom
+  fields on up to 50 tickets, previewed first (current and new values, and
+  a `preview_id`), then applied with `confirm: true`, one ticket at a time,
+  with a result per ticket. Tickets the call's time or the API budget left
+  are reported not attempted, and the same `preview_id` applies them later.
 
 ## 0.3.1 (2026-11-25)
 

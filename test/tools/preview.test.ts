@@ -70,19 +70,19 @@ function ticket(id: number, fields: Record<string, unknown> = { Category: "Other
 
 describe("mintPreviewId / checkPreviewId: what checks", () => {
   it("a minted id checks against the same items, in the same order", () => {
-    expect(checkPreviewId(TOOL, minted(), ITEMS)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, minted(), ITEMS)).toMatchObject({ ok: true });
   });
 
   it("a minted id checks against the same items in any order", () => {
     const id = minted();
-    expect(checkPreviewId(TOOL, id, [...ITEMS].reverse())).toEqual({ ok: true });
-    expect(checkPreviewId(TOOL, id, [ITEMS[1]!, ITEMS[2]!, ITEMS[0]!])).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, [...ITEMS].reverse())).toMatchObject({ ok: true });
+    expect(checkPreviewId(TOOL, id, [ITEMS[1]!, ITEMS[2]!, ITEMS[0]!])).toMatchObject({ ok: true });
   });
 
   it("the order of a ticket's field keys does not matter", () => {
     const id = minted();
     const reordered = { ticket_id: 101, fields: { "Sub-category": "Refund", Category: "Billing" } };
-    expect(checkPreviewId(TOOL, id, [ITEMS[2]!, reordered, ITEMS[1]!])).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, [ITEMS[2]!, reordered, ITEMS[1]!])).toMatchObject({ ok: true });
   });
 
   it("any subset of the previewed items, fields unchanged, checks", () => {
@@ -95,32 +95,32 @@ describe("mintPreviewId / checkPreviewId: what checks", () => {
           id,
           subset.map((i) => ITEMS[i]!),
         ),
-      ).toEqual({ ok: true });
+      ).toMatchObject({ ok: true });
     }
   });
 
   it("no server state: a repeat within 15 minutes also checks", () => {
     const id = minted();
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, ITEMS)).toMatchObject({ ok: true });
     setClock(T0 + 60_000);
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
-    expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toEqual({ ok: true });
-    expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, ITEMS)).toMatchObject({ ok: true });
+    expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toMatchObject({ ok: true });
+    expect(checkPreviewId(TOOL, id, [ITEMS[0]!])).toMatchObject({ ok: true });
   });
 
   it("two previews of the same items give different ids, each of which checks", () => {
     const a = minted();
     const b = minted();
     expect(a).not.toBe(b);
-    expect(checkPreviewId(TOOL, a, ITEMS)).toEqual({ ok: true });
-    expect(checkPreviewId(TOOL, b, ITEMS)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, a, ITEMS)).toMatchObject({ ok: true });
+    expect(checkPreviewId(TOOL, b, ITEMS)).toMatchObject({ ok: true });
   });
 
   it("an id is at most PREVIEW_ID_MAX_LENGTH characters at the cap, and checks", () => {
     const full = Array.from({ length: PREVIEW_CAP }, (_, i) => ticket(i + 1));
     const id = minted(full);
     expect(id.length).toBeLessThanOrEqual(PREVIEW_ID_MAX_LENGTH);
-    expect(checkPreviewId(TOOL, id, full)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, full)).toMatchObject({ ok: true });
   });
 });
 
@@ -220,13 +220,13 @@ describe("checkPreviewId: what is refused (validation, http_status null, id not 
     refusal(other.checkPreviewId(TOOL, id, ITEMS));
     expect(JSON.stringify(refusal(other.checkPreviewId(TOOL, id, ITEMS)))).not.toContain(id);
     // The id still checks in the process that minted it.
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, ITEMS)).toMatchObject({ ok: true });
   });
 
   it("an id older than 15 minutes; one exactly 15 minutes old still checks", () => {
     const id = minted();
     setClock(T0 + PREVIEW_TTL_MS);
-    expect(checkPreviewId(TOOL, id, ITEMS)).toEqual({ ok: true });
+    expect(checkPreviewId(TOOL, id, ITEMS)).toMatchObject({ ok: true });
     setClock(T0 + PREVIEW_TTL_MS + 1);
     const error = refusedWithoutQuoting(id, ITEMS);
     expect(error.message).toContain("15 minutes");
@@ -343,5 +343,55 @@ describe("mintPreviewId: what is refused", () => {
     ],
   ])("items given by a cast: %s", (_label, items) => {
     refusal(mintPreviewId(TOOL, items as PreviewItem[]));
+  });
+});
+
+// docs/improvements.md 70be151 and f64d743 (T-073): a confirm writes only the
+// ticket_id and fields the check authenticated, as it read them once.
+describe("checkPreviewId: the checked items it gives back", () => {
+  function checked(result: ReturnType<typeof checkPreviewId>): PreviewItem[] {
+    if (!result.ok) throw new Error(`check refused: ${result.error.message}`);
+    return result.items;
+  }
+
+  it("gives each item's ticket_id and fields, in the confirm's order, as the tags cover them", () => {
+    const id = minted();
+    const items = checked(checkPreviewId(TOOL, id, [ITEMS[2]!, ITEMS[0]!]));
+    expect(items).toEqual([ITEMS[2], ITEMS[0]]);
+  });
+
+  it("gives only ticket_id and fields: another key of a confirm item is not passed on", () => {
+    const id = minted();
+    const extra = { ...ITEMS[0]!, private: false, method: "DELETE" } as PreviewItem;
+    const items = checked(checkPreviewId(TOOL, id, [extra]));
+    expect(items).toEqual([ITEMS[0]]);
+    expect(Object.keys(items[0]!)).toEqual(["ticket_id", "fields"]);
+  });
+
+  it("gives fresh objects, not the caller's: a change to them after the check is not written", () => {
+    const id = minted();
+    const mine = { ticket_id: 101, fields: { ...ITEMS[0]!.fields } };
+    const items = checked(checkPreviewId(TOOL, id, [mine]));
+    expect(items[0]).not.toBe(mine);
+    expect(items[0]!.fields).not.toBe(mine.fields);
+    mine.fields.Category = "Changed after the check";
+    expect(items[0]!.fields).toEqual(ITEMS[0]!.fields);
+  });
+
+  it("reads a getter once: the fields given back are those the tags were checked on", () => {
+    const id = minted();
+    let reads = 0;
+    const fields = {};
+    Object.defineProperty(fields, "Category", {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "Billing" : "Read twice";
+      },
+    });
+    Object.defineProperty(fields, "Sub-category", { enumerable: true, value: "Refund" });
+    const items = checked(checkPreviewId(TOOL, id, [{ ticket_id: 101, fields }]));
+    expect(reads).toBe(1);
+    expect(items[0]!.fields).toEqual(ITEMS[0]!.fields);
   });
 });

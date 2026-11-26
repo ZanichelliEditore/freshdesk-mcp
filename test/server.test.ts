@@ -201,7 +201,11 @@ describe("createServer: enabled toolsets come from the team file only", () => {
 
   it("with write alone, lists the write tools and no core tool", async () => {
     const tools = await listTools(await open(serverFor(undefined, { toolsets: ["write"] })));
-    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket", "add_note"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "update_ticket",
+      "add_note",
+      "categorize_tickets",
+    ]);
   });
 
   it("without write in the team file, update_ticket is absent", async () => {
@@ -390,14 +394,22 @@ describe("the write wiring (src/tools/toolsets/write/index.ts)", () => {
       expect(args[0]).toBe(entries[name as keyof typeof entries]);
       expect(args[0]).not.toBe(entries);
     }
-    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket", "add_note"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "update_ticket",
+      "add_note",
+      "categorize_tickets",
+    ]);
     expect(Object.isFrozen(tools)).toBe(true);
   });
 
   it("the real wiring gives the write tools, each complete enough to register", async () => {
     const server = serverFor({ write: writeTools(fakeEntries()) }, { toolsets: ["write"] });
     const tools = await listTools(await open(server));
-    expect(tools.map((tool) => tool.name)).toEqual(["update_ticket", "add_note"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "update_ticket",
+      "add_note",
+      "categorize_tickets",
+    ]);
   });
 });
 
