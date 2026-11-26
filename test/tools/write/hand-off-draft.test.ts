@@ -17,7 +17,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { loadConfig } from "../../../src/config.js";
 import { createServer } from "../../../src/server.js";
 import { createContext } from "../../../src/tools/context.js";
-import { DRAFT_HEADER } from "../../../src/tools/toolsets/write/hand-off-draft.js";
+import { DRAFT_HEADER, handOffDraft } from "../../../src/tools/toolsets/write/hand-off-draft.js";
 import { agentPages, groupPages } from "../../fixtures/agents-groups.js";
 import { rawTicket, schemaFieldsPayload } from "../../fixtures/schema.js";
 import {
@@ -41,6 +41,8 @@ const AGENTS = "/api/v2/agents?per_page=100";
 const GROUPS = "/api/v2/groups?per_page=100";
 const TICKET = `/api/v2/tickets/${ID}`;
 const NOTES = `${TICKET}/notes`;
+/** The fixture's agent field. */
+const AGENT_FIELD = schemaFieldsPayload.find((field) => field.name === "agent");
 const DRAFT = "Hello, the refund was issued today; it reaches your card within 5 days.";
 
 const dir = mkdtempSync(join(tmpdir(), "freshdesk-mcp-hand-off-draft-"));
@@ -163,6 +165,7 @@ function output(result: CallResult): Record<string, unknown> {
 interface SentError {
   code: string;
   http_status: number | null;
+  retryable?: boolean;
   message: string;
   errors?: { field?: string; code?: string; message: string }[];
 }
@@ -218,6 +221,38 @@ describe("hand_off_draft: the note, then the assignment", () => {
     expect(bodyOf("PUT")).toEqual({ group_id: 703 });
   });
 
+  it("looks a repeated agent id up once and lists it once", async () => {
+    const s = await warm();
+    replyAgent(502);
+    replyNote();
+    replyPut();
+
+    const result = await callTool(s, TOOL, {
+      ticket_id: ID,
+      draft: DRAFT,
+      fields: { agent: 502 },
+      notify_agent_ids: [502, 502],
+    });
+
+    expect(output(result)).toMatchObject({ notified_agent_ids: [502], api_calls_used: 3 });
+    expect(sent()).toEqual(["GET /api/v2/agents/502", `POST ${NOTES}`, `PUT ${TICKET}`]);
+  });
+
+  it("hands over to a group with the agent cleared: null clears the agent in the same PUT", async () => {
+    const s = await warm();
+    replyNote();
+    replyPut();
+
+    const result = await callTool(s, TOOL, {
+      ticket_id: ID,
+      draft: DRAFT,
+      fields: { group: "Widget Desk", agent: null },
+    });
+
+    expect(output(result)).toMatchObject({ assigned: true });
+    expect(bodyOf("PUT")).toEqual({ group_id: 702, responder_id: null });
+  });
+
   it("counts a cold schema load in api_calls_used", async () => {
     const s = await cold();
     reply(FIELDS, schemaFieldsPayload);
@@ -264,6 +299,18 @@ describe("hand_off_draft: a refused note sends no PUT", () => {
     const result = await callTool(s, TOOL, { ticket_id: ID, draft: DRAFT, fields: { agent: 501 } });
 
     expect(failure(result)).toMatchObject({ code: "not_found", http_status: 404 });
+    expect(sent()).toEqual([`POST ${NOTES}`]);
+  });
+
+  it("a note POST answered 5xx: no PUT, the error says the note may have been written", async () => {
+    const s = await warm();
+    replyNote({ description: "oops" }, 500);
+
+    const result = await callTool(s, TOOL, { ticket_id: ID, draft: DRAFT, fields: { agent: 501 } });
+
+    const error = failure(result);
+    expect(error).toMatchObject({ code: "server", http_status: 500, retryable: false });
+    expect(error.message).toMatch(/note may have been written/);
     expect(sent()).toEqual([`POST ${NOTES}`]);
   });
 
@@ -324,11 +371,47 @@ describe("hand_off_draft: a PUT that fails after the note", () => {
     });
 
     const error = failure(result);
-    expect(error).toMatchObject({ code: "server", http_status: 500 });
+    expect(error).toMatchObject({ code: "server", http_status: 500, retryable: false });
     expect(error.message).toContain(`note_id ${NOTE_ID}`);
-    expect(error.message).toMatch(/assignment failed/i);
-    expect(error.message).toMatch(/not retried/i);
+    expect(error.message).toMatch(/may or may not have been applied/);
+    expect(error.message).toContain("update_ticket");
+    expect(error.message).toMatch(/Do not call hand_off_draft again/);
+    expect(error.message).toMatch(/did not retry/);
     expect(sent()).toEqual([`POST ${NOTES}`, `PUT ${TICKET}`]);
+  });
+
+  it("a PUT refused rate_limited: not retryable, the assignment not applied, never 'safe to try again'", async () => {
+    // The tool on fake entries: the client's 10 s rule, as the core passes it back.
+    const tool = handOffDraft({
+      note: async () => ({ ok: true, value: noteAnswer(), attempts: 1 }),
+      assign: async () => ({
+        ok: false,
+        error: {
+          code: "rate_limited",
+          http_status: null,
+          message: "Not sent: too little time. Nothing was applied: it is safe to try again.",
+          retryable: true,
+          retry_after_s: 5,
+        },
+        attempts: 0,
+      }),
+    });
+    const context = {
+      schema: { get: async () => ({ ok: true, schema: { fields: [AGENT_FIELD] }, attempts: 0 }) },
+    };
+
+    const result = await tool.handler(
+      { ticket_id: ID, draft: DRAFT, fields: { agent: 501 } },
+      context as never,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatchObject({ code: "rate_limited", retryable: false });
+    expect(result.error.retry_after_s).toBeUndefined();
+    expect(result.error.message).toContain(`note_id ${NOTE_ID}`);
+    expect(result.error.message).toMatch(/assignment was not applied/);
+    expect(result.error.message).not.toMatch(/safe to try again/);
   });
 
   it("a value the core refuses: the note stays, no PUT sent, the error names the note_id", async () => {
@@ -342,8 +425,9 @@ describe("hand_off_draft: a PUT that fails after the note", () => {
     });
 
     const error = failure(result);
-    expect(error).toMatchObject({ code: "validation", http_status: null });
+    expect(error).toMatchObject({ code: "validation", http_status: null, retryable: false });
     expect(error.message).toContain(`note_id ${NOTE_ID}`);
+    expect(error.message).toMatch(/assignment was not applied/);
     expect(error.errors?.[0]?.field).toBe("agent");
     expect(sent()).toEqual([`POST ${NOTES}`]);
   });
@@ -411,9 +495,37 @@ describe("hand_off_draft: fields outside group and agent", () => {
     expect(sent()).toEqual([]);
   });
 
+  it("refuses a key that names several fields, with nothing sent", async () => {
+    const s = await cold();
+    reply(FIELDS, [
+      ...schemaFieldsPayload,
+      { id: 1099, name: "cf_agent", label: "Agent", type: "custom_text", default: false },
+    ]);
+    reply(AGENTS, agentPages.flat());
+    reply(GROUPS, groupPages.flat());
+
+    const error = failure(
+      await callTool(s, TOOL, { ticket_id: ID, draft: DRAFT, fields: { Agent: 501 } }),
+    );
+
+    expect(error.errors?.map((item) => item.code)).toEqual(["ambiguous_field"]);
+    expect(sent().filter((line) => !line.startsWith("GET "))).toEqual([]);
+  });
+
+  it("lists at most 10 field problems and says how many more there are", async () => {
+    const s = await warm();
+    const fields = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`nope${i}`, 1]));
+
+    const error = failure(await callTool(s, TOOL, { ticket_id: ID, draft: DRAFT, fields }));
+
+    expect(error.errors).toHaveLength(10);
+    expect(error.message).toContain("2 more problems are not listed");
+    expect(sent()).toEqual([]);
+  });
+
   it("a schema that cannot load refuses the call, with no note", async () => {
     const s = await cold();
-    reply(FIELDS, { description: "oops" }, "GET", 500);
+    reply(FIELDS, { description: "no" }, "GET", 401);
 
     const result = await callTool(s, TOOL, { ticket_id: ID, draft: DRAFT, fields: { agent: 501 } });
 

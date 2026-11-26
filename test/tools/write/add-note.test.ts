@@ -235,6 +235,28 @@ describe("add_note: a note Freshdesk answers as public", () => {
   });
 });
 
+describe("add_note: a POST whose outcome is unknown", () => {
+  it("a 5xx says the note may have been written, and is not retryable", async () => {
+    const s = await session();
+    replyNote({ description: "oops" }, 500);
+
+    const error = failure(await callTool(s, TOOL, { ticket_id: ID, body: BODY }));
+
+    expect(error).toMatchObject({ code: "server", http_status: 500 });
+    expect(error.message).toMatch(/note may have been written/);
+    expect(sent()).toEqual([`POST ${NOTES}`]);
+  });
+
+  it("a 404 is plain not_found, with no such hint", async () => {
+    const s = await session();
+    replyNote({ description: "not found" }, 404);
+
+    const error = failure(await callTool(s, TOOL, { ticket_id: ID, body: BODY }));
+
+    expect(error.message).not.toMatch(/may have been written/);
+  });
+});
+
 describe("add_note: inputs it refuses, with nothing sent", () => {
   it.each([
     ["private: true", { private: true }],

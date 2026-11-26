@@ -23,6 +23,9 @@
 //     at sign (`@`, fullwidth `＠`, or its HTML entity `&#64;`, `&#x40;`,
 //     `&commat;`) replaced with `[address]` before it is returned. Words are
 //     split on whitespace and each tested once: linear, no backtracking.
+//   - A POST answered `server` or `network` (a 5xx, a timeout, an answer of
+//     another shape) may have been applied: the error says the note may have
+//     been written and to check the ticket before calling again.
 //   - A note Freshdesk answers `private: false` (owner, 2026-11-26) is an
 //     error, `server`, naming the `note_id` and saying the note is public and
 //     must be checked: the core sent `private: true`, so such an answer means
@@ -83,6 +86,19 @@ export function publicNote(noteId: number, after = ""): { ok: false; error: Fres
   };
 }
 
+/** A note's failure as the caller sees it: no address, and a sent POST's unknown outcome said. */
+export function noteFailed(error: FreshdeskError): { ok: false; error: FreshdeskError } {
+  const shown = withoutAddresses(error);
+  if (shown.code !== "server" && shown.code !== "network") return { ok: false, error: shown };
+  return {
+    ok: false,
+    error: {
+      ...shown,
+      message: `${shown.message} The note may have been written, and the agents emailed: check the ticket's notes before calling again.`,
+    },
+  };
+}
+
 /** The error with every address in its field errors replaced. */
 export function withoutAddresses(error: FreshdeskError): FreshdeskError {
   if (error.errors === undefined) return { ...error, message: hide(error.message) };
@@ -124,7 +140,7 @@ export function addNote(entry: AddNoteEntry): Tool<typeof input> {
         notify: ids,
         deadline: Date.now() + CALL_DEADLINE_MS,
       });
-      if (!result.ok) return { ok: false, error: withoutAddresses(result.error) };
+      if (!result.ok) return noteFailed(result.error);
       if (result.value.private !== true) return publicNote(result.value.id);
       return {
         ok: true,
