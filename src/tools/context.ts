@@ -5,7 +5,9 @@
 //     invariant 1) builds the one client on the one limiter, from the team
 //     `limits`, and keeps it. The context holds only its GET-only view:
 //     `http` refuses any method but GET, in the type and at runtime, with
-//     nothing sent.
+//     nothing sent. It also gets the team `toolsets`, so its write entries
+//     exist only with `write`; they are not on the context (T-071 hands each
+//     write tool its own).
 //   - One schema service on that view, its TTL `limits.schema_ttl_s`.
 //   - The team settings (`team`): field meanings, limits, toolsets. They are
 //     the context's own frozen copy, and the context object is frozen: a
@@ -72,6 +74,7 @@ export function createContext(config: Config, dispatcher: Dispatcher): AppContex
     ...(config.hostOverride === undefined ? {} : { hostOverride: config.hostOverride }),
     dispatcher,
     limits: team.limits,
+    toolsets: team.toolsets,
   }).view;
   return Object.freeze({
     http,

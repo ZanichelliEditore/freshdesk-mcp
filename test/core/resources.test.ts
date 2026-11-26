@@ -200,6 +200,64 @@ describe.each(writes)("$name", (write) => {
     expect(reads).toBe(1);
   });
 
+  it.each<[string, () => Record<string, unknown>]>([
+    ["whose top-level toJSON returns null", () => ({ toJSON: () => null })],
+    ["whose top-level toJSON returns a string", () => ({ toJSON: () => "status=5" })],
+    ["whose top-level toJSON returns a list", () => ({ toJSON: () => [{ status: 5 }] })],
+    ["whose top-level toJSON returns undefined", () => ({ toJSON: () => undefined })],
+  ])("refuses a body %s as validation, with nothing sent", async (_, body) => {
+    const result = await settle(write.call(42, body()));
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "validation",
+        http_status: null,
+        message: "Not sent: the body is not a JSON object.",
+        retryable: false,
+      },
+      attempts: 0,
+    });
+    expect(mock.getCallHistory()?.calls() ?? []).toHaveLength(0);
+  });
+
+  it.each<[string, () => Record<string, unknown>]>([
+    ["a BigInt", () => ({ status: 10n })],
+    [
+      "a cycle",
+      () => {
+        const body: Record<string, unknown> = { status: 2 };
+        body.self = body;
+        return body;
+      },
+    ],
+    [
+      "a toJSON that throws",
+      () => ({
+        toJSON: () => {
+          throw new Error("boom");
+        },
+      }),
+    ],
+  ])(
+    "resolves a body holding %s to validation, with nothing sent, not a rejection",
+    async (_, body) => {
+      const result = await settle(write.call(42, body()));
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "validation",
+          http_status: null,
+          message: "Not sent: the body cannot be sent as JSON.",
+          retryable: false,
+        },
+        attempts: 0,
+      });
+      expect(mock.getCallHistory()?.calls() ?? []).toHaveLength(0);
+    },
+  );
+
   it("returns a 4xx unchanged, not retried", async () => {
     on(write, 42).reply(
       400,

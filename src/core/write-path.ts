@@ -29,10 +29,38 @@
 // eslint.tool-imports.json (test/lint-rules.test.ts). src/tools/context.ts,
 // exempt from the list as the one file that builds the context, imports it.
 //
-// The write entry points (invariants 2, 3, 5, 6) are T-068's; notify
-// (invariant 4) is T-069's. Until then the write path sends no write.
+// And invariants 2, 3, 5 and 6 (T-068), the write entry points:
+//   - Built only when `write` is in the team's `toolsets` (`send` alone gives
+//     none): with it absent, the write path has no `entries` key at all, so a
+//     disabled toolset has nothing to call, by construction.
+//   - One frozen entry per write tool, keyed by entry point: `update_ticket`,
+//     `categorize_tickets`, `hand_off_draft` (its note and its assignment) and
+//     `add_note`. Each entry closes over its own allow set
+//     (src/core/allow-sets.ts): no input names a set, so a tool handed its own
+//     entry cannot write with another's (T-071 hands them out).
+//   - A ticket entry builds the body through `ticketInput` with its set; a
+//     field outside it is `field_not_writable`, nothing sent. The body's
+//     top-level keys are then checked against the keys the set's fields map
+//     to (plus `custom_fields` when the set takes custom fields, and `tags`
+//     when it takes tags): the schema is the tool's, so one forged by a cast
+//     (a default field turned into a nested field whose level is named
+//     `requester_id`) still cannot send a key outside the set. A value
+//     inside the set is checked against that schema's choices only.
+//   - `tags` is read by `update_ticket`'s entry only, as the ticket's whole
+//     tag list (the tool merges add/remove from the current tags), a list
+//     of strings; another entry never reads the key.
+//   - A note entry takes the ticket id and the body, and nothing that names
+//     a note's visibility or author: the payload is built here from a closed
+//     key set, `{ body, private: true }` (`notify_emails` is T-069's,
+//     invariant 4), so `private: false`, `user_id`, `incoming` or attachments
+//     never reach Freshdesk, even passed by a cast.
+//   - An entry never rejects. Every refusal is `validation`, `http_status:
+//     null`, with nothing sent, per-field entries where a field is the cause;
+//     an input that throws when read (a cast's getter, `null`) is one too.
+//     The writes go through src/core/resources.ts, whose snapshot refuses a
+//     body JSON cannot carry.
 
-import type { FreshdeskError } from "../client/errors.js";
+import type { FieldError, FreshdeskError } from "../client/errors.js";
 import {
   type GetHttp,
   type GetRequest,
@@ -46,22 +74,142 @@ import {
   type RetryResult,
 } from "../client/http.js";
 import { RateLimiter, type RateLimitOptions } from "../client/rate-limit.js";
+import type { Conversation, Ticket } from "../client/resources/tickets.js";
+import type { Schema } from "../schema/index.js";
+import { ticketInput } from "../schema/input.js";
+import { ticketKey } from "../schema/output.js";
+import { type AllowSet, allowSet, type WriteEntry } from "./allow-sets.js";
+import { notSent, postNote, putTicket, type WriteResult } from "./resources.js";
 
 export interface WritePathOptions extends Omit<HttpClientOptions, "limiter"> {
   /** The team's `limits`: the one limiter is built on them. */
   limits: RateLimitOptions;
+  /** The team's `toolsets`: the write entries are built only when `write` is among them. */
+  toolsets: readonly string[];
 }
 
 export interface WritePath {
   /** The GET-only view on the one client: what every module outside the core gets. */
   readonly view: GetHttp;
+  /** The write entry points; the key is absent unless `write` is enabled. */
+  readonly entries?: WriteEntries;
+}
+
+/** A ticket change: fields by API name or label, as `ticketInput` takes them. */
+export interface TicketChange {
+  /** The schema the fields are checked against (the tool's, from `context.schema`). */
+  schema: Schema;
+  id: number;
+  fields: Record<string, unknown>;
+  /** Epoch ms, the caller's: see `requestWithRetry`. */
+  deadline?: number;
+}
+
+/** `update_ticket`'s change: also the ticket's whole tag list, when it changes. */
+export interface TagChange extends TicketChange {
+  tags?: readonly string[];
+}
+
+/** A note: the ticket and the body. Always private; no other key is sent. */
+export interface NoteInput {
+  id: number;
+  body: string;
+  /** Epoch ms, the caller's: see `requestWithRetry`. */
+  deadline?: number;
+}
+
+type TicketWrite<C> = (change: C) => Promise<WriteResult<Ticket>>;
+type NoteWrite = (note: NoteInput) => Promise<WriteResult<Conversation>>;
+
+/** One entry per write tool (RFC 2026-11-25-write-safety-core, invariant 2). */
+export interface WriteEntries {
+  readonly update_ticket: { readonly update: TicketWrite<TagChange> };
+  readonly categorize_tickets: { readonly update: TicketWrite<TicketChange> };
+  readonly hand_off_draft: { readonly note: NoteWrite; readonly assign: TicketWrite<TicketChange> };
+  readonly add_note: { readonly note: NoteWrite };
 }
 
 /** Throws what `HttpClient`'s constructor throws (`ConfigError`), and the limiter's `RangeError`. */
 export function createWritePath(options: WritePathOptions): WritePath {
-  const { limits, ...client } = options;
+  const { limits, toolsets, ...client } = options;
   const http = new HttpClient({ ...client, limiter: new RateLimiter(limits) });
-  return Object.freeze({ view: new GetView(http) });
+  const view = new GetView(http);
+  if (!toolsets.includes("write")) return Object.freeze({ view });
+  return Object.freeze({ view, entries: writeEntries(http) });
+}
+
+function writeEntries(http: HttpClient): WriteEntries {
+  const ticket = (entry: WriteEntry) => {
+    const allow = allowSet(entry);
+    return (change: TagChange) => ticketWrite(http, allow, change);
+  };
+  const note: NoteWrite = (input) => noteWrite(http, input);
+  return Object.freeze({
+    update_ticket: Object.freeze({ update: ticket("update_ticket") }),
+    categorize_tickets: Object.freeze({ update: ticket("categorize_tickets") }),
+    hand_off_draft: Object.freeze({ note, assign: ticket("hand_off_draft") }),
+    add_note: Object.freeze({ note }),
+  });
+}
+
+function fieldRefusal(errors: FieldError[]): { ok: false; error: FreshdeskError; attempts: 0 } {
+  const refusal = notSent("Some ticket fields are not valid; nothing was sent.");
+  return { ...refusal, error: { ...refusal.error, errors } };
+}
+
+const UNREADABLE = "Not sent: the write's input could not be read.";
+
+/** The top-level body keys the set's fields map to. */
+function allowedKeys(allow: AllowSet): Set<string> {
+  const keys = new Set(allow.defaults.map((name) => ticketKey(name, true)));
+  if (allow.custom) keys.add("custom_fields");
+  if (allow.tags) keys.add("tags");
+  return keys;
+}
+
+async function ticketWrite(
+  http: HttpClient,
+  allow: AllowSet,
+  change: TagChange,
+): Promise<WriteResult<Ticket>> {
+  let id: number;
+  let deadline: number | undefined;
+  let body: Record<string, unknown>;
+  try {
+    ({ id, deadline } = change);
+    const built = ticketInput(change.schema, change.fields, allow);
+    if (!built.ok) return { ok: false, error: built.error, attempts: 0 };
+    body = built.body;
+    if (allow.tags && change.tags !== undefined) {
+      const tags: unknown = change.tags;
+      if (!Array.isArray(tags) || !tags.every((tag) => typeof tag === "string")) {
+        return fieldRefusal([
+          { field: "tags", code: "invalid_value", message: "Tags are a list of strings." },
+        ]);
+      }
+      body = { ...body, tags: [...tags] };
+    }
+    const allowed = allowedKeys(allow);
+    if (!Object.keys(body).every((key) => allowed.has(key))) {
+      return notSent("Not sent: the body holds a key this tool cannot set.");
+    }
+  } catch {
+    return notSent(UNREADABLE);
+  }
+  return putTicket(http, id, body, deadline);
+}
+
+async function noteWrite(http: HttpClient, input: NoteInput): Promise<WriteResult<Conversation>> {
+  let id: number;
+  let deadline: number | undefined;
+  let body: unknown;
+  try {
+    ({ id, body, deadline } = input);
+  } catch {
+    return notSent(UNREADABLE);
+  }
+  // The closed key set: a note from a write entry is private, always.
+  return postNote(http, id, { body, private: true }, deadline);
 }
 
 function notGet(): { ok: false; error: FreshdeskError } {

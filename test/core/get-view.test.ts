@@ -31,7 +31,13 @@ afterEach(async () => {
 });
 
 function view(): GetHttp {
-  return createWritePath({ domain: DOMAIN, apiKey: "k3y", dispatcher: mock, limits }).view;
+  return createWritePath({
+    domain: DOMAIN,
+    apiKey: "k3y",
+    dispatcher: mock,
+    limits,
+    toolsets: ["core"],
+  }).view;
 }
 
 function dispatched(): number {

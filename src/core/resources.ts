@@ -12,7 +12,10 @@
 //     snapshot is what every attempt sends: a getter, a `toJSON`, a Proxy or a
 //     change to the caller's object during a 429's wait cannot make a retry
 //     send another body than the first (security review, T-067). A body JSON
-//     cannot carry (a BigInt, a cycle) throws, as `HttpClient` does.
+//     cannot carry (a BigInt, a cycle, a `toJSON` that throws) and a snapshot
+//     that is not a JSON object (a top-level `toJSON` answering `null`, a
+//     string, a list or `undefined`) are `validation`, `http_status: null`,
+//     with nothing sent: a write resolves, it never rejects (T-068).
 //   - Through `requestWithRetry`, never `request`: a write is retried on a
 //     429 only, and a 5xx or a timeout comes back `retryable: false`, since
 //     it may have been applied (a direct `request` keeps `retryable: true`;
@@ -76,20 +79,20 @@ async function write<T>(
   deadline?: number,
 ): Promise<WriteResult<T>> {
   if (!(Number.isSafeInteger(id) && id > 0)) {
-    return {
-      ok: false,
-      error: {
-        code: "validation",
-        http_status: null,
-        message: "Not sent: ticket id is not a valid value.",
-        retryable: false,
-      },
-      attempts: 0,
-    };
+    return notSent("Not sent: ticket id is not a valid value.");
   }
   // One snapshot, read once, sent on every attempt: a getter, a `toJSON` or a
   // later change to the caller's object cannot alter a retry's body.
-  const snapshot: unknown = JSON.parse(JSON.stringify(body));
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(body);
+  } catch {
+    return notSent("Not sent: the body cannot be sent as JSON.");
+  }
+  const snapshot: unknown = text === undefined ? undefined : JSON.parse(text);
+  if (typeof snapshot !== "object" || snapshot === null || Array.isArray(snapshot)) {
+    return notSent("Not sent: the body is not a JSON object.");
+  }
   const result = await http.requestWithRetry(
     { method, path, params: { id }, body: snapshot },
     deadline,
@@ -109,4 +112,13 @@ async function write<T>(
     };
   }
   return { ok: true, value: parsed.data, attempts: result.attempts };
+}
+
+/** A local refusal: `validation`, `http_status: null`, nothing sent. */
+export function notSent(message: string): { ok: false; error: FreshdeskError; attempts: 0 } {
+  return {
+    ok: false,
+    error: { code: "validation", http_status: null, message, retryable: false },
+    attempts: 0,
+  };
 }
