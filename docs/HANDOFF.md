@@ -4,71 +4,58 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T10:19:48+01:00`
-- **Describes commit:** `ce9e57e` (the T-070 handoff commit), pushed to
-  `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
-  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45791102184
-  (workflow `quality`, ran on `ce9e57e`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-26T10:35:53+01:00`
+- **Describes commit:** the T-071 handoff commit (filled in by the stamp
+  commit). **CI:** filled in by the stamp commit.
 
-- **Current task:** T-070 (stateless preview and `preview_id`)
-  `done (2026-11-26)`. Commits `70be151` (implementation), `f64d743`
-  (full-round fixes), `250d476` (TTL back on `Date.now()`), then this
-  handoff commit. Tests: `test/tools/preview.test.ts` (57 cases); details in
-  the task file's "Done". No split was needed.
+- **Current task:** T-071 (`update_ticket`, the `write` toolset registers)
+  `done (2026-11-26)`. Commits `20063be` (implementation), `f22c4a3`
+  (full-round fixes), then this handoff commit. Tests:
+  `test/tools/write/update-ticket.test.ts` (27 cases), `test/server.test.ts`
+  "the write wiring" and the `write` cases of "enabled toolsets come from
+  the team file only", `test/lint-rules.test.ts` (place `T3`, context
+  type-only). No split was needed. No version bump or tag (OD-16).
 
-- **Next action:** `/pickup` T-071 (`update_ticket` and the `write` toolset
-  registration), the first `todo` row whose dependencies (T-041, T-068) are
-  `done`.
+- **Next action:** `/pickup` T-072 (`add_note`), the first `todo` row whose
+  dependencies (T-069, T-071) are `done`.
 
-- **Read before anything else:** `docs/tasks/T-071-update-ticket.md`;
-  `docs/improvements.md` entries `70be151` and `f64d743` (T-070's parked
-  items, for T-073) and `a57ef9b` (now marked taken into T-072/T-074).
+- **Read before anything else:** `docs/tasks/T-072-add-note.md`;
+  `docs/improvements.md` entry `f22c4a3` (T-071's parked items, including
+  the stale `add_note` line of `docs/tool-catalogue.md`) and `a57ef9b`
+  (T-072 returns only allow-listed fields of the note reply).
 
-- **Owner decisions (orchestrator for the owner, 2026-11-26):**
-  - No ticket-existence GET before the notify lookups: the limiter bounds
-    the cost (`a57ef9b` entry marked DECIDED).
-  - T-072 and T-074 return only allow-listed fields of Freshdesk's note
-    reply, with a test that no email ever appears in tool output; this
-    settles `a57ef9b`'s "note reply may repeat recipients" (marked TAKEN).
-  - Rule 9 stop on T-070's scoped round: option (b), the TTL on
-    `Date.now()` as in `70be151`; a wall clock set back stretches the TTL,
-    an accepted limitation (module header, task file); no third review
-    round, since this is the mechanism the full round reviewed.
+- **Owner decisions:** none this session (OD-16 applied: no release before
+  T-074).
 
 - **Reviews:**
-  - Full round, R1 = `70be151`, range `2829202..70be151`. Scoped round,
-    range `70be151..f64d743`. All three reviewers quoted base, HEAD, stat
+  - Full round, R1 = `20063be`, range `dbc92ba..20063be`. Scoped round,
+    range `20063be..f22c4a3`. All three reviewers quoted base, HEAD, stat
     line and trailer correctly in both rounds.
-  - `security-reviewer`, full: no high/medium. Wall-clock TTL stretched by
-    a clock set back (fixed by a monotonic clock in `f64d743`, then reverted
-    by the owner's decision); a throwing getter/Proxy threw instead of being
-    refused (fixed); only `ticket_id`/`fields` authenticated and
-    `canonical`'s `undefined`/`-0` (parked for T-073).
-  - `code-reviewer`, full: clean. `improvements.md` edit out of the task
-    (dismissed: the orchestrator asked for it); `canonical` cohesion and
-    the 834-character id (parked); overview list.ts entry, future-time
-    message, prefix compare (fixed).
+  - `security-reviewer`, full: medium, any `src/tools` module could
+    value-import `context.js` and call `toolsetsOf` to reach the write
+    tools (fixed in `f22c4a3`: `context.js` type-only in T0 to T2, absent
+    from T3, lint tests); low, tag merge not atomic (fixed: said in the
+    description and header).
+  - `code-reviewer`, full: the same medium (same fix); tag race (same);
+    a wiring test that could not fail, missing tag boundary tests, a stale
+    overview line (all fixed in `f22c4a3`).
   - `compliance-reviewer`: wireframes `none`, both rounds.
-  - Scoped round: `security-reviewer` nothing blocking (item read twice,
-    unreachable branch, replaceable `performance`: parked). `code-reviewer`:
-    the monotonic clock does not count sleep, falsifying "older than
-    15 minutes is refused"; its fix was a mechanism change, so the session
-    stopped (rule 9) and the owner chose (b), applied in `250d476`. Its
-    parkables: fake-timer leak (fixed with the revert), "not JSON" wording
-    (parked).
+  - Scoped round: `code-reviewer` clean; `security-reviewer` nothing
+    blocking. Parked (improvements `f22c4a3`): the context.ts comment
+    claims more than lint gives (a re-export through a listed module
+    outside `src/tools/`); lint tests for other import forms of
+    `toolsetsOf`; `MAX_TAGS` exact case for `tags_remove`; real-wiring test
+    names only; a wording nit.
 
 - **Proposed plan changes:** none.
 
 - **Open doubts:**
-  - T-073 must write only the checked `ticket_id` and `fields`, from the
-    parsed values; the id at the cap is 834 characters (`70be151`,
-    `f64d743` in improvements).
-  - From T-068: a ticket change that sets nothing is refused in the core;
-    T-071's tool should skip an empty change rather than call the entry.
+  - `update_ticket`'s tag merge is GET then PUT, not atomic (accepted,
+    described); a field refusal with tags given costs the tag GET first.
+  - From T-070: T-073 must write only the checked `ticket_id` and `fields`
+    (improvements `70be151`, `f64d743`).
   - From T-067: the `getAgent` active rule comes from Freshdesk's
-    documentation, not measured; real-time tests timed out under machine
-    load on 2026-11-26 (not seen this session).
+    documentation, not measured.
   - From T-077: that `context.ts` passes the team file's `toolsets` to
     `createWritePath` holds by inspection, not by lint.
   - From T-041/T-065: default fields keyed by `/ticket_fields` API name, to
@@ -77,11 +64,10 @@
     the safety-core value in `.claude/commands/decompose.md` step 4.
   - `.claude/worktrees/` is not gitignored (parked).
 
-- **Dead ends:** a monotonic mint time (`f64d743`): it does not count
-  sleep; reverted in `250d476`.
+- **Dead ends:** none.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `250d476`'s tree. Vitest
-  "Tests 3754 passed (3754)"; `tools/checks` "Ran 138 tests", OK; lint,
+- **Checkpoint:** `make quality` exit 0 on `f22c4a3`'s tree. Vitest
+  "Tests 3845 passed (3845)"; `tools/checks` "Ran 138 tests", OK; lint,
   format, typecheck, build and both gitleaks scans passed.

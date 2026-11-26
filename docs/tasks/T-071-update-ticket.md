@@ -2,7 +2,7 @@
 
 - **Type:** build
 - **Phase:** M2
-- **Status:** todo (2026-11-25)
+- **Status:** done (2026-11-26)
 - **Depends on:** T-041, T-068
 - **Created:** 2026-11-25
 
@@ -46,18 +46,38 @@ Split point: the registry wiring and `server.ts` first, the tool second.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- `20063be`: `src/tools/toolsets/write/index.ts` (wiring: `writeTools(entries)`
+  hands `updateTicket` `entries.update_ticket` only),
+  `src/tools/toolsets/write/update-ticket.ts`; `src/tools/context.ts` builds
+  the write tools from its own write path's entries, keeps them off the
+  context (module `WeakMap`), `toolsetsOf(context)`; `src/server.ts`
+  defaults to it, `send` still a `ConfigError`; `eslint.tool-imports.json`
+  place `T3` (no `src/core` path).
+- `f22c4a3`: full-round fixes: `context.js` type-only in every place, the
+  tag merge's race said in the description, more tests.
+- Tests: `test/tools/write/update-ticket.test.ts` (27 cases: one PUT with
+  ids for status/agent/custom field; Resolved and Closed; requester and
+  Subject `field_not_writable` with 0 requests; tag merge GET then PUT;
+  the description's two sentences; annotations);
+  `test/server.test.ts` "createServer: enabled toolsets come from the team
+  file only" (write lists `update_ticket` with `destructiveHint`, absent
+  without `write`, `send` still refused) and "the write wiring" (each
+  factory gets exactly its own entry, never the entries object);
+  `test/lint-rules.test.ts` (T3 entries, write place refuses src/core and
+  context, context type-only in T0 to T2).
+- `make quality` on `f22c4a3`: vitest 3845 passed, `tools/checks` 138 OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Tag merge is GET then PUT, not atomic: a concurrent tag change can be
+  overwritten (said in the description; Freshdesk has no conditional PUT).
+- A field refusal with tags given costs the tag GET first (the allow set is
+  checked in the core, at the PUT); with no tags it sends nothing.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)
