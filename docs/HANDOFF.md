@@ -4,66 +4,63 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-26T18:19:27+01:00`
-- **Describes commit:** `d63b213` (T-087: done; review fixes, proposed
-  T-100, handoff), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:**
-  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45866988722
-  (workflow `quality`, ran on `d63b213`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-27T09:59:33+01:00`
+- **Describes commit:** `<hash>` (T-100: done; review fixes, proposed
+  T-101, handoff). **CI:** filled by the stamp commit.
 
-- **Current task:** T-087 `done (2026-11-26)`: M3 acceptance on the real
-  account. See `docs/tasks/T-087-m3-real-account-run.md` "Done" (one dated
-  line per item; values in `docs/private/account-facts.md` "T-087 test
-  tickets" and "T-087 runs"). Commits `cced6b5` (results), then this
-  handoff commit. Started from `54eb820`. Four owner runs of `make
-  smoke-send` on 2026-11-26, all `ok, requests 2`; no automation acted;
-  A1 to A4 and A6 yes, A5 partial. M3's "Done when" is met.
+- **Current task:** T-100 `done (2026-11-27)`: A5 follow-up. See
+  `docs/tasks/T-100-a5-follow-up.md` "Done"; values in
+  `docs/private/account-facts.md` "T-100 step 0" to "T-100 step 2-4".
+  Commits `d058501` (results), then this handoff commit. Started from
+  `c95aee0`. A forward quoted no reply and no private note; a reply left
+  an Open ticket Open; no automation acted.
 
-- **Next action:** owner's choice. (a) Decide T-087's first open doubt
-  (A4 yes: reply reaches every ticket CC) before T-098; (b) confirm or
-  drop proposed T-100; (c) take T-090 (RFC `.mcpb`, `todo`) or T-091
-  (Desktop spike, `todo`). OD-34 is lifted by T-087 `done`: an npm release
-  accepting `send` is no longer blocked by it.
+- **Next action:** owner's choice. (a) Confirm or drop proposed T-101;
+  (b) decide T-100's `fwd_emails` doubt before T-098; (c) take T-091
+  (Desktop spike, `todo`), then T-090 (RFC `.mcpb`, `todo`), the order
+  recommended on 2026-11-27 so the RFC starts from T-091's facts.
 
-- **Read before anything else:** T-087 "Open doubts";
-  `docs/rfc/active/2026-11-26-send-safety-core.md` OD-21 and threat 3.
+- **Read before anything else:** T-100 "Open doubts".
 
-- **Reviews:** full round, R1 = `cced6b5`, range `54eb820..cced6b5`.
-  compliance-reviewer: Wireframes `none`, nothing to check (it also said
-  "compliance-reviewer still has to be run", a misreading of its own
-  role; dismissed). security-reviewer: medium, A4 yes confirms OD-21's
-  risk with Open doubts `none` (fixed: open doubt for the owner before
-  T-098); low, public note to ticket CCs unchecked (fixed: open doubt);
-  low, A5 private notes only in prose (fixed: open doubt, T-100); low,
-  which CC field (fixed: A4 line names the three fields that held it);
-  T-096's title naming an organisation, outside the range (parked,
-  `docs/improvements.md`). code-reviewer: medium, A5 overstated (fixed:
-  "partial", status half could not fail); medium, Open doubts `none`
-  (fixed); low-medium, A1/A2 scope (fixed: "for the endpoint and the keys
-  the core sends"); low, RFC "all unchecked" stale (recorded as open
-  doubt, not edited: core RFC); low, A4 "guards" wording (fixed:
-  "accepts"); low, template sections (fixed); low, hook line (fixed). It
-  ran one Bash `grep` (read-only, no write; reported by itself). All four
-  quotes matched in all three. Fixes were text only, no mechanism: no
-  scoped round.
+- **Owner's decisions (2026-11-27, this session):** A4 (T-087's first
+  open doubt) accepted: replies copying ticket CCs is standard Freshdesk
+  behaviour, ship with it; the CC warning text not wanted (needs T-101).
+  T-100 sized `todo` with both checks, then taken.
 
-- **Proposed plan changes:** T-100 (A5 follow-up, owner action:
-  forward on a ticket with a private note, reply with status read before
-  and after), `proposed (2026-11-26)`, after T-087 in PLAN's M3 table.
+- **Reviews:** full round, R1 = `d058501`, range `c95aee0..d058501`. All
+  four quotes matched in all three. compliance-reviewer: Wireframes
+  `none`, nothing to check. security-reviewer: medium, A4 acceptance
+  unrecorded (fixed: recorded here and in T-100, T-101 proposed);
+  medium, `fwd_emails` risk understated (fixed: (a) to (c) in Open
+  doubts, routed to the owner before T-098, check path via `/rfc`); low,
+  results generalised (fixed: configuration-scoped line). code-reviewer:
+  medium, quality/hook line without evidence (fixed: names `d058501` and
+  counts); medium, same A4 point (fixed); medium-low, "A5 yes in full"
+  (fixed: reworded to the size of the runs); low, "each run" not met as
+  written (fixed: stated); low, `fwd_emails` doubt without route (fixed);
+  low, stale RFC A5 text (fixed: open doubt); low, Next action vs status
+  (fixed: `done`). It made one no-op Bash `echo` (reported by itself).
+  Fixes were text only, no mechanism: no scoped round.
+
+- **Proposed plan changes:** T-101 (RFC amendment: drop the ticket-CC
+  warning; may carry the A1 to A6 and A5 result pointers and the
+  `fwd_emails` question), `proposed (2026-11-27)`, after T-100 in PLAN's
+  M3 table.
 
 - **Open doubts:**
-  - A4 yes: production replies reach every ticket CC, unlisted ones too,
-    unseen in the approval prompt. Owner decides before T-098.
-  - The send RFC still says "API assumptions, all unchecked".
-  - A5's private-note and status halves; public note to ticket CCs.
+  - `fwd_emails`: does a reply copy a forward's recipients? Owner
+    decides before T-098 (T-100 Open doubts).
+  - The send RFC's "API assumptions, all unchecked" and A5 lines are
+    stale (T-087, T-100).
+  - Public note to ticket CCs: not checked (T-087).
   - Carried: the GET-then-POST gap; T-089's 408 question; T-076's C6,
     T-082's doubts and older ones as in `4efcc70`'s HANDOFF.
 
-- **Dead ends:** Chrome DevTools MCP to create tickets: no Freshdesk
-  session (401); the owner made the tickets in the UI.
+- **Dead ends:** reply on the forward's ticket refused by the smoke
+  script (`fwd_emails not empty`); reply run on a fresh ticket.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `cced6b5`'s tree. Vitest "Test
+- **Checkpoint:** `make quality` exit 0 on `d058501`'s tree. Vitest "Test
   Files 58 passed (58)", "Tests 4824 passed (4824)"; `tools/checks` "Ran
   138 tests", OK.

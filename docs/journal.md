@@ -202,3 +202,8 @@ stands for. End an entry with the task id it came from.
 - The core's note answer is parsed with `conversation` (`src/client/resources/tickets.ts`), which needs boolean `incoming` and `private`: an answer without `private` is already `server`, `may_have_been_sent`, so a script reading `private` from the answer only ever sees `true` or `false` after a send. (T-086)
 - Freshdesk copies a ticket's ticket-level CC on an agent reply sent through `POST /tickets/{id}/reply` with an empty `cc_emails` (observed 2026-11-26 on one `mcp-test` ticket): what an API reply reaches is the requester plus the ticket's CCs, not the payload's recipients alone. A forward reached only its `to_emails`; a public note sent no mail on a ticket with no CC. (T-087)
 - Chrome DevTools MCP runs its own browser profile with no Freshdesk session (401 on `/a/tickets/new`); the T-076 ticket creation used Claude in Chrome, which was not available on 2026-11-26. For UI work on the account, check which browser tool is loaded before offering it. (T-087)
+
+## 2026-11-27
+
+- A forward through `POST /tickets/{id}/forward` writes its `to_emails` into the ticket's `fwd_emails` (observed 2026-11-27 on one `mcp-test` ticket): a later `make smoke-send CASE=reply` on that ticket is refused by T-086's CC guard, so a reply check needs its own fresh ticket. (T-100)
+- Freshdesk marked each new `mcp-test` ticket made in the UI on 2026-11-27 as spam at creation; restore it before a smoke run, whose GET refuses a spam ticket. (T-100)

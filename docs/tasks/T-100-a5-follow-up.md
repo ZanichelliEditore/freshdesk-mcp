@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M3
-- **Status:** doing (2026-11-27)
+- **Status:** done (2026-11-27)
 - **Depends on:** T-087
 - **Created:** 2026-11-26 (proposed); sized `todo` by the owner 2026-11-27
 
@@ -89,34 +89,66 @@ once; no ticket-level CC; group set). Ids, addresses and mail text in
   `T100-PRIVATE-NOTE` absent from the forwarded mail, text and HTML.
 - Forward quotes the conversation: no (2026-11-27). Marker
   `T100-PUBLIC-REPLY` absent. The forward quotes the ticket description
-  only, as T-087's A5 found. OD-29 answered for this account: a forward
-  carries no reply and no private note.
-- Reply changes the status: no (2026-11-27). Status Aperto before and
-  Aperto after the reply, on a second ticket (see Dead ends); the
-  activity log shows no status-change entry. The check could fail: the
-  status was read before the run.
+  only, as T-087's A5 found. For one forward on one ticket, under the
+  account's configuration on 2026-11-27: a forward carried no reply and
+  no private note (OD-29).
+- Reply changes the status: no (2026-11-27), for one reply on an Open
+  ticket: Aperto before and Aperto after, on a second ticket (see Dead
+  ends); the activity log shows no status-change entry. The check could
+  fail: the status was read before the run. Other starting statuses
+  (Pending, Resolved) not tried.
 - No automation rule acted: yes (2026-11-27), from the activity log
   after the forward and after the reply (system SLA policy at creation
   only).
-- Both runs that sent printed `ok, requests 2` (one GET, one POST
-  answered 201); step 1 `not sent yes, send_id yes, requests 0`.
-- A5 is now yes in full, with T-087's description half.
-- No account value in this file; commit hook and `make quality` at
-  handoff (HANDOFF "Checkpoint").
+- The two runs that sent printed `ok, requests 2` (one GET, one POST
+  answered 201), and the confirm-less first call of each `not sent yes,
+  send_id yes, requests 0`. The acceptance's "each run" is not met as
+  written: a third run, on the forward's ticket, was refused by the smoke
+  script with `requests 1` and sent nothing (Dead ends).
+- A5 answered, at the size above: a forward quotes the description only,
+  no conversation or private note; a reply on an Open ticket left it
+  Open. With T-087's description half.
+- Commit `d058501` (results). No account value in this file; the commit
+  hook (`account values in the index`, gitleaks) passed on `d058501`.
+  `make quality` exit 0 on `d058501`'s tree: Vitest "Tests 4824 passed
+  (4824)", `tools/checks` "Ran 138 tests", OK.
 
 ## Dead ends
 - The reply on the forward's ticket: `make smoke-send CASE=reply` refused
   it (`ticket: refused (fwd_emails not empty)`, requests 1, nothing
   sent). The forward put its `TO` in the ticket's `fwd_emails`, and
   T-086's A6 guard refuses any non-empty CC field, as designed. The reply
-  ran on a fresh ticket instead.
+  ran on a fresh ticket instead. That guard is the smoke script's only:
+  no send entry of the core reads `fwd_emails` (RFC A6), so in
+  production the same reply would have been dispatched.
 
 ## Open doubts
-- A forward leaves its recipients in the ticket's `fwd_emails`. Whether
-  a later reply copies `fwd_emails` is not checked; if it does, a reply
-  after a forward reaches the forward's recipients, unseen in the
-  approval prompt (the same class as A4, which the owner accepted on
-  2026-11-27).
+- **`fwd_emails`, for the owner before T-098.** A forward leaves its
+  recipients in the ticket's `fwd_emails`. Whether a later reply copies
+  `fwd_emails` is not checked. If it does: (a) the server's own
+  `forward_ticket` creates CC state that a later `reply_to_ticket` does
+  not check, so a forward to an internal mailbox then a reply to the
+  customer shows that mailbox to the customer, unseen in the approval
+  prompt; the reply tool's wording "the ticket's existing CC addresses"
+  does not suggest the forward's recipients; (b) an agent forwarding from
+  the UI to any address adds it to the same set; (c) only the smoke
+  script reads `fwd_emails`, the core does not. The owner's 2026-11-27
+  answer on A4 (below) covered ticket CCs as Freshdesk standard
+  behaviour; whether it covers this too is the owner's call. Checking it
+  needs a smoke-script opt-in for a non-empty `fwd_emails`, a change to
+  T-086's guard, so through `/rfc`.
+- **A4 decided (owner, 2026-11-27, in the T-100 session):** ship with
+  ticket CCs copied on a reply accepted, as standard Freshdesk behaviour
+  operators know; the owner also wants the CC warning text dropped. The
+  warning is in RFC `2026-11-26-send-safety-core` OD-21 and T-083/T-084's
+  acceptance, so dropping it is an RFC amendment: proposed T-101.
+- The results hold for the account's configuration on 2026-11-27
+  (forward and reply templates, status on reply are admin settings). The
+  tool descriptions and OD-29 keep their conservative wording
+  (`forward-ticket.ts` "possibly its conversation").
+- The send RFC's A5 lines and its "If A5's private-note question answers
+  yes" sentence are now answered and stale; a dated pointer is left to a
+  `/rfc` amendment (T-101 could carry it), not written here.
 - On the second ticket the status was read at 09:53, before the restore
   from spam at 09:54; the log has no status-change entry, so it was
   Aperto at the reply.
