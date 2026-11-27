@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-27T10:25:23+01:00`
-- **Describes commit:** `<hash>` (T-091: done; review fixes, handoff).
-  **CI:** filled by the stamp commit.
+- **Describes commit:** `c69e044` (T-091: done; review fixes, handoff),
+  pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45973786035
+  (workflow `quality`, ran on `c69e044`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-091 `done (2026-11-27)`: Claude Desktop facts from
   a throwaway bundle. See `docs/tasks/T-091-spike-desktop-facts.md`
