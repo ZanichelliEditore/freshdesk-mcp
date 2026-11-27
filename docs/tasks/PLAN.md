@@ -501,7 +501,7 @@ Done when: an operator installs on a clean machine without a terminal
 (SPEC §13). Decomposed 2026-11-26 (`/decompose M4`, run by a session
 under the orchestrator, with the `planner`'s proposal). M3's build rows
 are done; T-087, the owner's M3 run on the real account, is in progress
-and is not changed by this plan.
+and is not changed by this plan. (2026-11-27: T-087 `done (2026-11-26)`.)
 
 **Decompose step 4.** M4 adds no capability that writes to Freshdesk and
 no row touches the safety core (the write path, RFC
@@ -526,10 +526,12 @@ decides; T-091 checks what Claude Desktop actually passes.
 
 **Owner actions for M4:** answer OD-35 to OD-42 (T-090's RFC is where
 they are recorded); finish T-087; run T-091's install checks in Claude
-Desktop (a build session cannot); later, T-096 and T-099.
+Desktop (a build session cannot); later, T-096 and T-099. (2026-11-27:
+OD-35 to OD-42 answered, T-087 and T-091 done; T-096 and T-099 remain.)
 
 **Owner decisions for M4** (numbering continues the M3 table). Open: no
-row that depends on them is sized.
+row that depends on them is sized. (2026-11-27: all answered in RFC
+`2026-11-27-mcpb-bundle`; the rows wait for a `/decompose M4` amendment.)
 
 | OD | Question | Governs | Options | Proposal | Answer |
 |---|---|---|---|---|---|

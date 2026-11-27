@@ -356,7 +356,7 @@ Two levels:
 
 | Level | What | How |
 |---|---|---|
-| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (flag or env: `--export-dir`, else `FRESHDESK_EXPORT_DIR`) | env vars and the server's `args` (Claude Code) or `.mcpb` `user_config`, every field passed as env, never `args` (key marked `sensitive`; not found in Claude Desktop's support or log folders outside the installed extension's manifest copy, which is unchecked; recheck in T-092; RFC `2026-11-27-mcpb-bundle`) |
+| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (flag or env: `--export-dir`, else `FRESHDESK_EXPORT_DIR`) | env vars and the server's `args` (Claude Code) or `.mcpb` `user_config`, every field passed as env, never `args` (key marked `sensitive`; not found in Claude Desktop's support or log folders outside every `manifest.json`, which is unchecked; recheck in T-092; RFC `2026-11-27-mcpb-bundle`) |
 | Team | enabled toolsets, field meanings and hidden fields, "uncategorised" definition, forward allow-list, caps, call budget, reserve % | JSON file, path via `FRESHDESK_MCP_CONFIG` / `user_config`; validated with zod at start, clear error on bad config |
 
 - **Uncategorised** default: a ticket where the configured category field
@@ -371,7 +371,8 @@ Two levels:
   export is not a rule-1 capability (no RFC); its task runs
   `/security-review`.
 - Example team config ships in the repo with synthetic values; the
-  Zanichelli one lives in an internal place (§12).
+  Zanichelli one lives only on the maintainer's machine, outside any git
+  working tree (§12).
 - An internal `.mcpb` build may bake the Zanichelli team config in, so
   operators type only domain and key. A maintainer derives it from the
   CI-built public bundle of a tag (SHA-256 checked), outside any public

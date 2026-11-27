@@ -46,7 +46,7 @@ Facts this RFC rests on:
   - `compatibility.runtimes.node` was not tested.
   - The probe had no dependencies: the real server (undici 8, the MCP
     SDK) has not run on Desktop's Node.
-- **The config code today:** `loadConfig` treats only an empty string as
+- **The config code at `73677cd` (2026-11-27):** `loadConfig` treats only an empty string as
   unset (`src/config.ts:236-243`). An unset team-file field arriving as
   the placeholder stops the start (`readFileSync` ENOENT,
   `src/config.ts:206`); an unset export field arriving as the placeholder
@@ -95,9 +95,15 @@ Each open decision (PLAN M4, OD-35 to OD-42) with the owner's answer
   hook, not an operator setting.
 - The two optional fields need T-093 first: the server must take the
   literal `${user_config.<name>}` of **those two variables only** as
-  unset, never as a value, and never skip a check because of it. A
-  placeholder in `FRESHDESK_DOMAIN` or `FRESHDESK_API_KEY` stays an
-  error. A manifest `default` of `""` might avoid the placeholder; it was
+  unset, never as a value, and never skip a check because of it. The
+  match is exact: the whole value equal to `${user_config.<that
+  variable's own field name>}`. Any other value, any other `${…}`
+  included (an unexpanded `${__dirname}/team-config.json`, decision 6),
+  stays a path and fails closed (ENOENT, `src/config.ts:206`); a broader
+  match would start the server on the defaults, where `fields` is `{}`
+  and fields the team config hides reappear in ticket detail output.
+  T-093 tests a literal `${__dirname}/…` value. A placeholder in
+  `FRESHDESK_DOMAIN` or `FRESHDESK_API_KEY` stays an error. A manifest `default` of `""` might avoid the placeholder; it was
   not tested, so T-093 checks it before choosing between the two.
 
 ### 2. OD-35, the tool: `@anthropic-ai/mcpb` as a pinned devDependency (a)
@@ -158,8 +164,16 @@ more rights):
 
 - **Pack, read-only:** `make mcpb` runs with `contents: read` (in the
   `build` job or one like it) and uploads the bundle and its SHA-256 as
-  a workflow artifact. All npm code, the mcpb tool's dependencies
-  included, runs here.
+  a workflow artifact. Read-only rights limit the token, not what the
+  code can do to the run's artifacts: once `@anthropic-ai/mcpb` is a
+  devDependency, every `npm ci` in the file (`quality`, `gitleaks`,
+  `build`) installs its tree, and the repo has no `.npmrc`, so its
+  install scripts run. A compromised package there could alter the npm
+  tarball or the bundle before upload. So T-094 also makes each
+  consuming job recompute the SHA-256 of what it downloads and refuse a
+  mismatch with the hash the producing job gave as a job output
+  (`build` to `publish`, pack to attach), and weighs `npm ci
+  --ignore-scripts` in those jobs.
 - **Attach, `contents: write`:** `needs: [quality, gitleaks, build]` and
   the pack job; the same `if:` as `publish` (`github.event_name ==
   'push' && startsWith(github.ref, 'refs/tags/v')`), so a
@@ -170,8 +184,8 @@ more rights):
   commit an ancestor of `origin/main`); downloads the artifact and runs
   only `gh release create "$GITHUB_REF_NAME" --verify-tag` with the
   bundle and the SHA-256 in the notes. No `npm`, no `npx`, no checkout
-  credentials kept. `release.yml` creates no GitHub release today; this
-  job does.
+  credentials kept. `release.yml` at `73677cd` creates no GitHub
+  release; this job does.
 
 Every `uses:` pinned by SHA, as the rest of the file. The public
 bundle's team-file field is optional, so with no file it runs on the
@@ -187,29 +201,36 @@ both pack and attach: the mcpb tool's dependency tree would run with
 
 `make mcpb-internal TAG=v<x.y.z> TEAM_CONFIG=<path>`, run by a
 maintainer, starts from the **CI-built public bundle of that tag**, not
-from the local tree, so the code's provenance stays CI's and only the
-config is added by hand:
+from the local tree, so the code is the release's and only the config
+is added by hand:
 
 - downloads the tag's public bundle from the GitHub release and checks
-  it against the SHA-256 in the release notes; refuses on mismatch;
-- refuses a `TEAM_CONFIG` path inside the repository;
+  it against the SHA-256 in the release notes; refuses on mismatch.
+  This proves the file matches the release page, not that CI built it:
+  whoever can edit the release can change both (stronger check parked,
+  `docs/improvements.md`);
+- resolves `TEAM_CONFIG`'s real path (symlinks followed) and refuses it
+  if it is inside any git working tree;
 - validates the file with the server's own schema, and refuses any
-  `toolsets` outside a tracked list that states OD-40's answer (today
-  all three, decision 8): changing it is a reviewed commit, not a build
+  `toolsets` outside a tracked list that states OD-40's answer (on
+  2026-11-27, all three, decision 8): changing it is a reviewed commit, not a build
   option;
 - unpacks, adds the file as `team-config.json`, sets
   `FRESHDESK_MCP_CONFIG` to `${__dirname}/team-config.json` in the
   manifest and removes the team-file field, so the form asks domain and
   key only; repacks with the locked `mcpb`;
-- writes the bundle only to a gitignored directory.
+- unpacks and writes the bundle only outside any git working tree,
+  with the same refusal: the bundle holds the team config inside a zip
+  that gitleaks and the `account-patterns` hook cannot see into.
 
 `${__dirname}` expansion is checked in T-095. If Desktop does not expand
 it, the fallback is the server resolving a relative
 `FRESHDESK_MCP_CONFIG` against its own entry point's directory: a change
 to `src/config.ts`, with its test, in T-093 or T-095.
 
-The bundle goes to the internal place (OD-39) with its SHA-256. It is
-never attached to a GitHub release and never built by a public CI run.
+How the maintainer hands the bundle and its SHA-256 to operators
+(direct delivery or an internal drive) is the owner's, outside this RFC
+(owner, 2026-11-27). It is never attached to a GitHub release and never built by a public CI run.
 Since bundles are unsigned (decision 4), repacking loses no signature.
 OD-34 as read above: no internal bundle is distributed before T-087 is
 `done`, whatever its toolsets (met).
@@ -226,8 +247,8 @@ and the file must still reach them somehow.
 
 Owner, 2026-11-27. The file stays on the maintainer's machine, **outside
 any git working tree** (not `docs/private/` inside this repo): decision
-6 refuses a path inside the repository, and a file outside it cannot be
-committed by a stray `git add -f`. Named by slug only in tracked files.
+6 refuses a path inside any git working tree, and a file outside one
+cannot be committed by a stray `git add -f`. Named by slug only in tracked files.
 
 Rejected: (a) an internal drive: no history of who changed the
 allow-list. (b) a private git repository (the earlier proposal): history
@@ -270,8 +291,8 @@ only that an ASCII search of two folders, every `manifest.json`
 excluded, did not find it. The installed extension's own `manifest.json`
 copy was not checked. Until the recheck T-091 names (dummy only in the
 form, no exclusion, a count), SPEC §10 says "not found in Desktop's
-support or log folders outside the installed extension's manifest copy,
-which is unchecked", not "in the keychain".
+support or log folders outside every `manifest.json`, which is
+unchecked", not "in the keychain".
 
 The recheck runs in T-092 and **gates T-097 and T-099**: the guide does
 not tell operators where the key is kept, and no operator installs,
@@ -285,16 +306,18 @@ with Anthropic and waiting.
 - An operator installs by double-click and types domain and key; nothing
   else, with the internal bundle.
 - One new devDependency with nine runtime dependencies of its own,
-  `node-forge` among them; none ships in the bundle, they run in CI only
-  with read-only rights (decision 5) and on the maintainer's machine for
-  the internal repack. Dependabot and `npm audit` cover them.
+  `node-forge` among them; none ships in the bundle. They are installed
+  by every `npm ci` in CI, all jobs with read-only rights, and on the
+  maintainer's machine for the internal repack; decision 5's hash checks
+  guard the artifacts they could touch. Dependabot and `npm audit` cover them.
 - The bundle runs on Node the project does not control: a Desktop update
   could change it. Checked per release (decision 3), not prevented.
-- Unsigned: operators see a warning and must be told it is expected,
+- Unsigned: operators may see a warning (T-097 captures it) and must be
+  told it is expected,
   which also teaches them to click through warnings. The SHA-256 and the
   "only from these two places" rule are the mitigation, not a fix.
-- The internal bundle's code is CI's (checked by SHA-256 against the
-  release); its config is the maintainer's word and the SHA-256 on the
+- The internal bundle's code matches the release asset (SHA-256 against
+  the release page, which its editors could change); its config is the maintainer's word and the SHA-256 on the
   internal page. It holds the team config in clear inside a zip: anyone
   with the file has the allow-list and field meanings (not the key,
   which each operator types). An internal bundle needs a public release
@@ -319,12 +342,28 @@ with Anthropic and waiting.
   internal-bundle line (decision 6), §11's release line (decisions 2 and
   5), §12's "internal location chosen at M4" (decision 7) and the open
   DPO line, now a dated decision (decision 10).
-- PLAN at acceptance: OD-35 to OD-42 answered; T-092 to T-099 re-checked
-  for a `/decompose M4` amendment, notably: T-092 gaining the real-bundle
-  start on Desktop (with `process.versions.electron`) and the `sensitive`
-  recheck; T-093 confirmed; T-094 split into a read-only pack job and an
-  attach job; T-095 starting from the released bundle with the tracked
-  toolsets list; T-097 and T-099 gated on the `sensitive` recheck.
+- PLAN at acceptance: OD-35 to OD-42 answered. T-092 to T-099
+  re-checked for a `/decompose M4` amendment, which alone may change
+  them:
+  - T-092: depends on T-093; gains the real-bundle start on Desktop
+    (with `process.versions.electron`), one `core` read and the
+    `sensitive` recheck; no `compatibility.runtimes.node`.
+  - T-093: confirmed, no longer conditional (T-091 found the
+    placeholder); the exact match and the `${__dirname}` test of
+    decision 1.
+  - T-094: a read-only pack job and an attach job (`contents: write`,
+    `publish`'s `if:`, tag checks, `gh release create` only); hashes
+    recomputed by consuming jobs; `--ignore-scripts` weighed.
+  - T-095: `TAG=` and starts from the released bundle; real path
+    refused inside any git working tree, for the config, staging and
+    output; the tracked toolsets list.
+  - T-096: the place is the maintainer's machine, outside any git
+    working tree (OD-39); `toolsets` all three (OD-40).
+  - T-097: gated on the `sensitive` recheck; captures what Desktop shows
+    for an unsigned bundle; covers `send` tools from the first install.
+  - T-098: its `OD-41` dependency drops (decision 10).
+  - T-099: gated on the `sensitive` recheck; its DPO precondition is
+    met (2026-11-23).
 
 ## Alternatives considered
 
