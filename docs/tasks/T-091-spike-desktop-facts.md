@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M4
-- **Status:** doing (2026-11-27)
+- **Status:** done (2026-11-27)
 - **Depends on:** none
 - **Created:** 2026-11-26
 
@@ -76,9 +76,12 @@ fields empty), then uninstalled.
   `file`, `directory`).
 - `file` and `directory` fields work: yes; each value is an existing path
   of its kind (`statSync`: `file`, `directory`).
-- `sensitive` kept out of plain-text config files: yes. A search of
+- `sensitive` kept out of plain-text config files: yes, as far as an
+  ASCII search measures it. A `grep` of
   `~/Library/Application Support/Claude` and `~/Library/Logs/Claude` for
-  the dummy secret, `manifest.json` excluded, found nothing (`exit=1`).
+  the dummy secret, every `manifest.json` excluded, found nothing
+  (`exit=1`); it would miss a UTF-16 or encoded copy and any other
+  directory.
   The only hit without that exclusion was the extension's copy of the
   probe's `manifest.json`, whose field description held the dummy text
   (see Dead ends).
@@ -86,8 +89,18 @@ fields empty), then uninstalled.
   unset (`src/config.ts:240-242`, `|| undefined`), so an unset
   `FRESHDESK_MCP_CONFIG` or `FRESHDESK_EXPORT_DIR` mapped through
   `user_config` would arrive as a literal placeholder and be taken as a
-  path. Not changed here (out of scope).
-- No real-account call: yes. `make quality`: see the handoff commit.
+  path. Fail-closed, but it blocks a Desktop install: an empty team-file
+  field stops the server at start (`readFileSync` ENOENT,
+  `src/config.ts:206`, `ConfigError`); an empty export-directory field is
+  refused by `export_tickets` (`!isAbsolute`,
+  `src/tools/toolsets/core/export-tickets.ts:247`). T-093's fix must map
+  the placeholder to unset for optional fields only, never accept it as
+  a value or skip a check. Not changed here (out of scope).
+- No real-account call: yes.
+- `make quality`: exit 0 on `c40ec85`'s tree; Vitest "Test Files 58
+  passed (58)", "Tests 4824 passed (4824)"; `tools/checks` "Ran 138
+  tests", OK.
+- Commits: `c40ec85` (results), then the handoff commit.
 
 ## Dead ends
 - The first plain-text search for the `sensitive` dummy matched the
@@ -98,13 +111,17 @@ fields empty), then uninstalled.
 ## Open doubts
 - Where Desktop keeps the `sensitive` value (keychain or an encrypted
   store) was not checked; only its absence from plain-text files.
+- The one unfiltered hit, the installed probe's `manifest.json`, was put
+  down to the dummy text in the field description; whether Desktop also
+  wrote the value into that file was not counted (`grep -c`), and the
+  folder was gone after the uninstall. Recheck before T-090 or T-092
+  rely on the `sensitive` line: dummy only in the install form, not in
+  the manifest, no exclusion. (code- and security-reviewer, 2026-11-27)
 - Whether a `compatibility.runtimes.node` field in the manifest changes
   which Node Desktop uses was not tested.
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done).

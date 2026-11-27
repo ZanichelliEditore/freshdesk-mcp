@@ -4,53 +4,48 @@
 (commits, `path::test`, run URLs); don't narrate. An empty section says
 "none".*
 
-- **Written:** `2026-11-27T09:59:33+01:00`
-- **Describes commit:** `91e0014` (T-100: done; review fixes, proposed
-  T-101, handoff), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:**
-  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45970121897
-  (workflow `quality`, ran on `91e0014`: `quality (22.19)`, `quality (24)`,
-  `checks` all success).
+- **Written:** `2026-11-27T10:25:23+01:00`
+- **Describes commit:** `<hash>` (T-091: done; review fixes, handoff).
+  **CI:** filled by the stamp commit.
 
-- **Current task:** T-100 `done (2026-11-27)`: A5 follow-up. See
-  `docs/tasks/T-100-a5-follow-up.md` "Done"; values in
-  `docs/private/account-facts.md` "T-100 step 0" to "T-100 step 2-4".
-  Commits `d058501` (results), then this handoff commit. Started from
-  `c95aee0`. A forward quoted no reply and no private note; a reply left
-  an Open ticket Open; no automation acted.
+- **Current task:** T-091 `done (2026-11-27)`: Claude Desktop facts from
+  a throwaway bundle. See `docs/tasks/T-091-spike-desktop-facts.md`
+  "Done". Commits `c40ec85` (results), then this handoff commit. Started
+  from `dad54e7`. Desktop `7.37095.0`, macOS `27.2.1`: Node `v24.22.3`
+  (Desktop's Electron Node); an empty optional `user_config` field
+  arrives as the literal `${user_config.<name>}`; `file` and `directory`
+  work; the `sensitive` dummy not found in plain text.
 
-- **Next action:** owner's choice. (a) Confirm or drop proposed T-101;
-  (b) decide T-100's `fwd_emails` doubt before T-098; (c) take T-091
-  (Desktop spike, `todo`), then T-090 (RFC `.mcpb`, `todo`), the order
-  recommended on 2026-11-27 so the RFC starts from T-091's facts.
+- **Next action:** owner's choice. (a) T-090 (RFC `.mcpb`, `todo`), now
+  with T-091's facts; (b) confirm proposed T-093 (its trigger is met:
+  T-091 Done, "T-093's trigger"); (c) confirm or drop proposed T-101;
+  (d) decide T-100's `fwd_emails` doubt before T-098.
 
-- **Read before anything else:** T-100 "Open doubts".
+- **Read before anything else:** T-091 "Done" and "Open doubts".
 
-- **Owner's decisions (2026-11-27, this session):** A4 (T-087's first
-  open doubt) accepted: replies copying ticket CCs is standard Freshdesk
-  behaviour, ship with it; the CC warning text not wanted (needs T-101).
-  T-100 sized `todo` with both checks, then taken.
-
-- **Reviews:** full round, R1 = `d058501`, range `c95aee0..d058501`. All
+- **Reviews:** full round, R1 = `c40ec85`, range `dad54e7..c40ec85`. All
   four quotes matched in all three. compliance-reviewer: Wireframes
-  `none`, nothing to check. security-reviewer: medium, A4 acceptance
-  unrecorded (fixed: recorded here and in T-100, T-101 proposed);
-  medium, `fwd_emails` risk understated (fixed: (a) to (c) in Open
-  doubts, routed to the owner before T-098, check path via `/rfc`); low,
-  results generalised (fixed: configuration-scoped line). code-reviewer:
-  medium, quality/hook line without evidence (fixed: names `d058501` and
-  counts); medium, same A4 point (fixed); medium-low, "A5 yes in full"
-  (fixed: reworded to the size of the runs); low, "each run" not met as
-  written (fixed: stated); low, `fwd_emails` doubt without route (fixed);
-  low, stale RFC A5 text (fixed: open doubt); low, Next action vs status
-  (fixed: `done`). It made one no-op Bash `echo` (reported by itself).
-  Fixes were text only, no mechanism: no scoped round.
+  `none`, nothing to check. code-reviewer: no blocking finding; low,
+  `make quality` a pointer not a result (fixed: counts written); low,
+  `sensitive` hit attribution an inference (fixed: open doubt, the
+  installed folder gone after uninstall so not countable); low, status
+  `doing` with Done filled (fixed: `done`, Context pressure, Next
+  action). It made one read-only `git grep` Bash call (reported by
+  itself). security-reviewer: low, placeholder risk not called
+  fail-closed and T-093 impact understated (fixed: fail-closed lines
+  with `src/config.ts:206` and `export-tickets.ts:247`, T-093 guard);
+  low, `sensitive` "yes" stronger than an ASCII search (fixed:
+  reworded, recheck before T-090/T-092 in Open doubts); info, no
+  personal data. Fixes were text only, no mechanism: no scoped round.
 
-- **Proposed plan changes:** T-101 (RFC amendment: drop the ticket-CC
-  warning; may carry the A1 to A6 and A5 result pointers and the
-  `fwd_emails` question), `proposed (2026-11-27)`, after T-100 in PLAN's
-  M3 table.
+- **Proposed plan changes:** none new. Existing proposed rows: T-101
+  (2026-11-27); T-093, whose condition T-091 met (not changed: status is
+  `/decompose`'s).
 
 - **Open doubts:**
+  - T-091: where Desktop stores the `sensitive` value; the unfiltered
+    `manifest.json` hit not counted; `compatibility.runtimes.node` not
+    tested.
   - `fwd_emails`: does a reply copy a forward's recipients? Owner
     decides before T-098 (T-100 Open doubts).
   - The send RFC's "API assumptions, all unchecked" and A5 lines are
@@ -59,11 +54,12 @@
   - Carried: the GET-then-POST gap; T-089's 408 question; T-076's C6,
     T-082's doubts and older ones as in `4efcc70`'s HANDOFF.
 
-- **Dead ends:** reply on the forward's ticket refused by the smoke
-  script (`fwd_emails not empty`); reply run on a fresh ticket.
+- **Dead ends:** the first `sensitive` search hit the probe's own
+  `manifest.json` (the dummy was in a field description); rerun with
+  `--exclude=manifest.json`.
 
 - **Known red:** none.
 
-- **Checkpoint:** `make quality` exit 0 on `d058501`'s tree. Vitest "Test
+- **Checkpoint:** `make quality` exit 0 on `c40ec85`'s tree. Vitest "Test
   Files 58 passed (58)", "Tests 4824 passed (4824)"; `tools/checks` "Ran
   138 tests", OK.
