@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M4
-- **Status:** doing (2026-11-27)
+- **Status:** done (2026-11-27)
 - **Depends on:** none (may run while T-087 is open)
 - **Created:** 2026-11-26
 
@@ -74,18 +74,44 @@ commit second (as T-079).
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+- RFC `docs/rfc/active/2026-11-27-mcpb-bundle.md`, Active (owner,
+  2026-11-27): `af25520` (draft, rfc-reviewer rounds, owner's answers,
+  acceptance), `024c47b` (handoff full-round fixes), then the handoff
+  commit (scoped-round text fixes).
+- OD-35 to OD-42 answered one at a time by the owner (2026-11-27):
+  OD-35 (a), OD-36 (a), OD-37 (a) refined, OD-38 (a), OD-39 (c),
+  OD-40 (c), OD-41 DPO already obtained 2026-11-23 covering all three
+  toolsets, OD-42 (a). PLAN OD table filled; M4 paragraphs dated.
+- `user_config` by env, never `args` (decision 1); T-091's findings used
+  (Context, decisions 1, 3, 11).
+- "Extended by" line in `docs/rfc/active/2026-11-25-release-on-npm.md`.
+- SPEC §10, §11, §12 worded per the answers.
+- T-092 to T-099 re-checked: the RFC's Consequences list one line per
+  row, for a `/decompose M4` amendment (not sized here).
+- `rfc-reviewer`: full round and scoped round on the draft, before the
+  owner's answers; parked items in `docs/improvements.md`.
+- `make quality` exit 0: Vitest "Test Files 58 passed (58)", "Tests
+  4824 passed (4824)"; `tools/checks` "Ran 138 tests", OK.
 
 ## Dead ends
 none
 
 ## Open doubts
-none
+- Guarding the CI build itself against a compromised dependency (RFC
+  decision 5): the hash checks give transit integrity only. Options for
+  T-094, owner's call: `npm ci --ignore-scripts` in `quality`,
+  `gitleaks`, `build`; the pack job starting from `build`'s tarball;
+  attach comparing the bundle's server files with the tarball.
+  (security-reviewer, handoff scoped round, 2026-11-27)
+- OD-39 and OD-40 were answered after `rfc-reviewer`'s two rounds, so
+  `rfc-reviewer` never saw "config only on the maintainer's machine" or
+  "`send` for operators"; the handoff's code- and security-reviewer did.
+  The owner chose Active without a third round (2026-11-27).
+- Carried from T-091: where Desktop stores the `sensitive` key (recheck
+  in T-092, gates T-097 and T-099); `${__dirname}` expansion (T-095).
 
 ## Context pressure
-low | ok | tight | overflowed — and, if tight or overflowed, how it should
-have been split.
+ok
 
 ## Next action
-Only if the status is still `doing`: the exact first step for the next
-session.
+none (done)

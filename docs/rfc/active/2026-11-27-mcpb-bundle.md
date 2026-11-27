@@ -169,11 +169,17 @@ more rights):
   devDependency, every `npm ci` in the file (`quality`, `gitleaks`,
   `build`) installs its tree, and the repo has no `.npmrc`, so its
   install scripts run. A compromised package there could alter the npm
-  tarball or the bundle before upload. So T-094 also makes each
-  consuming job recompute the SHA-256 of what it downloads and refuse a
-  mismatch with the hash the producing job gave as a job output
-  (`build` to `publish`, pack to attach), and weighs `npm ci
-  --ignore-scripts` in those jobs.
+  tarball or the bundle before upload. T-094 makes each consuming job
+  recompute the SHA-256 of what it downloads and refuse a mismatch with
+  the hash the producing job gave as a job output (`build` to `publish`,
+  pack to attach). That proves **transit integrity only**: the hash is
+  taken in the producing job after its dependencies ran, so it cannot
+  catch tampering there. `npm ci --ignore-scripts` would not close it in
+  the pack job either, where the mcpb tool's tree runs as code. How to
+  guard the build itself (scripts off in `quality`, `gitleaks` and
+  `build`; the pack job starting from `build`'s tarball; attach comparing
+  the bundle's server files with the tarball) is open for T-094, decided
+  by the owner (T-090 "Open doubts").
 - **Attach, `contents: write`:** `needs: [quality, gitleaks, build]` and
   the pack job; the same `if:` as `publish` (`github.event_name ==
   'push' && startsWith(github.ref, 'refs/tags/v')`), so a
@@ -210,7 +216,9 @@ is added by hand:
   whoever can edit the release can change both (stronger check parked,
   `docs/improvements.md`);
 - resolves `TEAM_CONFIG`'s real path (symlinks followed) and refuses it
-  if it is inside any git working tree;
+  if it is inside any git working tree; only git's "not a git
+  repository" answer counts as outside: any other git error (git
+  missing, `safe.directory`, a `GIT_DIR` or `GIT_WORK_TREE` set) refuses;
 - validates the file with the server's own schema, and refuses any
   `toolsets` outside a tracked list that states OD-40's answer (on
   2026-11-27, all three, decision 8): changing it is a reviewed commit, not a build
@@ -308,8 +316,9 @@ with Anthropic and waiting.
 - One new devDependency with nine runtime dependencies of its own,
   `node-forge` among them; none ships in the bundle. They are installed
   by every `npm ci` in CI, all jobs with read-only rights, and on the
-  maintainer's machine for the internal repack; decision 5's hash checks
-  guard the artifacts they could touch. Dependabot and `npm audit` cover them.
+  maintainer's machine for the internal repack. Decision 5's hash checks
+  give transit integrity only; guarding the build itself is open for
+  T-094. Dependabot and `npm audit` cover them.
 - The bundle runs on Node the project does not control: a Desktop update
   could change it. Checked per release (decision 3), not prevented.
 - Unsigned: operators may see a warning (T-097 captures it) and must be
@@ -353,7 +362,8 @@ with Anthropic and waiting.
     decision 1.
   - T-094: a read-only pack job and an attach job (`contents: write`,
     `publish`'s `if:`, tag checks, `gh release create` only); hashes
-    recomputed by consuming jobs; `--ignore-scripts` weighed.
+    recomputed by consuming jobs (transit only); the build guard as
+    the owner decides (decision 5).
   - T-095: `TAG=` and starts from the released bundle; real path
     refused inside any git working tree, for the config, staging and
     output; the tracked toolsets list.
