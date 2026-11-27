@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-27T09:59:33+01:00`
-- **Describes commit:** `<hash>` (T-100: done; review fixes, proposed
-  T-101, handoff). **CI:** filled by the stamp commit.
+- **Describes commit:** `91e0014` (T-100: done; review fixes, proposed
+  T-101, handoff), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:**
+  green, https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45970121897
+  (workflow `quality`, ran on `91e0014`: `quality (22.19)`, `quality (24)`,
+  `checks` all success).
 
 - **Current task:** T-100 `done (2026-11-27)`: A5 follow-up. See
   `docs/tasks/T-100-a5-follow-up.md` "Done"; values in
