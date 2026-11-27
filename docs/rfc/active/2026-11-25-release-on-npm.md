@@ -4,6 +4,10 @@
 - **Date:** 2026-11-25
 - **Author:** freshdesk-mcp team
 - [x] Implemented
+- **Extended by:** RFC `2026-11-27-mcpb-bundle` (owner, 2026-11-27),
+  which adds the `.mcpb` attached to the GitHub release on the same `v*`
+  tag (a read-only pack job and an attach job holding `contents: write`)
+  and the internal bundle, never released. Nothing here changes.
 
 ## Context
 

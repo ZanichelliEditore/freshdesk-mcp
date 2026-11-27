@@ -2,7 +2,7 @@
 
 - **Type:** plan
 - **Phase:** M4
-- **Status:** todo (2026-11-26)
+- **Status:** doing (2026-11-27)
 - **Depends on:** none (may run while T-087 is open)
 - **Created:** 2026-11-26
 

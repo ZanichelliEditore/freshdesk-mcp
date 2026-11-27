@@ -356,7 +356,7 @@ Two levels:
 
 | Level | What | How |
 |---|---|---|
-| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (flag or env: `--export-dir`, else `FRESHDESK_EXPORT_DIR`) | env vars and the server's `args` (Claude Code) or `.mcpb` `user_config` (key marked `sensitive`, stored in the OS keychain by Claude Desktop) |
+| Personal | `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, the export directory (flag or env: `--export-dir`, else `FRESHDESK_EXPORT_DIR`) | env vars and the server's `args` (Claude Code) or `.mcpb` `user_config`, every field passed as env, never `args` (key marked `sensitive`; not found in Claude Desktop's support or log folders outside the installed extension's manifest copy, which is unchecked; recheck in T-092; RFC `2026-11-27-mcpb-bundle`) |
 | Team | enabled toolsets, field meanings and hidden fields, "uncategorised" definition, forward allow-list, caps, call budget, reserve % | JSON file, path via `FRESHDESK_MCP_CONFIG` / `user_config`; validated with zod at start, clear error on bad config |
 
 - **Uncategorised** default: a ticket where the configured category field
@@ -373,7 +373,9 @@ Two levels:
 - Example team config ships in the repo with synthetic values; the
   Zanichelli one lives in an internal place (§12).
 - An internal `.mcpb` build may bake the Zanichelli team config in, so
-  operators type only domain and key.
+  operators type only domain and key. A maintainer derives it from the
+  CI-built public bundle of a tag (SHA-256 checked), outside any public
+  CI run and never on a GitHub release (RFC `2026-11-27-mcpb-bundle`).
 
 ## 11. Quality and distribution
 
@@ -409,7 +411,9 @@ Two levels:
   again; the first release is 0.1.0, after M1's smoke and on the owner's
   explicit go; a deprecated 0.0.0 placeholder precedes it (RFC
   2026-11-25); versions stay 0.x until M4, then 1.0.0. GitHub releases
-  with the `.mcpb` built by `@anthropic-ai/mcpb pack` in CI; semver;
+  with the `.mcpb` built by `@anthropic-ai/mcpb pack` (a pinned
+  devDependency) in a read-only CI job and attached, unsigned, with its
+  SHA-256, by a separate job (RFC `2026-11-27-mcpb-bundle`); semver;
   CHANGELOG.
 - Docs: README (English, for technical users and a possible public
   release); operator guide in Italian (install `.mcpb`, get the API key,
@@ -434,8 +438,9 @@ interfaces and implementations per toolset, as each is first used (§4,
 §8.3); since the
 package is public on npm, the source is public in practice, so the
 GitHub repo can be public from M1, while the **Zanichelli team config
-stays out of it** (domain, allow-list, field meanings) in an internal
-location chosen at M4.
+stays out of it** (domain, allow-list, field meanings), only on the
+maintainer's machine, outside any git working tree (owner, 2026-11-27;
+RFC `2026-11-27-mcpb-bundle`).
 
 **Owner, 2026-11-23:** npm scope `@zanichelli`, repository public;
 toolsets from the team file only; export directory in personal env; call
@@ -444,7 +449,10 @@ now; wrapping per §7.4; deadlines per §7.1 and §7.3; only the catalogue
 for the §8.3 resources; the builder's choices parked up to T-013 accepted
 as built.
 
-**Open (owner):** DPO validation before rollout beyond the builders.
+**Owner, 2026-11-27:** the DPO validation before rollout beyond the
+builders was obtained on 2026-11-23 and covers `core`, `write` and
+`send`; the internal config enables all three for operators (RFC
+`2026-11-27-mcpb-bundle`).
 
 ## 13. Milestones (phases with acceptance)
 
