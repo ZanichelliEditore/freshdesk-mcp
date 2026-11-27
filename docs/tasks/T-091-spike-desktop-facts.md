@@ -2,7 +2,7 @@
 
 - **Type:** spike
 - **Phase:** M4
-- **Status:** todo (2026-11-26)
+- **Status:** doing (2026-11-27)
 - **Depends on:** none
 - **Created:** 2026-11-26
 
@@ -59,13 +59,47 @@ green.
 *Filled at `/handoff`:*
 
 ## Done
-Commits and tests, not narration.
+Measured 2026-11-27 by the owner on Claude Desktop `7.37095.0`, macOS
+`27.2.1` (arm64), from a scratchpad bundle (`manifest.json` v0.2 and a
+zero-dependency `server/index.js`, packed with `zip`; nothing tracked, no
+dependency added) whose entry point logged only shapes. No Freshdesk call;
+dummy values only. Two installs (run 1 all fields filled, run 2 optional
+fields empty), then uninstalled.
+
+- Node: yes, `v24.22.3`, meets `>=22.19`. Desktop runs a `server.type:
+  "node"` bundle with `command: "node"` on its own Electron Node
+  (`process.versions.electron` present, log prefix `UtilityProcess`), not
+  the machine's Node (Homebrew `v22.23.5` on the same machine).
+- Unset optional `string`, `file` and `directory` fields: each arrives as
+  the literal `${user_config.<name>}`; not absent, not an empty string.
+- Set fields: all five arrive set (required, `sensitive`, optional string,
+  `file`, `directory`).
+- `file` and `directory` fields work: yes; each value is an existing path
+  of its kind (`statSync`: `file`, `directory`).
+- `sensitive` kept out of plain-text config files: yes. A search of
+  `~/Library/Application Support/Claude` and `~/Library/Logs/Claude` for
+  the dummy secret, `manifest.json` excluded, found nothing (`exit=1`).
+  The only hit without that exclusion was the extension's copy of the
+  probe's `manifest.json`, whose field description held the dummy text
+  (see Dead ends).
+- T-093's trigger: yes. `loadConfig` turns only an empty string into
+  unset (`src/config.ts:240-242`, `|| undefined`), so an unset
+  `FRESHDESK_MCP_CONFIG` or `FRESHDESK_EXPORT_DIR` mapped through
+  `user_config` would arrive as a literal placeholder and be taken as a
+  path. Not changed here (out of scope).
+- No real-account call: yes. `make quality`: see the handoff commit.
 
 ## Dead ends
-none
+- The first plain-text search for the `sensitive` dummy matched the
+  installed `manifest.json`, because the probe's field description quoted
+  the dummy value; rerun with `--exclude=manifest.json`. A later probe
+  should not put its dummy value in the manifest.
 
 ## Open doubts
-none
+- Where Desktop keeps the `sensitive` value (keychain or an encrypted
+  store) was not checked; only its absence from plain-text files.
+- Whether a `compatibility.runtimes.node` field in the manifest changes
+  which Node Desktop uses was not tested.
 
 ## Context pressure
 low | ok | tight | overflowed — and, if tight or overflowed, how it should

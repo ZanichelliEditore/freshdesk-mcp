@@ -207,3 +207,4 @@ stands for. End an entry with the task id it came from.
 
 - A forward through `POST /tickets/{id}/forward` writes its `to_emails` into the ticket's `fwd_emails` (observed 2026-11-27 on one `mcp-test` ticket): a later `make smoke-send CASE=reply` on that ticket is refused by T-086's CC guard, so a reply check needs its own fresh ticket. (T-100)
 - Freshdesk marked each new `mcp-test` ticket made in the UI on 2026-11-27 as spam at creation; restore it before a smoke run, whose GET refuses a spam ticket. (T-100)
+- Claude Desktop substitutes an optional `user_config` field left empty as the literal `${user_config.<name>}`, not as an absent or empty env var (observed 2026-11-27, Desktop 7.37095.0, macOS 27.2.1, string, `file` and `directory` alike); `loadConfig`'s `|| undefined` (`src/config.ts:240-242`) catches only the empty string. It also runs a `node` bundle on its own Electron Node (`v24.22.3`), not the user's. (T-091)
