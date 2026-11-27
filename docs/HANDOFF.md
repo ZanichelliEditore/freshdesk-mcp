@@ -5,8 +5,11 @@
 "none".*
 
 - **Written:** `2026-11-27T11:04:35+01:00`
-- **Describes commit:** `<hash>` (T-090: done; scoped-round fixes,
-  handoff). **CI:** filled by the stamp commit.
+- **Describes commit:** `2bda662` (T-090: done; scoped-round fixes,
+  handoff), pushed to `ZanichelliEditore/freshdesk-mcp`. **CI:** green,
+  https://github.com/ZanichelliEditore/freshdesk-mcp/actions/runs/45979251713
+  (workflow `quality`, ran on `2bda662`: `quality (22.19)`,
+  `quality (24)`, `checks` all success).
 
 - **Current task:** T-090 `done (2026-11-27)`: RFC
   `docs/rfc/active/2026-11-27-mcpb-bundle.md`, Active (owner,
